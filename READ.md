@@ -1,6 +1,6 @@
 # Beverage Management System
 
-A comprehensive inventory management system for Canter Inn.
+A comprehensive inventory management system.
 
 ## Features
 - Inventory tracking for spirits, wine, beer, ingredients
