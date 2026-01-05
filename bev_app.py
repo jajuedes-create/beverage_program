@@ -6,7 +6,7 @@
 #   - Weekly Order Builder
 #   - Cocktail Builds Book
 #
-# Author: Canter Inn
+# Author: James Juedes
 # Deployment: Streamlit Community Cloud via GitHub
 # =============================================================================
 
@@ -208,7 +208,7 @@ def show_home():
     # ----- Footer Info -----
     st.markdown("---")
     st.markdown(
-        "<p style='text-align: center; color: #888;'>Canter Inn • Madison, WI</p>",
+        "<p style='text-align: center; color: #888;'>Dev by JAJ • Madison, WI</p>",
         unsafe_allow_html=True
     )
 
