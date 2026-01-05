@@ -101,15 +101,41 @@ st.markdown("""
         font-size: 18px;
     }
     
-    /* ----- Order Status Styling ----- */
-    .order-needed {
-        background-color: #ffebee;
-        border-left: 4px solid #f44336;
+    /* ----- Cocktail Card Styling ----- */
+    .cocktail-card {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 10px 0;
+        border-left: 4px solid #8E2DE2;
     }
     
-    .order-ok {
-        background-color: #e8f5e9;
-        border-left: 4px solid #4caf50;
+    .cocktail-name {
+        font-size: 20px;
+        font-weight: bold;
+        color: #1f1f1f;
+        margin-bottom: 10px;
+    }
+    
+    .cocktail-meta {
+        font-size: 14px;
+        color: #666;
+    }
+    
+    /* ----- Recipe Display ----- */
+    .recipe-section {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 10px 0;
+    }
+    
+    .ingredient-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 5px 0;
+        border-bottom: 1px solid #f0f0f0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -154,6 +180,18 @@ def get_sample_spirits():
         {"Product": "Botanist", "Type": "Gin", "Cost": 33.74, "Size (oz.)": 33.8, 
          "Margin": 0.21, "Neat Price": 10.0, "Inventory": 4.0, "Use": "Menu", 
          "Distributor": "General Beverage", "Order Notes": "", "Suggested Retail": 48},
+        {"Product": "Bordiga Extra Dry Vermouth", "Type": "Vermouth & Aperitif", "Cost": 23.00, "Size (oz.)": 25.3, 
+         "Margin": 0.18, "Neat Price": 8.0, "Inventory": 2.0, "Use": "Menu", 
+         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 33},
+        {"Product": "Campari", "Type": "Vermouth & Aperitif", "Cost": 28.00, "Size (oz.)": 33.8, 
+         "Margin": 0.20, "Neat Price": 8.0, "Inventory": 2.0, "Use": "Menu", 
+         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 40},
+        {"Product": "Angostura Bitters", "Type": "Bitters", "Cost": 32.00, "Size (oz.)": 16.0, 
+         "Margin": 0.15, "Neat Price": 0.0, "Inventory": 2.0, "Use": "Menu", 
+         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 0},
+        {"Product": "Angostura Orange Bitters", "Type": "Bitters", "Cost": 16.00, "Size (oz.)": 4.0, 
+         "Margin": 0.15, "Neat Price": 0.0, "Inventory": 2.0, "Use": "Menu", 
+         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 0},
     ]
     
     df = pd.DataFrame(data)
@@ -294,6 +332,12 @@ def get_sample_ingredients():
          "UoM": "oz", "Distributor": "House Made", "Order Notes": ""},
         {"Product": "Demerara Syrup (House)", "Cost": 8.00, "Size/Yield": 32.0, 
          "UoM": "oz", "Distributor": "House Made", "Order Notes": ""},
+        {"Product": "Orange Peel", "Cost": 0.50, "Size/Yield": 10.0, 
+         "UoM": "pieces", "Distributor": "House Made", "Order Notes": ""},
+        {"Product": "Lemon Peel", "Cost": 0.50, "Size/Yield": 10.0, 
+         "UoM": "pieces", "Distributor": "House Made", "Order Notes": ""},
+        {"Product": "Luxardo Cherry", "Cost": 25.00, "Size/Yield": 50.0, 
+         "UoM": "cherries", "Distributor": "Breakthru", "Order Notes": ""},
     ]
     
     df = pd.DataFrame(data)
@@ -311,21 +355,9 @@ def get_sample_ingredients():
 
 def get_sample_weekly_inventory():
     """
-    Returns a DataFrame with weekly inventory items and their par levels.
-    This is used for the Weekly Order Builder to track what needs ordering.
-    
-    Columns:
-        - Product: Name of the product
-        - Category: Spirits, Wine, Beer, or Ingredients
-        - Par: Target inventory level
-        - Current Inventory: Current count (user updates weekly)
-        - Unit: Unit of measurement for ordering
-        - Unit Cost: Cost per unit (pulled from master inventory)
-        - Distributor: Supplier
-        - Order Notes: Special ordering instructions
+    Returns a DataFrame with weekly inventory items and par levels.
     """
     data = [
-        # Beer items
         {"Product": "New Glarus Moon Man", "Category": "Beer", "Par": 3, 
          "Current Inventory": 2, "Unit": "Case", "Unit Cost": 26.40, 
          "Distributor": "Frank Beer", "Order Notes": ""},
@@ -341,8 +373,6 @@ def get_sample_weekly_inventory():
         {"Product": "High Life", "Category": "Beer", "Par": 3, 
          "Current Inventory": 2, "Unit": "Case", "Unit Cost": 21.15, 
          "Distributor": "Frank Beer", "Order Notes": ""},
-        
-        # Spirits items
         {"Product": "Tito's", "Category": "Spirits", "Par": 4, 
          "Current Inventory": 3, "Unit": "Bottle", "Unit Cost": 24.50, 
          "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
@@ -358,8 +388,6 @@ def get_sample_weekly_inventory():
         {"Product": "Botanist", "Category": "Spirits", "Par": 2, 
          "Current Inventory": 1, "Unit": "Bottle", "Unit Cost": 33.74, 
          "Distributor": "General Beverage", "Order Notes": ""},
-        
-        # Ingredients items
         {"Product": "Natalie's Lime Juice", "Category": "Ingredients", "Par": 4, 
          "Current Inventory": 2, "Unit": "Bottle", "Unit Cost": 8.34, 
          "Distributor": "US Foods", "Order Notes": ""},
@@ -387,10 +415,7 @@ def get_sample_weekly_inventory():
 def get_sample_order_history():
     """
     Returns a DataFrame with sample historical order data.
-    Used to demonstrate order history and demand visualization features.
     """
-    
-    # Generate dates for past 6 weeks
     today = datetime.now()
     weeks = []
     for i in range(6, 0, -1):
@@ -398,23 +423,18 @@ def get_sample_order_history():
         weeks.append(week_start.strftime("%Y-%m-%d"))
     
     data = [
-        # Week 1
         {"Week": weeks[0], "Product": "Tito's", "Category": "Spirits", 
          "Quantity Ordered": 2, "Unit Cost": 24.50, "Total Cost": 49.00, "Distributor": "Breakthru"},
         {"Week": weeks[0], "Product": "New Glarus Moon Man", "Category": "Beer", 
          "Quantity Ordered": 2, "Unit Cost": 26.40, "Total Cost": 52.80, "Distributor": "Frank Beer"},
         {"Week": weeks[0], "Product": "Natalie's Lime Juice", "Category": "Ingredients", 
          "Quantity Ordered": 3, "Unit Cost": 8.34, "Total Cost": 25.02, "Distributor": "US Foods"},
-        
-        # Week 2
         {"Week": weeks[1], "Product": "Tito's", "Category": "Spirits", 
          "Quantity Ordered": 1, "Unit Cost": 24.50, "Total Cost": 24.50, "Distributor": "Breakthru"},
         {"Week": weeks[1], "Product": "Buffalo Trace", "Category": "Spirits", 
          "Quantity Ordered": 2, "Unit Cost": 31.00, "Total Cost": 62.00, "Distributor": "Breakthru"},
         {"Week": weeks[1], "Product": "Coors Light", "Category": "Beer", 
          "Quantity Ordered": 1, "Unit Cost": 24.51, "Total Cost": 24.51, "Distributor": "Frank Beer"},
-        
-        # Week 3
         {"Week": weeks[2], "Product": "Espolòn Blanco", "Category": "Spirits", 
          "Quantity Ordered": 2, "Unit Cost": 25.00, "Total Cost": 50.00, "Distributor": "Breakthru"},
         {"Week": weeks[2], "Product": "New Glarus Moon Man", "Category": "Beer", 
@@ -423,16 +443,12 @@ def get_sample_order_history():
          "Quantity Ordered": 2, "Unit Cost": 8.34, "Total Cost": 16.68, "Distributor": "US Foods"},
         {"Week": weeks[2], "Product": "Natalie's Lemon Juice", "Category": "Ingredients", 
          "Quantity Ordered": 2, "Unit Cost": 8.34, "Total Cost": 16.68, "Distributor": "US Foods"},
-        
-        # Week 4
         {"Week": weeks[3], "Product": "Tito's", "Category": "Spirits", 
          "Quantity Ordered": 3, "Unit Cost": 24.50, "Total Cost": 73.50, "Distributor": "Breakthru"},
         {"Week": weeks[3], "Product": "Rittenhouse Rye", "Category": "Spirits", 
          "Quantity Ordered": 1, "Unit Cost": 28.00, "Total Cost": 28.00, "Distributor": "Breakthru"},
         {"Week": weeks[3], "Product": "High Life", "Category": "Beer", 
          "Quantity Ordered": 2, "Unit Cost": 21.15, "Total Cost": 42.30, "Distributor": "Frank Beer"},
-        
-        # Week 5
         {"Week": weeks[4], "Product": "Buffalo Trace", "Category": "Spirits", 
          "Quantity Ordered": 1, "Unit Cost": 31.00, "Total Cost": 31.00, "Distributor": "Breakthru"},
         {"Week": weeks[4], "Product": "Botanist", "Category": "Spirits", 
@@ -441,8 +457,6 @@ def get_sample_order_history():
          "Quantity Ordered": 1, "Unit Cost": 75.00, "Total Cost": 75.00, "Distributor": "GB Beer"},
         {"Week": weeks[4], "Product": "Q Club Soda", "Category": "Ingredients", 
          "Quantity Ordered": 2, "Unit Cost": 12.48, "Total Cost": 24.96, "Distributor": "Breakthru"},
-        
-        # Week 6 (most recent)
         {"Week": weeks[5], "Product": "Tito's", "Category": "Spirits", 
          "Quantity Ordered": 2, "Unit Cost": 24.50, "Total Cost": 49.00, "Distributor": "Breakthru"},
         {"Week": weeks[5], "Product": "Espolòn Blanco", "Category": "Spirits", 
@@ -459,6 +473,99 @@ def get_sample_order_history():
 
 
 # =============================================================================
+# SAMPLE DATA - COCKTAIL RECIPES
+# =============================================================================
+
+def get_sample_cocktails():
+    """
+    Returns a list of sample cocktail recipes.
+    Each recipe is a dictionary containing all recipe information.
+    
+    Structure:
+        - name: Cocktail name
+        - glass: Glassware used
+        - instructions: Build instructions
+        - sale_price: Menu price
+        - ingredients: List of {product, amount, unit, unit_cost, cost}
+    """
+    cocktails = [
+        {
+            "name": "Martini at The Inn",
+            "glass": "Martini",
+            "instructions": "Combine gin, vermouth, and bitters in mixing glass. Add ice and stir until ice cold. Strain into chilled martini glass and garnish with olives.",
+            "sale_price": 14.00,
+            "ingredients": [
+                {"product": "Botanist", "amount": 2.5, "unit": "oz"},
+                {"product": "Bordiga Extra Dry Vermouth", "amount": 0.5, "unit": "oz"},
+                {"product": "Angostura Orange Bitters", "amount": 0.03, "unit": "oz"},
+                {"product": "Olives", "amount": 2, "unit": "pieces"},
+            ]
+        },
+        {
+            "name": "Old Fashioned",
+            "glass": "Rocks",
+            "instructions": "Add sugar, bitters, and a splash of water to rocks glass. Muddle until dissolved. Add bourbon and ice, stir. Garnish with orange peel and cherry.",
+            "sale_price": 13.00,
+            "ingredients": [
+                {"product": "Buffalo Trace", "amount": 2.0, "unit": "oz"},
+                {"product": "Demerara Syrup (House)", "amount": 0.25, "unit": "oz"},
+                {"product": "Angostura Bitters", "amount": 0.1, "unit": "oz"},
+                {"product": "Orange Peel", "amount": 1, "unit": "pieces"},
+                {"product": "Luxardo Cherry", "amount": 1, "unit": "cherries"},
+            ]
+        },
+        {
+            "name": "Margarita",
+            "glass": "Coupe",
+            "instructions": "Combine tequila, lime juice, and agave in shaker with ice. Shake vigorously and strain into salt-rimmed coupe glass. Garnish with lime wheel.",
+            "sale_price": 12.00,
+            "ingredients": [
+                {"product": "Espolòn Blanco", "amount": 2.0, "unit": "oz"},
+                {"product": "Natalie's Lime Juice", "amount": 1.0, "unit": "oz"},
+                {"product": "Agave Nectar", "amount": 0.75, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Negroni",
+            "glass": "Rocks",
+            "instructions": "Add all ingredients to rocks glass with ice. Stir until well chilled. Garnish with orange peel.",
+            "sale_price": 13.00,
+            "ingredients": [
+                {"product": "Botanist", "amount": 1.0, "unit": "oz"},
+                {"product": "Campari", "amount": 1.0, "unit": "oz"},
+                {"product": "Lustau Vermut Rojo", "amount": 1.0, "unit": "oz"},
+                {"product": "Orange Peel", "amount": 1, "unit": "pieces"},
+            ]
+        },
+        {
+            "name": "Moscow Mule",
+            "glass": "Copper Mug",
+            "instructions": "Add vodka and lime juice to copper mug. Fill with ice and top with ginger beer. Stir gently and garnish with lime wheel.",
+            "sale_price": 11.00,
+            "ingredients": [
+                {"product": "Tito's", "amount": 2.0, "unit": "oz"},
+                {"product": "Natalie's Lime Juice", "amount": 0.75, "unit": "oz"},
+                {"product": "Q Ginger Beer", "amount": 4.0, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Whiskey Sour",
+            "glass": "Coupe",
+            "instructions": "Combine bourbon, lemon juice, and simple syrup in shaker. Dry shake, then add ice and shake again. Strain into coupe and garnish with cherry.",
+            "sale_price": 12.00,
+            "ingredients": [
+                {"product": "Buffalo Trace", "amount": 2.0, "unit": "oz"},
+                {"product": "Natalie's Lemon Juice", "amount": 0.75, "unit": "oz"},
+                {"product": "Simple Syrup (House)", "amount": 0.75, "unit": "oz"},
+                {"product": "Luxardo Cherry", "amount": 1, "unit": "cherries"},
+            ]
+        },
+    ]
+    
+    return cocktails
+
+
+# =============================================================================
 # SESSION STATE INITIALIZATION
 # =============================================================================
 
@@ -471,7 +578,7 @@ def init_session_state():
     if 'current_page' not in st.session_state:
         st.session_state.current_page = 'home'
     
-    # Inventory data storage
+    # Inventory data
     if 'spirits_inventory' not in st.session_state:
         st.session_state.spirits_inventory = get_sample_spirits()
     
@@ -496,6 +603,10 @@ def init_session_state():
     
     if 'current_order' not in st.session_state:
         st.session_state.current_order = pd.DataFrame()
+    
+    # Cocktail Builds Book data
+    if 'cocktail_recipes' not in st.session_state:
+        st.session_state.cocktail_recipes = get_sample_cocktails()
 
 
 # =============================================================================
@@ -550,30 +661,109 @@ def filter_dataframe(df: pd.DataFrame, search_term: str, column_filters: dict) -
 def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
     """
     Generates an order list based on items below par level.
-    
-    Args:
-        weekly_inv: DataFrame with Par and Current Inventory columns
-        
-    Returns:
-        DataFrame with products that need ordering and suggested quantities
     """
-    # Find items where inventory is below par
     needs_order = weekly_inv[weekly_inv['Current Inventory'] < weekly_inv['Par']].copy()
     
     if len(needs_order) == 0:
         return pd.DataFrame()
     
-    # Calculate suggested order amount
     needs_order['Suggested Order'] = needs_order['Par'] - needs_order['Current Inventory']
-    needs_order['Order Quantity'] = needs_order['Suggested Order']  # User can modify this
+    needs_order['Order Quantity'] = needs_order['Suggested Order']
     needs_order['Order Value'] = needs_order['Order Quantity'] * needs_order['Unit Cost']
     
-    # Select and reorder columns for display
     order_columns = ['Product', 'Category', 'Current Inventory', 'Par', 
                      'Suggested Order', 'Order Quantity', 'Unit', 'Unit Cost', 
                      'Order Value', 'Distributor', 'Order Notes']
     
     return needs_order[order_columns]
+
+
+def get_ingredient_cost_per_unit(product_name: str) -> float:
+    """
+    Looks up the cost per unit for a product from inventory.
+    Searches both Spirits (Cost/Oz) and Ingredients (Cost/Unit) inventories.
+    
+    Args:
+        product_name: Name of the product to look up
+        
+    Returns:
+        float: Cost per unit (oz for spirits, varies for ingredients)
+    """
+    # Check spirits inventory
+    spirits = st.session_state.spirits_inventory
+    spirit_match = spirits[spirits['Product'] == product_name]
+    if len(spirit_match) > 0:
+        return spirit_match['Cost/Oz'].values[0]
+    
+    # Check ingredients inventory
+    ingredients = st.session_state.ingredients_inventory
+    ingredient_match = ingredients[ingredients['Product'] == product_name]
+    if len(ingredient_match) > 0:
+        return ingredient_match['Cost/Unit'].values[0]
+    
+    return 0.0
+
+
+def calculate_cocktail_cost(ingredients: list) -> float:
+    """
+    Calculates total cost for a cocktail based on ingredients.
+    
+    Args:
+        ingredients: List of ingredient dicts with 'product', 'amount', 'unit'
+        
+    Returns:
+        float: Total cost of ingredients
+    """
+    total = 0.0
+    for ing in ingredients:
+        unit_cost = get_ingredient_cost_per_unit(ing['product'])
+        total += unit_cost * ing['amount']
+    return total
+
+
+def calculate_margin(cost: float, sale_price: float) -> float:
+    """
+    Calculates cost margin (cost / sale_price).
+    
+    Args:
+        cost: Total cost of cocktail
+        sale_price: Menu sale price
+        
+    Returns:
+        float: Margin as decimal (e.g., 0.20 for 20%)
+    """
+    if sale_price > 0:
+        return cost / sale_price
+    return 0.0
+
+
+def suggest_price_from_cost(cost: float, target_margin: float = 0.20) -> float:
+    """
+    Suggests a sale price based on target cost margin.
+    
+    Args:
+        cost: Total cost of cocktail
+        target_margin: Target cost percentage (default 20%)
+        
+    Returns:
+        float: Suggested sale price
+    """
+    if target_margin > 0:
+        return cost / target_margin
+    return 0.0
+
+
+def get_available_products():
+    """
+    Returns a combined list of all products from Spirits and Ingredients inventories.
+    Used for ingredient selection in cocktail builder.
+    
+    Returns:
+        list: Sorted list of product names
+    """
+    spirits = st.session_state.spirits_inventory['Product'].tolist()
+    ingredients = st.session_state.ingredients_inventory['Product'].tolist()
+    return sorted(list(set(spirits + ingredients)))
 
 
 # =============================================================================
@@ -860,14 +1050,9 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
 
 def show_ordering():
     """
-    Renders the Weekly Order Builder module with:
-    - Dashboard showing order costs and top products
-    - Weekly inventory input with par levels
-    - Auto-generated order based on items below par
-    - Order history and demand visualization
+    Renders the Weekly Order Builder module.
     """
     
-    # ----- Header -----
     col_back, col_title = st.columns([1, 11])
     with col_back:
         if st.button("← Home"):
@@ -876,27 +1061,18 @@ def show_ordering():
     with col_title:
         st.title("📋 Weekly Order Builder")
     
-    # =========================================================================
-    # DASHBOARD SECTION
-    # =========================================================================
-    
+    # Dashboard
     st.markdown("### 📊 Order Dashboard")
     
-    # Calculate metrics from order history
     order_history = st.session_state.order_history
     
     if len(order_history) > 0:
-        # Get unique weeks and sort them
         weeks = sorted(order_history['Week'].unique())
-        
-        # Previous week's total (most recent in history)
         if len(weeks) >= 1:
             prev_week = weeks[-1]
             prev_week_total = order_history[order_history['Week'] == prev_week]['Total Cost'].sum()
         else:
             prev_week_total = 0
-        
-        # Calculate top products by frequency and total spend
         top_products = order_history.groupby('Product').agg({
             'Quantity Ordered': 'sum',
             'Total Cost': 'sum'
@@ -905,78 +1081,47 @@ def show_ordering():
         prev_week_total = 0
         top_products = pd.DataFrame()
     
-    # Current order total (being built)
     if 'current_order' in st.session_state and len(st.session_state.current_order) > 0:
         current_order_total = st.session_state.current_order['Order Value'].sum()
     else:
         current_order_total = 0
     
-    # Display metrics
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric(
-            label="📅 Previous Week's Order",
-            value=format_currency(prev_week_total)
-        )
-    
+        st.metric(label="📅 Previous Week's Order", value=format_currency(prev_week_total))
     with col2:
-        st.metric(
-            label="🛒 Current Order (Building)",
-            value=format_currency(current_order_total)
-        )
-    
+        st.metric(label="🛒 Current Order (Building)", value=format_currency(current_order_total))
     with col3:
-        st.metric(
-            label="📈 6-Week Avg Order",
-            value=format_currency(order_history.groupby('Week')['Total Cost'].sum().mean() if len(order_history) > 0 else 0)
-        )
+        st.metric(label="📈 6-Week Avg Order", 
+                  value=format_currency(order_history.groupby('Week')['Total Cost'].sum().mean() if len(order_history) > 0 else 0))
     
-    # Top products display
     if len(top_products) > 0:
         with st.expander("🏆 Top Products (by total spend)", expanded=False):
             st.dataframe(
                 top_products.reset_index().rename(columns={
-                    'Product': 'Product',
-                    'Quantity Ordered': 'Total Units Ordered',
-                    'Total Cost': 'Total Spend'
+                    'Product': 'Product', 'Quantity Ordered': 'Total Units Ordered', 'Total Cost': 'Total Spend'
                 }),
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Total Spend": st.column_config.NumberColumn(format="$%.2f")
-                }
+                use_container_width=True, hide_index=True,
+                column_config={"Total Spend": st.column_config.NumberColumn(format="$%.2f")}
             )
     
     st.markdown("---")
     
-    # =========================================================================
-    # TABS: BUILD ORDER / ORDER HISTORY / ANALYTICS
-    # =========================================================================
-    
+    # Tabs
     tab_build, tab_history, tab_analytics = st.tabs([
-        "🛒 Build This Week's Order", 
-        "📜 Order History", 
-        "📈 Demand Analytics"
+        "🛒 Build This Week's Order", "📜 Order History", "📈 Demand Analytics"
     ])
     
-    # -------------------------------------------------------------------------
-    # TAB: BUILD ORDER
-    # -------------------------------------------------------------------------
     with tab_build:
         st.markdown("### Step 1: Update Current Inventory Counts")
         st.markdown("Enter your current inventory counts below. Products below par will be added to the order.")
         
-        # Weekly inventory editor
         weekly_inv = st.session_state.weekly_inventory.copy()
-        
-        # Add a status column to show if order is needed
         weekly_inv['Status'] = weekly_inv.apply(
-            lambda row: "🔴 Order" if row['Current Inventory'] < row['Par'] else "✅ OK",
-            axis=1
+            lambda row: "🔴 Order" if row['Current Inventory'] < row['Par'] else "✅ OK", axis=1
         )
         
-        # Reorder columns for display
         display_cols = ['Product', 'Category', 'Par', 'Current Inventory', 'Status', 
                        'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
         
@@ -993,13 +1138,9 @@ def show_ordering():
             disabled=["Product", "Category", "Status", "Unit", "Unit Cost", "Distributor", "Order Notes"]
         )
         
-        # Update session state with edited values
         if st.button("🔄 Update Inventory & Generate Order", key="update_weekly"):
-            # Update the weekly inventory with edited values
             st.session_state.weekly_inventory['Current Inventory'] = edited_weekly['Current Inventory'].values
             st.session_state.weekly_inventory['Par'] = edited_weekly['Par'].values
-            
-            # Generate order
             order = generate_order_from_inventory(st.session_state.weekly_inventory)
             st.session_state.current_order = order
             st.success("✅ Inventory updated and order generated!")
@@ -1008,13 +1149,10 @@ def show_ordering():
         st.markdown("---")
         st.markdown("### Step 2: Review & Adjust This Week's Order")
         
-        # Display and edit current order
         if 'current_order' in st.session_state and len(st.session_state.current_order) > 0:
             order_df = st.session_state.current_order.copy()
-            
             st.markdown(f"**{len(order_df)} items need ordering:**")
             
-            # Editable order table
             edited_order = st.data_editor(
                 order_df,
                 use_container_width=True,
@@ -1031,264 +1169,491 @@ def show_ordering():
                          "Unit", "Unit Cost", "Distributor", "Order Notes"]
             )
             
-            # Recalculate order values when quantity changes
             if st.button("💰 Recalculate Order Total", key="recalc_order"):
                 edited_order['Order Value'] = edited_order['Order Quantity'] * edited_order['Unit Cost']
                 st.session_state.current_order = edited_order
                 st.rerun()
             
-            # Order summary
             st.markdown("---")
             st.markdown("### Order Summary")
             
-            col_summary1, col_summary2, col_summary3 = st.columns(3)
-            
-            with col_summary1:
+            col_s1, col_s2, col_s3 = st.columns(3)
+            with col_s1:
                 st.metric("Total Items", len(edited_order))
-            
-            with col_summary2:
+            with col_s2:
                 st.metric("Total Units", f"{edited_order['Order Quantity'].sum():.1f}")
+            with col_s3:
+                st.metric("Total Order Value", format_currency(edited_order['Order Value'].sum()))
             
-            with col_summary3:
-                order_total = edited_order['Order Value'].sum()
-                st.metric("Total Order Value", format_currency(order_total))
-            
-            # Order by distributor breakdown
             st.markdown("#### By Distributor:")
-            distributor_summary = edited_order.groupby('Distributor').agg({
-                'Order Quantity': 'sum',
-                'Order Value': 'sum'
+            dist_summary = edited_order.groupby('Distributor').agg({
+                'Order Quantity': 'sum', 'Order Value': 'sum'
             }).reset_index()
+            st.dataframe(dist_summary, use_container_width=True, hide_index=True,
+                        column_config={"Order Value": st.column_config.NumberColumn(format="$%.2f")})
             
-            st.dataframe(
-                distributor_summary,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Order Value": st.column_config.NumberColumn(format="$%.2f")
-                }
-            )
-            
-            # Save order button
             st.markdown("---")
             if st.button("✅ Save Order to History", key="save_order", type="primary"):
-                # Create order history entries
                 today = datetime.now().strftime("%Y-%m-%d")
-                
                 new_orders = []
                 for _, row in edited_order.iterrows():
                     if row['Order Quantity'] > 0:
                         new_orders.append({
-                            'Week': today,
-                            'Product': row['Product'],
-                            'Category': row['Category'],
-                            'Quantity Ordered': row['Order Quantity'],
-                            'Unit Cost': row['Unit Cost'],
-                            'Total Cost': row['Order Value'],
-                            'Distributor': row['Distributor']
+                            'Week': today, 'Product': row['Product'], 'Category': row['Category'],
+                            'Quantity Ordered': row['Order Quantity'], 'Unit Cost': row['Unit Cost'],
+                            'Total Cost': row['Order Value'], 'Distributor': row['Distributor']
                         })
-                
                 if new_orders:
-                    new_orders_df = pd.DataFrame(new_orders)
                     st.session_state.order_history = pd.concat([
-                        st.session_state.order_history, 
-                        new_orders_df
+                        st.session_state.order_history, pd.DataFrame(new_orders)
                     ], ignore_index=True)
-                    
-                    # Reset current order
                     st.session_state.current_order = pd.DataFrame()
-                    
-                    # Update weekly inventory (reset current inventory to par after ordering)
-                    # This simulates receiving the order
                     st.success("✅ Order saved to history!")
                     st.balloons()
                     st.rerun()
                 else:
                     st.warning("No items with quantity > 0 to save.")
-        
         else:
             st.info("👆 Update inventory counts above and click 'Update Inventory & Generate Order' to see what needs ordering.")
     
-    # -------------------------------------------------------------------------
-    # TAB: ORDER HISTORY
-    # -------------------------------------------------------------------------
     with tab_history:
         st.markdown("### 📜 Previous Orders")
-        
-        order_history = st.session_state.order_history
-        
         if len(order_history) > 0:
-            # Filter options
-            col_filter1, col_filter2 = st.columns(2)
-            
-            with col_filter1:
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
                 weeks = sorted(order_history['Week'].unique(), reverse=True)
-                selected_weeks = st.multiselect(
-                    "Filter by Week:",
-                    options=weeks,
-                    default=weeks[:4] if len(weeks) >= 4 else weeks,
-                    key="history_week_filter"
-                )
-            
-            with col_filter2:
+                selected_weeks = st.multiselect("Filter by Week:", options=weeks,
+                    default=weeks[:4] if len(weeks) >= 4 else weeks, key="history_week_filter")
+            with col_f2:
                 categories = order_history['Category'].unique().tolist()
-                selected_categories = st.multiselect(
-                    "Filter by Category:",
-                    options=categories,
-                    default=categories,
-                    key="history_category_filter"
-                )
+                selected_categories = st.multiselect("Filter by Category:", options=categories,
+                    default=categories, key="history_category_filter")
             
-            # Apply filters
             filtered_history = order_history.copy()
             if selected_weeks:
                 filtered_history = filtered_history[filtered_history['Week'].isin(selected_weeks)]
             if selected_categories:
                 filtered_history = filtered_history[filtered_history['Category'].isin(selected_categories)]
             
-            # Weekly totals
             st.markdown("#### Weekly Order Totals")
             weekly_totals = filtered_history.groupby('Week')['Total Cost'].sum().reset_index()
             weekly_totals = weekly_totals.sort_values('Week', ascending=False)
+            st.dataframe(weekly_totals, use_container_width=True, hide_index=True,
+                        column_config={"Total Cost": st.column_config.NumberColumn(format="$%.2f")})
             
-            st.dataframe(
-                weekly_totals,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Total Cost": st.column_config.NumberColumn(format="$%.2f")
-                }
-            )
-            
-            # Detailed order history
             st.markdown("#### Order Details")
-            st.dataframe(
-                filtered_history.sort_values(['Week', 'Product'], ascending=[False, True]),
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
-                    "Total Cost": st.column_config.NumberColumn(format="$%.2f")
-                }
-            )
+            st.dataframe(filtered_history.sort_values(['Week', 'Product'], ascending=[False, True]),
+                        use_container_width=True, hide_index=True,
+                        column_config={
+                            "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
+                            "Total Cost": st.column_config.NumberColumn(format="$%.2f")
+                        })
         else:
             st.info("No order history yet. Save an order to see it here.")
     
-    # -------------------------------------------------------------------------
-    # TAB: DEMAND ANALYTICS
-    # -------------------------------------------------------------------------
     with tab_analytics:
         st.markdown("### 📈 Demand Analytics")
-        
-        order_history = st.session_state.order_history
-        
         if len(order_history) > 0:
-            # Product selector for line plot
             products = sorted(order_history['Product'].unique())
-            
-            selected_products = st.multiselect(
-                "Select products to analyze:",
-                options=products,
-                default=products[:3] if len(products) >= 3 else products,
-                key="analytics_products"
-            )
+            selected_products = st.multiselect("Select products to analyze:", options=products,
+                default=products[:3] if len(products) >= 3 else products, key="analytics_products")
             
             if selected_products:
-                # Filter data for selected products
                 plot_data = order_history[order_history['Product'].isin(selected_products)]
                 
-                # Line plot of quantity ordered over time
                 st.markdown("#### Quantity Ordered Over Time")
-                
-                fig_qty = px.line(
-                    plot_data,
-                    x='Week',
-                    y='Quantity Ordered',
-                    color='Product',
-                    markers=True,
-                    title='Weekly Order Quantities by Product'
-                )
-                fig_qty.update_layout(
-                    xaxis_title="Week",
-                    yaxis_title="Quantity Ordered",
-                    legend_title="Product",
-                    hovermode='x unified'
-                )
+                fig_qty = px.line(plot_data, x='Week', y='Quantity Ordered', color='Product',
+                                 markers=True, title='Weekly Order Quantities by Product')
                 st.plotly_chart(fig_qty, use_container_width=True)
                 
-                # Line plot of spending over time
                 st.markdown("#### Spending Over Time")
-                
-                fig_cost = px.line(
-                    plot_data,
-                    x='Week',
-                    y='Total Cost',
-                    color='Product',
-                    markers=True,
-                    title='Weekly Spending by Product'
-                )
-                fig_cost.update_layout(
-                    xaxis_title="Week",
-                    yaxis_title="Total Cost ($)",
-                    legend_title="Product",
-                    hovermode='x unified'
-                )
+                fig_cost = px.line(plot_data, x='Week', y='Total Cost', color='Product',
+                                  markers=True, title='Weekly Spending by Product')
                 st.plotly_chart(fig_cost, use_container_width=True)
                 
-                # Summary statistics
                 st.markdown("#### Product Summary Statistics")
-                
-                summary_stats = plot_data.groupby('Product').agg({
+                summary = plot_data.groupby('Product').agg({
                     'Quantity Ordered': ['sum', 'mean', 'std'],
                     'Total Cost': ['sum', 'mean']
                 }).round(2)
-                
-                summary_stats.columns = ['Total Qty', 'Avg Qty/Week', 'Std Dev', 'Total Spend', 'Avg Spend/Week']
-                summary_stats = summary_stats.reset_index()
-                
-                st.dataframe(
-                    summary_stats,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
-                        "Avg Spend/Week": st.column_config.NumberColumn(format="$%.2f")
-                    }
-                )
+                summary.columns = ['Total Qty', 'Avg Qty/Week', 'Std Dev', 'Total Spend', 'Avg Spend/Week']
+                st.dataframe(summary.reset_index(), use_container_width=True, hide_index=True,
+                            column_config={
+                                "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
+                                "Avg Spend/Week": st.column_config.NumberColumn(format="$%.2f")
+                            })
             
-            # Category breakdown
             st.markdown("---")
             st.markdown("#### Spending by Category")
-            
-            category_spending = order_history.groupby('Category')['Total Cost'].sum().reset_index()
-            
-            fig_pie = px.pie(
-                category_spending,
-                values='Total Cost',
-                names='Category',
-                title='Total Spending by Category'
-            )
+            cat_spend = order_history.groupby('Category')['Total Cost'].sum().reset_index()
+            fig_pie = px.pie(cat_spend, values='Total Cost', names='Category', title='Total Spending by Category')
             st.plotly_chart(fig_pie, use_container_width=True)
-            
         else:
             st.info("No order history yet. Save some orders to see analytics.")
 
 
 # =============================================================================
-# PAGE: COCKTAIL BUILDS BOOK (Placeholder)
+# PAGE: COCKTAIL BUILDS BOOK
 # =============================================================================
 
 def show_cocktails():
     """
-    Placeholder for the Cocktail Builds Book module.
+    Renders the Cocktail Builds Book module with:
+    - Dashboard showing cocktail count and average cost
+    - Search functionality by name or ingredient
+    - Recipe viewer with costing details
+    - Add/Edit recipe functionality
     """
     
-    if st.button("← Home"):
-        navigate_to('home')
-        st.rerun()
+    # ----- Header -----
+    col_back, col_title = st.columns([1, 11])
+    with col_back:
+        if st.button("← Home"):
+            navigate_to('home')
+            st.rerun()
+    with col_title:
+        st.title("🍹 Cocktail Builds Book")
     
-    st.title("🍹 Cocktail Builds Book")
-    st.info("🚧 This module is under construction. Coming soon!")
+    # =========================================================================
+    # DASHBOARD
+    # =========================================================================
+    
+    st.markdown("### 📊 Cocktails Dashboard")
+    
+    recipes = st.session_state.cocktail_recipes
+    
+    # Calculate metrics
+    total_cocktails = len(recipes)
+    
+    # Calculate costs for all cocktails
+    cocktail_costs = []
+    cocktail_margins = []
+    for recipe in recipes:
+        cost = calculate_cocktail_cost(recipe['ingredients'])
+        cocktail_costs.append(cost)
+        margin = calculate_margin(cost, recipe['sale_price'])
+        cocktail_margins.append(margin)
+    
+    avg_cost = sum(cocktail_costs) / len(cocktail_costs) if cocktail_costs else 0
+    avg_margin = sum(cocktail_margins) / len(cocktail_margins) if cocktail_margins else 0
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(label="📚 Total Recipes", value=total_cocktails)
+    with col2:
+        st.metric(label="💵 Avg Cost", value=format_currency(avg_cost))
+    with col3:
+        st.metric(label="📊 Avg Margin", value=f"{avg_margin:.1%}")
+    with col4:
+        # Count unique ingredients used across all recipes
+        all_ingredients = set()
+        for recipe in recipes:
+            for ing in recipe['ingredients']:
+                all_ingredients.add(ing['product'])
+        st.metric(label="🧴 Unique Ingredients", value=len(all_ingredients))
+    
+    st.markdown("---")
+    
+    # =========================================================================
+    # TABS: VIEW RECIPES / ADD NEW RECIPE
+    # =========================================================================
+    
+    tab_view, tab_add = st.tabs(["📖 View & Search Recipes", "➕ Add New Recipe"])
+    
+    # -------------------------------------------------------------------------
+    # TAB: VIEW & SEARCH RECIPES
+    # -------------------------------------------------------------------------
+    with tab_view:
+        st.markdown("### 🔍 Search Cocktails")
+        
+        # Search bar
+        search_query = st.text_input(
+            "Search by cocktail name or ingredient:",
+            key="cocktail_search",
+            placeholder="e.g., 'Margarita' or 'bourbon'"
+        )
+        
+        # Filter recipes based on search
+        filtered_recipes = []
+        for recipe in recipes:
+            # Check if search matches cocktail name
+            if search_query.lower() in recipe['name'].lower():
+                filtered_recipes.append(recipe)
+            # Check if search matches any ingredient
+            elif any(search_query.lower() in ing['product'].lower() for ing in recipe['ingredients']):
+                filtered_recipes.append(recipe)
+            # If no search query, include all
+            elif not search_query:
+                filtered_recipes.append(recipe)
+        
+        st.caption(f"Showing {len(filtered_recipes)} of {len(recipes)} recipes")
+        
+        st.markdown("---")
+        
+        # Display recipes
+        if filtered_recipes:
+            for idx, recipe in enumerate(filtered_recipes):
+                # Calculate cost and margin for this cocktail
+                total_cost = calculate_cocktail_cost(recipe['ingredients'])
+                margin = calculate_margin(total_cost, recipe['sale_price'])
+                suggested_price = suggest_price_from_cost(total_cost, 0.20)
+                
+                # Recipe card
+                with st.expander(f"🍸 **{recipe['name']}** | Cost: {format_currency(total_cost)} | Price: {format_currency(recipe['sale_price'])} | Margin: {margin:.1%}", expanded=False):
+                    
+                    col_info, col_pricing = st.columns([2, 1])
+                    
+                    with col_info:
+                        st.markdown(f"**Glass:** {recipe['glass']}")
+                        st.markdown("**Ingredients:**")
+                        
+                        # Build ingredients table
+                        ing_data = []
+                        for ing in recipe['ingredients']:
+                            unit_cost = get_ingredient_cost_per_unit(ing['product'])
+                            ing_cost = unit_cost * ing['amount']
+                            ing_data.append({
+                                "Ingredient": ing['product'],
+                                "Amount": ing['amount'],
+                                "Unit": ing['unit'],
+                                "Unit Cost": unit_cost,
+                                "Cost": ing_cost
+                            })
+                        
+                        ing_df = pd.DataFrame(ing_data)
+                        st.dataframe(
+                            ing_df,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Unit Cost": st.column_config.NumberColumn(format="$%.4f"),
+                                "Cost": st.column_config.NumberColumn(format="$%.4f"),
+                            }
+                        )
+                        
+                        st.markdown("**Build Instructions:**")
+                        st.write(recipe['instructions'])
+                    
+                    with col_pricing:
+                        st.markdown("#### 💰 Pricing")
+                        st.metric("Total Cost", format_currency(total_cost))
+                        st.metric("Current Price", format_currency(recipe['sale_price']))
+                        st.metric("Cost Margin", f"{margin:.1%}")
+                        st.caption(f"Suggested Price (20% cost): {format_currency(suggested_price)}")
+                        
+                        # Edit price
+                        st.markdown("---")
+                        new_price = st.number_input(
+                            "Adjust Sale Price:",
+                            min_value=0.0,
+                            value=recipe['sale_price'],
+                            step=0.50,
+                            key=f"price_{idx}"
+                        )
+                        
+                        if new_price != recipe['sale_price']:
+                            new_margin = calculate_margin(total_cost, new_price)
+                            st.caption(f"New Margin: {new_margin:.1%}")
+                            
+                            if st.button("💾 Update Price", key=f"update_price_{idx}"):
+                                # Find and update the recipe in session state
+                                for r in st.session_state.cocktail_recipes:
+                                    if r['name'] == recipe['name']:
+                                        r['sale_price'] = new_price
+                                        break
+                                st.success("✅ Price updated!")
+                                st.rerun()
+                    
+                    # Delete button
+                    st.markdown("---")
+                    col_del, col_spacer = st.columns([1, 4])
+                    with col_del:
+                        if st.button("🗑️ Delete Recipe", key=f"delete_{idx}"):
+                            st.session_state.cocktail_recipes = [
+                                r for r in st.session_state.cocktail_recipes 
+                                if r['name'] != recipe['name']
+                            ]
+                            st.success(f"✅ {recipe['name']} deleted!")
+                            st.rerun()
+        else:
+            st.info("No recipes found matching your search.")
+    
+    # -------------------------------------------------------------------------
+    # TAB: ADD NEW RECIPE
+    # -------------------------------------------------------------------------
+    with tab_add:
+        st.markdown("### ➕ Create New Cocktail Recipe")
+        
+        # Basic info
+        col_name, col_glass = st.columns(2)
+        
+        with col_name:
+            new_name = st.text_input("Cocktail Name:", key="new_cocktail_name")
+        
+        with col_glass:
+            glass_options = ["Martini", "Coupe", "Rocks", "Collins", "Highball", 
+                           "Copper Mug", "Nick & Nora", "Wine Glass", "Flute", "Other"]
+            new_glass = st.selectbox("Glass:", options=glass_options, key="new_cocktail_glass")
+        
+        st.markdown("---")
+        
+        # Ingredients section
+        st.markdown("#### 🧴 Ingredients")
+        st.caption("Add ingredients one at a time. Select from Spirits and Ingredients inventory.")
+        
+        # Get available products
+        available_products = get_available_products()
+        
+        # Initialize ingredient list in session state
+        if 'new_recipe_ingredients' not in st.session_state:
+            st.session_state.new_recipe_ingredients = []
+        
+        # Add ingredient form
+        col_prod, col_amt, col_unit, col_add = st.columns([3, 1, 1, 1])
+        
+        with col_prod:
+            selected_product = st.selectbox(
+                "Product:",
+                options=[""] + available_products,
+                key="add_ingredient_product"
+            )
+        
+        with col_amt:
+            ingredient_amount = st.number_input(
+                "Amount:",
+                min_value=0.0,
+                step=0.25,
+                key="add_ingredient_amount"
+            )
+        
+        with col_unit:
+            unit_options = ["oz", "pieces", "cherries", "dashes", "barspoon", "splash"]
+            ingredient_unit = st.selectbox("Unit:", options=unit_options, key="add_ingredient_unit")
+        
+        with col_add:
+            st.write("")  # Spacer
+            st.write("")  # Spacer
+            if st.button("➕ Add", key="add_ingredient_btn"):
+                if selected_product and ingredient_amount > 0:
+                    st.session_state.new_recipe_ingredients.append({
+                        "product": selected_product,
+                        "amount": ingredient_amount,
+                        "unit": ingredient_unit
+                    })
+                    st.rerun()
+        
+        # Display current ingredients
+        if st.session_state.new_recipe_ingredients:
+            st.markdown("**Current Ingredients:**")
+            
+            ing_display = []
+            running_cost = 0
+            for i, ing in enumerate(st.session_state.new_recipe_ingredients):
+                unit_cost = get_ingredient_cost_per_unit(ing['product'])
+                ing_cost = unit_cost * ing['amount']
+                running_cost += ing_cost
+                ing_display.append({
+                    "#": i + 1,
+                    "Product": ing['product'],
+                    "Amount": ing['amount'],
+                    "Unit": ing['unit'],
+                    "Cost": ing_cost
+                })
+            
+            st.dataframe(
+                pd.DataFrame(ing_display),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Cost": st.column_config.NumberColumn(format="$%.4f")
+                }
+            )
+            
+            # Running cost total
+            st.metric("Running Cost Total", format_currency(running_cost))
+            suggested = suggest_price_from_cost(running_cost, 0.20)
+            st.caption(f"Suggested Price (20% cost): {format_currency(suggested)}")
+            
+            # Clear ingredients button
+            if st.button("🗑️ Clear All Ingredients", key="clear_ingredients"):
+                st.session_state.new_recipe_ingredients = []
+                st.rerun()
+        
+        st.markdown("---")
+        
+        # Instructions
+        new_instructions = st.text_area(
+            "Build Instructions:",
+            key="new_cocktail_instructions",
+            height=100,
+            placeholder="Describe how to build this cocktail..."
+        )
+        
+        # Pricing
+        st.markdown("#### 💰 Pricing")
+        
+        col_price, col_margin = st.columns(2)
+        
+        # Calculate cost from ingredients
+        recipe_cost = 0
+        for ing in st.session_state.new_recipe_ingredients:
+            unit_cost = get_ingredient_cost_per_unit(ing['product'])
+            recipe_cost += unit_cost * ing['amount']
+        
+        with col_price:
+            # Default to suggested price based on 20% margin
+            default_price = suggest_price_from_cost(recipe_cost, 0.20) if recipe_cost > 0 else 12.00
+            new_price = st.number_input(
+                "Sale Price:",
+                min_value=0.0,
+                value=round(default_price, 0),
+                step=0.50,
+                key="new_cocktail_price"
+            )
+        
+        with col_margin:
+            if new_price > 0 and recipe_cost > 0:
+                new_margin = calculate_margin(recipe_cost, new_price)
+                st.metric("Calculated Margin", f"{new_margin:.1%}")
+            else:
+                st.metric("Calculated Margin", "N/A")
+        
+        st.markdown("---")
+        
+        # Save button
+        if st.button("💾 Save Recipe", key="save_new_recipe", type="primary"):
+            # Validation
+            if not new_name:
+                st.error("Please enter a cocktail name.")
+            elif not st.session_state.new_recipe_ingredients:
+                st.error("Please add at least one ingredient.")
+            elif not new_instructions:
+                st.error("Please enter build instructions.")
+            else:
+                # Check for duplicate name
+                existing_names = [r['name'].lower() for r in st.session_state.cocktail_recipes]
+                if new_name.lower() in existing_names:
+                    st.error(f"A recipe named '{new_name}' already exists.")
+                else:
+                    # Create new recipe
+                    new_recipe = {
+                        "name": new_name,
+                        "glass": new_glass,
+                        "instructions": new_instructions,
+                        "sale_price": new_price,
+                        "ingredients": st.session_state.new_recipe_ingredients.copy()
+                    }
+                    
+                    # Add to recipes
+                    st.session_state.cocktail_recipes.append(new_recipe)
+                    
+                    # Clear the form
+                    st.session_state.new_recipe_ingredients = []
+                    
+                    st.success(f"✅ {new_name} saved successfully!")
+                    st.balloons()
+                    st.rerun()
 
 
 # =============================================================================
