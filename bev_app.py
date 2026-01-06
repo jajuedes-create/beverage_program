@@ -148,49 +148,50 @@ st.markdown("""
 def get_sample_spirits():
     """
     Returns a DataFrame with sample spirit inventory data.
+    Margins are stored as whole numbers (e.g., 20 for 20%).
     """
     data = [
         {"Product": "Hendrick's", "Type": "Gin", "Cost": 30.80, "Size (oz.)": 33.8, 
-         "Margin": 0.20, "Neat Price": 9.0, "Inventory": 1.0, "Use": "Backbar", 
+         "Margin": 20, "Neat Price": 9.0, "Inventory": 1.0, "Use": "Backbar", 
          "Distributor": "Breakthru", "Order Notes": "6 pk deal", "Suggested Retail": 44},
         {"Product": "Tito's", "Type": "Vodka", "Cost": 24.50, "Size (oz.)": 33.8, 
-         "Margin": 0.18, "Neat Price": 8.0, "Inventory": 3.0, "Use": "Rail", 
+         "Margin": 18, "Neat Price": 8.0, "Inventory": 3.0, "Use": "Rail", 
          "Distributor": "Breakthru", "Order Notes": "3 bttl deal", "Suggested Retail": 35},
         {"Product": "Ketel One", "Type": "Vodka", "Cost": 32.25, "Size (oz.)": 33.8, 
-         "Margin": 0.19, "Neat Price": 10.0, "Inventory": 3.0, "Use": "Backbar", 
+         "Margin": 19, "Neat Price": 10.0, "Inventory": 3.0, "Use": "Backbar", 
          "Distributor": "Breakthru", "Order Notes": "3 bttl deal", "Suggested Retail": 46},
         {"Product": "Tempus Fugit Crème de Cacao", "Type": "Cordial & Digestif", "Cost": 32.50, "Size (oz.)": 23.7, 
-         "Margin": 0.22, "Neat Price": 12.0, "Inventory": 6.0, "Use": "Menu", 
+         "Margin": 22, "Neat Price": 12.0, "Inventory": 6.0, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": "6 pk deal", "Suggested Retail": 47},
         {"Product": "St. George Absinthe", "Type": "Cordial & Digestif", "Cost": 54.00, "Size (oz.)": 25.3, 
-         "Margin": 0.23, "Neat Price": 19.0, "Inventory": 1.0, "Use": "Menu", 
+         "Margin": 23, "Neat Price": 19.0, "Inventory": 1.0, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 78},
         {"Product": "Espolòn Blanco", "Type": "Tequila", "Cost": 25.00, "Size (oz.)": 33.8, 
-         "Margin": 0.20, "Neat Price": 8.0, "Inventory": 4.0, "Use": "Rail", 
+         "Margin": 20, "Neat Price": 8.0, "Inventory": 4.0, "Use": "Rail", 
          "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 36},
         {"Product": "Lustau Vermut Rojo", "Type": "Vermouth & Aperitif", "Cost": 16.00, "Size (oz.)": 25.3, 
-         "Margin": 0.18, "Neat Price": 7.0, "Inventory": 2.0, "Use": "Menu", 
+         "Margin": 18, "Neat Price": 7.0, "Inventory": 2.0, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 23},
         {"Product": "Buffalo Trace", "Type": "Whiskey", "Cost": 31.00, "Size (oz.)": 33.8, 
-         "Margin": 0.20, "Neat Price": 9.0, "Inventory": 2.0, "Use": "Rail", 
+         "Margin": 20, "Neat Price": 9.0, "Inventory": 2.0, "Use": "Rail", 
          "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 44},
         {"Product": "Rittenhouse Rye", "Type": "Whiskey", "Cost": 28.00, "Size (oz.)": 25.3, 
-         "Margin": 0.19, "Neat Price": 9.0, "Inventory": 3.0, "Use": "Rail", 
+         "Margin": 19, "Neat Price": 9.0, "Inventory": 3.0, "Use": "Rail", 
          "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 40},
         {"Product": "Botanist", "Type": "Gin", "Cost": 33.74, "Size (oz.)": 33.8, 
-         "Margin": 0.21, "Neat Price": 10.0, "Inventory": 4.0, "Use": "Menu", 
+         "Margin": 21, "Neat Price": 10.0, "Inventory": 4.0, "Use": "Menu", 
          "Distributor": "General Beverage", "Order Notes": "", "Suggested Retail": 48},
         {"Product": "Bordiga Extra Dry Vermouth", "Type": "Vermouth & Aperitif", "Cost": 23.00, "Size (oz.)": 25.3, 
-         "Margin": 0.18, "Neat Price": 8.0, "Inventory": 2.0, "Use": "Menu", 
+         "Margin": 18, "Neat Price": 8.0, "Inventory": 2.0, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 33},
         {"Product": "Campari", "Type": "Vermouth & Aperitif", "Cost": 28.00, "Size (oz.)": 33.8, 
-         "Margin": 0.20, "Neat Price": 8.0, "Inventory": 2.0, "Use": "Menu", 
+         "Margin": 20, "Neat Price": 8.0, "Inventory": 2.0, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 40},
         {"Product": "Angostura Bitters", "Type": "Bitters", "Cost": 32.00, "Size (oz.)": 16.0, 
-         "Margin": 0.15, "Neat Price": 0.0, "Inventory": 2.0, "Use": "Menu", 
+         "Margin": 15, "Neat Price": 0.0, "Inventory": 2.0, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 0},
         {"Product": "Angostura Orange Bitters", "Type": "Bitters", "Cost": 16.00, "Size (oz.)": 4.0, 
-         "Margin": 0.15, "Neat Price": 0.0, "Inventory": 2.0, "Use": "Menu", 
+         "Margin": 15, "Neat Price": 0.0, "Inventory": 2.0, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 0},
     ]
     
@@ -212,38 +213,39 @@ def get_sample_spirits():
 def get_sample_wines():
     """
     Returns a DataFrame with sample wine inventory data.
+    Margins are stored as whole numbers (e.g., 35 for 35%).
     """
     data = [
         {"Product": "Mauzac Nature, 2022, Domaine Plageoles, Gaillac, France", 
-         "Type": "Bubbles", "Cost": 22.0, "Size (oz.)": 25.3, "Margin": 0.35, 
+         "Type": "Bubbles", "Cost": 22.0, "Size (oz.)": 25.3, "Margin": 35, 
          "Bottle Price": 63.0, "Inventory": 18.0, "Distributor": "Chromatic", 
          "BTG": 14.0, "Suggested Retail": 32},
         {"Product": "Savagnin, 2022, Domaine de la Pinte, 'Sav'Or' Vin de France (Jura)", 
-         "Type": "Rosé/Orange", "Cost": 29.0, "Size (oz.)": 25.3, "Margin": 0.37, 
+         "Type": "Rosé/Orange", "Cost": 29.0, "Size (oz.)": 25.3, "Margin": 37, 
          "Bottle Price": 79.0, "Inventory": 5.0, "Distributor": "Chromatic", 
          "BTG": 18.0, "Suggested Retail": 42},
         {"Product": "Sémillon, 2015, Forlorn Hope, 'Nacré', Napa Valley, CA", 
-         "Type": "White", "Cost": 17.0, "Size (oz.)": 25.3, "Margin": 0.33, 
+         "Type": "White", "Cost": 17.0, "Size (oz.)": 25.3, "Margin": 33, 
          "Bottle Price": 51.0, "Inventory": 2.0, "Distributor": "Chromatic", 
          "BTG": 11.0, "Suggested Retail": 24},
         {"Product": "Blanc de Blancs Extra Brut, 2012, Le Brun Servenay, Champagne, France", 
-         "Type": "Bubbles", "Cost": 65.0, "Size (oz.)": 25.3, "Margin": 0.35, 
+         "Type": "Bubbles", "Cost": 65.0, "Size (oz.)": 25.3, "Margin": 35, 
          "Bottle Price": 186.0, "Inventory": 2.0, "Distributor": "Left Bank", 
          "BTG": 41.0, "Suggested Retail": 94},
         {"Product": "Rosé of Gewürtztraminer/Pinot Noir, 2023, Teutonic, Willamette Valley, OR", 
-         "Type": "Rosé/Orange", "Cost": 23.0, "Size (oz.)": 25.3, "Margin": 0.33, 
+         "Type": "Rosé/Orange", "Cost": 23.0, "Size (oz.)": 25.3, "Margin": 33, 
          "Bottle Price": 69.0, "Inventory": 2.0, "Distributor": "Left Bank", 
          "BTG": 15.0, "Suggested Retail": 33},
         {"Product": "Chardonnay, 2023, Jean Dauvissat, Chablis, France", 
-         "Type": "White", "Cost": 31.5, "Size (oz.)": 25.3, "Margin": 0.35, 
+         "Type": "White", "Cost": 31.5, "Size (oz.)": 25.3, "Margin": 35, 
          "Bottle Price": 90.0, "Inventory": 6.0, "Distributor": "Vino Veritas", 
          "BTG": 20.0, "Suggested Retail": 45},
         {"Product": "Pinot Noir, 2021, Domaine de la Côte, Sta. Rita Hills, CA", 
-         "Type": "Red", "Cost": 55.0, "Size (oz.)": 25.3, "Margin": 0.34, 
+         "Type": "Red", "Cost": 55.0, "Size (oz.)": 25.3, "Margin": 34, 
          "Bottle Price": 162.0, "Inventory": 3.0, "Distributor": "Vino Veritas", 
          "BTG": 36.0, "Suggested Retail": 79},
         {"Product": "Nebbiolo, 2019, Cantina Massara, Barolo, Piedmont, Italy", 
-         "Type": "Red", "Cost": 31.0, "Size (oz.)": 25.3, "Margin": 0.32, 
+         "Type": "Red", "Cost": 31.0, "Size (oz.)": 25.3, "Margin": 32, 
          "Bottle Price": 97.0, "Inventory": 4.0, "Distributor": "Vino Veritas", 
          "BTG": 22.0, "Suggested Retail": 45},
     ]
@@ -264,31 +266,32 @@ def get_sample_wines():
 def get_sample_beers():
     """
     Returns a DataFrame with sample beer inventory data.
+    Margins are stored as whole numbers (e.g., 21 for 21%).
     """
     data = [
         {"Product": "New Glarus Staghorn Oktoberfest", "Type": "Can", 
          "Cost per Keg/Case": 26.40, "Size": 24.0, "UoM": "cans", 
-         "Margin": 0.21, "Menu Price": 5.0, "Inventory": 1.0, 
+         "Margin": 21, "Menu Price": 5.0, "Inventory": 1.0, 
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "New Glarus Moon Man", "Type": "Can", 
          "Cost per Keg/Case": 26.40, "Size": 24.0, "UoM": "cans", 
-         "Margin": 0.21, "Menu Price": 5.0, "Inventory": 2.0, 
+         "Margin": 21, "Menu Price": 5.0, "Inventory": 2.0, 
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "Coors Light", "Type": "Can", 
          "Cost per Keg/Case": 24.51, "Size": 30.0, "UoM": "cans", 
-         "Margin": 0.19, "Menu Price": 4.0, "Inventory": 1.0, 
+         "Margin": 19, "Menu Price": 4.0, "Inventory": 1.0, 
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "New Glarus Fat Squirrel", "Type": "Can", 
          "Cost per Keg/Case": 26.40, "Size": 24.0, "UoM": "cans", 
-         "Margin": 0.22, "Menu Price": 5.0, "Inventory": 1.0, 
+         "Margin": 22, "Menu Price": 5.0, "Inventory": 1.0, 
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "Hop Haus Yard Work IPA", "Type": "Sixtel", 
          "Cost per Keg/Case": 75.00, "Size": 1.0, "UoM": "keg", 
-         "Margin": 0.22, "Menu Price": 7.0, "Inventory": 1.0, 
+         "Margin": 22, "Menu Price": 7.0, "Inventory": 1.0, 
          "Distributor": "GB Beer", "Order Notes": ""},
         {"Product": "High Life", "Type": "Bottles", 
          "Cost per Keg/Case": 21.15, "Size": 24.0, "UoM": "bottles", 
-         "Margin": 0.18, "Menu Price": 4.0, "Inventory": 2.0, 
+         "Margin": 18, "Menu Price": 4.0, "Inventory": 2.0, 
          "Distributor": "Frank Beer", "Order Notes": ""},
     ]
     
@@ -667,26 +670,29 @@ def clean_currency_column(df: pd.DataFrame, column_name: str) -> pd.DataFrame:
 
 def clean_percentage_value(value):
     """
-    Cleans a percentage value by handling various formats:
-    - "20%" -> 0.20
-    - "0.20" -> 0.20
-    - 20 -> 0.20 (assumes whole number is a percentage)
-    - 0.20 -> 0.20
+    Cleans a percentage value by handling various formats.
+    Returns percentage as a whole number (e.g., 20 for 20%, not 0.20).
+    
+    Input handling:
+    - "20%" -> 20
+    - "0.20" -> 20
+    - 20 -> 20
+    - 0.20 -> 20
     
     Args:
         value: The value to clean (string or numeric)
         
     Returns:
-        float: Cleaned decimal value (e.g., 0.20 for 20%)
+        float: Cleaned percentage as whole number (e.g., 20 for 20%)
     """
     if pd.isna(value):
         return 0.0
     
     # If already a float/int
     if isinstance(value, (int, float)):
-        # If greater than 1, assume it's a whole number percentage
-        if value > 1:
-            return float(value) / 100.0
+        # If less than or equal to 1, assume it's a decimal that needs conversion
+        if value <= 1:
+            return float(value) * 100.0
         return float(value)
     
     # If it's a string
@@ -696,19 +702,19 @@ def clean_percentage_value(value):
         
         # Check for % symbol
         if '%' in cleaned:
-            # Remove % and convert
+            # Remove % and convert - already a whole number
             cleaned = cleaned.replace('%', '').strip()
             try:
-                return float(cleaned) / 100.0
+                return float(cleaned)
             except ValueError:
                 return 0.0
         else:
             # No % symbol, try to convert
             try:
                 num = float(cleaned)
-                # If greater than 1, assume it's a whole number percentage
-                if num > 1:
-                    return num / 100.0
+                # If less than or equal to 1, assume it's a decimal
+                if num <= 1:
+                    return num * 100.0
                 return num
             except ValueError:
                 return 0.0
@@ -1340,7 +1346,7 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
             "Bottle Price": st.column_config.NumberColumn(format="$%.2f"),
             "Menu Price": st.column_config.NumberColumn(format="$%.2f"),
             "BTG": st.column_config.NumberColumn(format="$%.2f"),
-            "Margin": st.column_config.NumberColumn(format="%.0%%"),
+            "Margin": st.column_config.NumberColumn(format="%.0f%%", help="Cost margin as percentage"),
             "Cost per Keg/Case": st.column_config.NumberColumn(format="$%.2f"),
             "Suggested Retail": st.column_config.NumberColumn(format="$%.2f"),
         }
