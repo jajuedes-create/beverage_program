@@ -500,10 +500,10 @@ st.markdown("""
     }
     
     .stTabs [data-baseweb="tab"] {
-        height: 60px;
-        padding: 10px 24px;
-        font-size: 18px;
-        font-weight: 600;
+        height: 70px;
+        padding: 12px 28px;
+        font-size: 22px;
+        font-weight: 700;
         border-radius: 8px 8px 0 0;
         background-color: #f0f2f6;
     }
@@ -1715,7 +1715,46 @@ def show_inventory():
     
     st.markdown("---")
     
-    # CSV Upload
+    # Tabbed inventory views
+    tab_spirits, tab_wine, tab_beer, tab_ingredients = st.tabs([
+        "🥃 Spirits", "🍷 Wine", "🍺 Beer", "🧴 Ingredients"
+    ])
+    
+    with tab_spirits:
+        show_inventory_tab(
+            df=st.session_state.spirits_inventory,
+            category="spirits",
+            filter_columns=["Type", "Distributor", "Use"],
+            display_name="Spirits"
+        )
+    
+    with tab_wine:
+        show_inventory_tab(
+            df=st.session_state.wine_inventory,
+            category="wine",
+            filter_columns=["Type", "Distributor"],
+            display_name="Wine"
+        )
+    
+    with tab_beer:
+        show_inventory_tab(
+            df=st.session_state.beer_inventory,
+            category="beer",
+            filter_columns=["Type", "Distributor"],
+            display_name="Beer"
+        )
+    
+    with tab_ingredients:
+        show_inventory_tab(
+            df=st.session_state.ingredients_inventory,
+            category="ingredients",
+            filter_columns=["Distributor"],
+            display_name="Ingredients"
+        )
+    
+    st.markdown("---")
+    
+    # CSV Upload (moved to bottom of page)
     with st.expander("📤 Upload Inventory Data (CSV)", expanded=False):
         st.markdown("""
         Upload a CSV file to replace inventory data for any category.
@@ -1775,45 +1814,6 @@ def show_inventory():
                     
             except Exception as e:
                 st.error(f"Error reading CSV: {e}")
-    
-    st.markdown("---")
-    
-    # Tabbed inventory views
-    tab_spirits, tab_wine, tab_beer, tab_ingredients = st.tabs([
-        "🥃 Spirits", "🍷 Wine", "🍺 Beer", "🧴 Ingredients"
-    ])
-    
-    with tab_spirits:
-        show_inventory_tab(
-            df=st.session_state.spirits_inventory,
-            category="spirits",
-            filter_columns=["Type", "Distributor", "Use"],
-            display_name="Spirits"
-        )
-    
-    with tab_wine:
-        show_inventory_tab(
-            df=st.session_state.wine_inventory,
-            category="wine",
-            filter_columns=["Type", "Distributor"],
-            display_name="Wine"
-        )
-    
-    with tab_beer:
-        show_inventory_tab(
-            df=st.session_state.beer_inventory,
-            category="beer",
-            filter_columns=["Type", "Distributor"],
-            display_name="Beer"
-        )
-    
-    with tab_ingredients:
-        show_inventory_tab(
-            df=st.session_state.ingredients_inventory,
-            category="ingredients",
-            filter_columns=["Distributor"],
-            display_name="Ingredients"
-        )
 
 
 def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, display_name: str):
