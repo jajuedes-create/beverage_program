@@ -665,10 +665,78 @@ def clean_currency_column(df: pd.DataFrame, column_name: str) -> pd.DataFrame:
     return df
 
 
+def clean_percentage_value(value):
+    """
+    Cleans a percentage value by handling various formats:
+    - "20%" -> 0.20
+    - "0.20" -> 0.20
+    - 20 -> 0.20 (assumes whole number is a percentage)
+    - 0.20 -> 0.20
+    
+    Args:
+        value: The value to clean (string or numeric)
+        
+    Returns:
+        float: Cleaned decimal value (e.g., 0.20 for 20%)
+    """
+    if pd.isna(value):
+        return 0.0
+    
+    # If already a float/int
+    if isinstance(value, (int, float)):
+        # If greater than 1, assume it's a whole number percentage
+        if value > 1:
+            return float(value) / 100.0
+        return float(value)
+    
+    # If it's a string
+    if isinstance(value, str):
+        # Remove whitespace
+        cleaned = value.strip()
+        
+        # Check for % symbol
+        if '%' in cleaned:
+            # Remove % and convert
+            cleaned = cleaned.replace('%', '').strip()
+            try:
+                return float(cleaned) / 100.0
+            except ValueError:
+                return 0.0
+        else:
+            # No % symbol, try to convert
+            try:
+                num = float(cleaned)
+                # If greater than 1, assume it's a whole number percentage
+                if num > 1:
+                    return num / 100.0
+                return num
+            except ValueError:
+                return 0.0
+    
+    return 0.0
+
+
+def clean_percentage_column(df: pd.DataFrame, column_name: str) -> pd.DataFrame:
+    """
+    Cleans a percentage column in a DataFrame.
+    
+    Args:
+        df: DataFrame to modify
+        column_name: Name of the column to clean
+        
+    Returns:
+        pd.DataFrame: DataFrame with cleaned column
+    """
+    if column_name in df.columns:
+        df[column_name] = df[column_name].apply(clean_percentage_value)
+    return df
+
+
 def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
     """
     Processes an uploaded Spirits inventory CSV:
     - Cleans currency columns
+    - Cleans percentage columns (Margin)
     - Recalculates derived fields (Cost/Oz, Value)
     
     Args:
@@ -686,8 +754,12 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
         for col in currency_columns:
             df = clean_currency_column(df, col)
         
-        # Clean numeric columns
-        numeric_columns = ['Size (oz.)', 'Margin', 'Inventory']
+        # Clean percentage columns
+        if 'Margin' in df.columns:
+            df = clean_percentage_column(df, 'Margin')
+        
+        # Clean numeric columns (excluding Margin which is handled above)
+        numeric_columns = ['Size (oz.)', 'Inventory']
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -721,8 +793,12 @@ def process_uploaded_wine(df: pd.DataFrame) -> pd.DataFrame:
         for col in currency_columns:
             df = clean_currency_column(df, col)
         
-        # Clean numeric columns
-        numeric_columns = ['Size (oz.)', 'Margin', 'Inventory']
+        # Clean percentage columns
+        if 'Margin' in df.columns:
+            df = clean_percentage_column(df, 'Margin')
+        
+        # Clean numeric columns (excluding Margin which is handled above)
+        numeric_columns = ['Size (oz.)', 'Inventory']
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -750,8 +826,12 @@ def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
         for col in currency_columns:
             df = clean_currency_column(df, col)
         
-        # Clean numeric columns
-        numeric_columns = ['Size', 'Margin', 'Inventory']
+        # Clean percentage columns
+        if 'Margin' in df.columns:
+            df = clean_percentage_column(df, 'Margin')
+        
+        # Clean numeric columns (excluding Margin which is handled above)
+        numeric_columns = ['Size', 'Inventory']
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
