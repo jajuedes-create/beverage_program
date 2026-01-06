@@ -6,7 +6,7 @@
 #   - Weekly Order Builder
 #   - Cocktail Builds Book
 #
-# Author: James Juedes
+# Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
 # =============================================================================
 
@@ -624,20 +624,232 @@ def navigate_to(page: str):
 # UTILITY FUNCTIONS
 # =============================================================================
 
+def clean_currency_value(value):
+    """
+    Cleans a currency value by removing $, commas, and converting to float.
+    Handles strings like "$30.80", "30.80", "$1,234.56", or already numeric values.
+    
+    Args:
+        value: The value to clean (string or numeric)
+        
+    Returns:
+        float: Cleaned numeric value, or 0.0 if conversion fails
+    """
+    if pd.isna(value):
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        # Remove $, commas, and whitespace
+        cleaned = value.replace('$', '').replace(',', '').strip()
+        try:
+            return float(cleaned)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def clean_currency_column(df: pd.DataFrame, column_name: str) -> pd.DataFrame:
+    """
+    Cleans a currency column in a DataFrame, converting string values to floats.
+    
+    Args:
+        df: DataFrame to modify
+        column_name: Name of the column to clean
+        
+    Returns:
+        pd.DataFrame: DataFrame with cleaned column
+    """
+    if column_name in df.columns:
+        df[column_name] = df[column_name].apply(clean_currency_value)
+    return df
+
+
+def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Processes an uploaded Spirits inventory CSV:
+    - Cleans currency columns
+    - Recalculates derived fields (Cost/Oz, Value)
+    
+    Args:
+        df: Raw uploaded DataFrame
+        
+    Returns:
+        pd.DataFrame: Processed DataFrame ready for use
+    """
+    try:
+        # Make a copy to avoid modifying original
+        df = df.copy()
+        
+        # Clean currency columns
+        currency_columns = ['Cost', 'Neat Price', 'Suggested Retail', 'Cost/Oz', 'Value']
+        for col in currency_columns:
+            df = clean_currency_column(df, col)
+        
+        # Clean numeric columns
+        numeric_columns = ['Size (oz.)', 'Margin', 'Inventory']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        # Recalculate derived fields
+        if 'Cost' in df.columns and 'Size (oz.)' in df.columns:
+            df['Cost/Oz'] = df.apply(
+                lambda row: row['Cost'] / row['Size (oz.)'] if row['Size (oz.)'] > 0 else 0, 
+                axis=1
+            )
+        
+        if 'Cost' in df.columns and 'Inventory' in df.columns:
+            df['Value'] = df['Cost'] * df['Inventory']
+        
+        return df
+    except Exception as e:
+        st.error(f"Error processing spirits data: {e}")
+        return df
+
+
+def process_uploaded_wine(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Processes an uploaded Wine inventory CSV.
+    """
+    try:
+        # Make a copy to avoid modifying original
+        df = df.copy()
+        
+        # Clean currency columns
+        currency_columns = ['Cost', 'Bottle Price', 'BTG', 'Suggested Retail', 'Value']
+        for col in currency_columns:
+            df = clean_currency_column(df, col)
+        
+        # Clean numeric columns
+        numeric_columns = ['Size (oz.)', 'Margin', 'Inventory']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        # Recalculate Value
+        if 'Cost' in df.columns and 'Inventory' in df.columns:
+            df['Value'] = df['Cost'] * df['Inventory']
+        
+        return df
+    except Exception as e:
+        st.error(f"Error processing wine data: {e}")
+        return df
+
+
+def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Processes an uploaded Beer inventory CSV.
+    """
+    try:
+        # Make a copy to avoid modifying original
+        df = df.copy()
+        
+        # Clean currency columns
+        currency_columns = ['Cost per Keg/Case', 'Menu Price', 'Cost/Unit', 'Value']
+        for col in currency_columns:
+            df = clean_currency_column(df, col)
+        
+        # Clean numeric columns
+        numeric_columns = ['Size', 'Margin', 'Inventory']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        # Recalculate derived fields
+        if 'Cost per Keg/Case' in df.columns and 'Size' in df.columns:
+            df['Cost/Unit'] = df.apply(
+                lambda row: row['Cost per Keg/Case'] / row['Size'] if row['Size'] > 0 else 0, 
+                axis=1
+            )
+        
+        if 'Cost per Keg/Case' in df.columns and 'Inventory' in df.columns:
+            df['Value'] = df['Cost per Keg/Case'] * df['Inventory']
+        
+        return df
+    except Exception as e:
+        st.error(f"Error processing beer data: {e}")
+        return df
+
+
+def process_uploaded_ingredients(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Processes an uploaded Ingredients inventory CSV.
+    """
+    try:
+        # Make a copy to avoid modifying original
+        df = df.copy()
+        
+        # Clean currency columns
+        currency_columns = ['Cost', 'Cost/Unit']
+        for col in currency_columns:
+            df = clean_currency_column(df, col)
+        
+        # Clean numeric columns
+        numeric_columns = ['Size/Yield']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        # Recalculate Cost/Unit
+        if 'Cost' in df.columns and 'Size/Yield' in df.columns:
+            df['Cost/Unit'] = df.apply(
+                lambda row: row['Cost'] / row['Size/Yield'] if row['Size/Yield'] > 0 else 0, 
+                axis=1
+            )
+        
+        return df
+    except Exception as e:
+        st.error(f"Error processing ingredients data: {e}")
+        return df
+
+
 def calculate_total_value(df: pd.DataFrame) -> float:
     """
     Calculates total inventory value from a DataFrame.
+    Handles edge cases like missing columns, NaN values, and string values.
+    
+    Args:
+        df: DataFrame with potential 'Value' column
+        
+    Returns:
+        float: Sum of the Value column, or 0.0 if not available
     """
-    if 'Value' in df.columns:
-        return df['Value'].sum()
-    return 0.0
+    # Handle None or empty DataFrame
+    if df is None:
+        return 0.0
+    
+    try:
+        if len(df) == 0:
+            return 0.0
+    except Exception:
+        return 0.0
+    
+    if 'Value' not in df.columns:
+        return 0.0
+    
+    try:
+        # Get the Value column and clean it
+        value_col = df['Value'].copy()
+        
+        # Apply currency cleaning to each value
+        cleaned_values = value_col.apply(clean_currency_value)
+        
+        # Sum and return as float
+        result = cleaned_values.sum()
+        return float(result) if pd.notna(result) else 0.0
+    except Exception:
+        return 0.0
 
 
 def format_currency(value: float) -> str:
     """
     Formats a number as USD currency.
     """
-    return f"${value:,.2f}"
+    try:
+        return f"${float(value):,.2f}"
+    except (ValueError, TypeError):
+        return "$0.00"
 
 
 def filter_dataframe(df: pd.DataFrame, search_term: str, column_filters: dict) -> pd.DataFrame:
@@ -689,17 +901,22 @@ def get_ingredient_cost_per_unit(product_name: str) -> float:
     Returns:
         float: Cost per unit (oz for spirits, varies for ingredients)
     """
-    # Check spirits inventory
-    spirits = st.session_state.spirits_inventory
-    spirit_match = spirits[spirits['Product'] == product_name]
-    if len(spirit_match) > 0:
-        return spirit_match['Cost/Oz'].values[0]
-    
-    # Check ingredients inventory
-    ingredients = st.session_state.ingredients_inventory
-    ingredient_match = ingredients[ingredients['Product'] == product_name]
-    if len(ingredient_match) > 0:
-        return ingredient_match['Cost/Unit'].values[0]
+    try:
+        # Check spirits inventory
+        spirits = st.session_state.spirits_inventory
+        spirit_match = spirits[spirits['Product'] == product_name]
+        if len(spirit_match) > 0 and 'Cost/Oz' in spirit_match.columns:
+            value = spirit_match['Cost/Oz'].values[0]
+            return clean_currency_value(value)
+        
+        # Check ingredients inventory
+        ingredients = st.session_state.ingredients_inventory
+        ingredient_match = ingredients[ingredients['Product'] == product_name]
+        if len(ingredient_match) > 0 and 'Cost/Unit' in ingredient_match.columns:
+            value = ingredient_match['Cost/Unit'].values[0]
+            return clean_currency_value(value)
+    except Exception:
+        pass
     
     return 0.0
 
@@ -834,7 +1051,7 @@ def show_home():
     
     st.markdown("---")
     st.markdown(
-        "<p style='text-align: center; color: #888;'>Dev by JAJ • Madison, WI</p>",
+        "<p style='text-align: center; color: #888;'>Canter Inn • Madison, WI</p>",
         unsafe_allow_html=True
     )
 
@@ -859,10 +1076,27 @@ def show_inventory():
     # Dashboard metrics
     st.markdown("### 📊 Inventory Dashboard")
     
-    spirits_value = calculate_total_value(st.session_state.spirits_inventory)
-    wine_value = calculate_total_value(st.session_state.wine_inventory)
-    beer_value = calculate_total_value(st.session_state.beer_inventory)
-    ingredients_value = calculate_total_value(st.session_state.ingredients_inventory)
+    # Calculate values with defensive error handling
+    try:
+        spirits_value = float(calculate_total_value(st.session_state.spirits_inventory) or 0)
+    except Exception:
+        spirits_value = 0.0
+    
+    try:
+        wine_value = float(calculate_total_value(st.session_state.wine_inventory) or 0)
+    except Exception:
+        wine_value = 0.0
+    
+    try:
+        beer_value = float(calculate_total_value(st.session_state.beer_inventory) or 0)
+    except Exception:
+        beer_value = 0.0
+    
+    try:
+        ingredients_value = float(calculate_total_value(st.session_state.ingredients_inventory) or 0)
+    except Exception:
+        ingredients_value = 0.0
+    
     total_value = spirits_value + wine_value + beer_value + ingredients_value
     
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -883,7 +1117,11 @@ def show_inventory():
     
     # CSV Upload
     with st.expander("📤 Upload Inventory Data (CSV)", expanded=False):
-        st.markdown("Upload a CSV file to replace inventory data for any category.")
+        st.markdown("""
+        Upload a CSV file to replace inventory data for any category.
+        The CSV should have matching column headers. Currency formatting (e.g., "$30.80") 
+        will be automatically cleaned, and calculated fields will be recalculated.
+        """)
         
         upload_category = st.selectbox(
             "Select category to upload:",
@@ -896,21 +1134,39 @@ def show_inventory():
         if uploaded_file is not None:
             try:
                 new_data = pd.read_csv(uploaded_file)
-                st.write("Preview of uploaded data:")
+                st.write("Preview of uploaded data (raw):")
                 st.dataframe(new_data.head())
                 
+                # Show expected columns for the selected category
+                expected_cols = {
+                    "Spirits": ["Product", "Type", "Cost", "Size (oz.)", "Margin", "Neat Price", 
+                               "Inventory", "Use", "Distributor", "Order Notes", "Suggested Retail"],
+                    "Wine": ["Product", "Type", "Cost", "Size (oz.)", "Margin", "Bottle Price",
+                            "Inventory", "Distributor", "BTG", "Suggested Retail"],
+                    "Beer": ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", "Margin",
+                            "Menu Price", "Inventory", "Distributor", "Order Notes"],
+                    "Ingredients": ["Product", "Cost", "Size/Yield", "UoM", "Distributor", "Order Notes"]
+                }
+                
+                st.caption(f"Expected columns for {upload_category}: {', '.join(expected_cols[upload_category])}")
+                
                 if st.button("✅ Confirm Upload", key="confirm_upload"):
+                    # Process the data based on category
                     if upload_category == "Spirits":
-                        st.session_state.spirits_inventory = new_data
+                        processed_data = process_uploaded_spirits(new_data)
+                        st.session_state.spirits_inventory = processed_data
                     elif upload_category == "Wine":
-                        st.session_state.wine_inventory = new_data
+                        processed_data = process_uploaded_wine(new_data)
+                        st.session_state.wine_inventory = processed_data
                     elif upload_category == "Beer":
-                        st.session_state.beer_inventory = new_data
+                        processed_data = process_uploaded_beer(new_data)
+                        st.session_state.beer_inventory = processed_data
                     elif upload_category == "Ingredients":
-                        st.session_state.ingredients_inventory = new_data
+                        processed_data = process_uploaded_ingredients(new_data)
+                        st.session_state.ingredients_inventory = processed_data
                     
                     st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-                    st.success(f"✅ {upload_category} inventory updated successfully!")
+                    st.success(f"✅ {upload_category} inventory uploaded and processed successfully!")
                     st.rerun()
                     
             except Exception as e:
