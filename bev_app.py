@@ -267,7 +267,7 @@ def is_google_sheets_configured() -> bool:
     return get_google_sheets_connection() is not None
 
 def save_all_inventory_data():
-    """Saves all inventory DataFrames to Google Sheets."""
+    """Saves all inventory DataFrames to Google Sheets and creates a historical snapshot."""
     if not is_google_sheets_configured():
         return
     
@@ -285,6 +285,9 @@ def save_all_inventory_data():
         save_dataframe_to_sheets(st.session_state.order_history, 'order_history')
     if 'last_inventory_date' in st.session_state:
         save_text_to_sheets(st.session_state.last_inventory_date, 'last_inventory_date')
+    
+    # Save historical snapshot for comparison tracking
+    save_inventory_snapshot()
 
 def save_cocktail_recipes():
     """Saves cocktail recipes to Google Sheets."""
@@ -293,6 +296,81 @@ def save_cocktail_recipes():
     
     if 'cocktail_recipes' in st.session_state:
         save_json_to_sheets(st.session_state.cocktail_recipes, 'cocktail_recipes')
+
+
+def save_inventory_snapshot():
+    """
+    Saves a snapshot of current inventory values with timestamp.
+    Used for historical comparison tracking.
+    """
+    if not is_google_sheets_configured():
+        return
+    
+    # Calculate current values
+    spirits_value = calculate_total_value(st.session_state.spirits_inventory) if 'spirits_inventory' in st.session_state else 0
+    wine_value = calculate_total_value(st.session_state.wine_inventory) if 'wine_inventory' in st.session_state else 0
+    beer_value = calculate_total_value(st.session_state.beer_inventory) if 'beer_inventory' in st.session_state else 0
+    ingredients_value = calculate_total_value(st.session_state.ingredients_inventory) if 'ingredients_inventory' in st.session_state else 0
+    total_value = spirits_value + wine_value + beer_value + ingredients_value
+    
+    # Create snapshot record
+    snapshot = {
+        'Date': datetime.now().strftime("%Y-%m-%d"),
+        'Spirits Value': spirits_value,
+        'Wine Value': wine_value,
+        'Beer Value': beer_value,
+        'Ingredients Value': ingredients_value,
+        'Total Value': total_value
+    }
+    
+    # Load existing history
+    existing_history = load_dataframe_from_sheets('inventory_history')
+    
+    if existing_history is not None and len(existing_history) > 0:
+        # Check if we already have a snapshot for today
+        today = datetime.now().strftime("%Y-%m-%d")
+        if today in existing_history['Date'].values:
+            # Update today's snapshot
+            existing_history.loc[existing_history['Date'] == today, 'Spirits Value'] = spirits_value
+            existing_history.loc[existing_history['Date'] == today, 'Wine Value'] = wine_value
+            existing_history.loc[existing_history['Date'] == today, 'Beer Value'] = beer_value
+            existing_history.loc[existing_history['Date'] == today, 'Ingredients Value'] = ingredients_value
+            existing_history.loc[existing_history['Date'] == today, 'Total Value'] = total_value
+            history_df = existing_history
+        else:
+            # Add new snapshot
+            history_df = pd.concat([existing_history, pd.DataFrame([snapshot])], ignore_index=True)
+    else:
+        # Create new history
+        history_df = pd.DataFrame([snapshot])
+    
+    # Save to Google Sheets
+    save_dataframe_to_sheets(history_df, 'inventory_history')
+
+
+def load_inventory_history() -> pd.DataFrame:
+    """
+    Loads historical inventory snapshots.
+    
+    Returns:
+        pd.DataFrame with columns: Date, Spirits Value, Wine Value, Beer Value, Ingredients Value, Total Value
+    """
+    if not is_google_sheets_configured():
+        return None
+    
+    history = load_dataframe_from_sheets('inventory_history')
+    
+    if history is not None and len(history) > 0:
+        # Ensure numeric columns are numeric
+        value_cols = ['Spirits Value', 'Wine Value', 'Beer Value', 'Ingredients Value', 'Total Value']
+        for col in value_cols:
+            if col in history.columns:
+                history[col] = pd.to_numeric(history[col], errors='coerce').fillna(0)
+        
+        # Sort by date descending
+        history = history.sort_values('Date', ascending=False)
+    
+    return history
 
 # =============================================================================
 # PAGE CONFIGURATION
@@ -414,6 +492,29 @@ st.markdown("""
         justify-content: space-between;
         padding: 5px 0;
         border-bottom: 1px solid #f0f0f0;
+    }
+    
+    /* ----- Inventory Tab Styling ----- */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        height: 60px;
+        padding: 10px 24px;
+        font-size: 18px;
+        font-weight: 600;
+        border-radius: 8px 8px 0 0;
+        background-color: #f0f2f6;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: #ffffff;
+        border-top: 3px solid #ff4b4b;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: #e6e9ef;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1523,6 +1624,95 @@ def show_inventory():
         st.metric(label="💰 Total Value", value=format_currency(total_value))
     
     st.caption(f"Last inventory recorded: {st.session_state.last_inventory_date}")
+    
+    # Historical Comparison Section
+    with st.expander("📈 Historical Value Comparison", expanded=False):
+        history = load_inventory_history()
+        
+        if history is not None and len(history) > 0:
+            # Get list of dates for dropdown (excluding today if present)
+            available_dates = history['Date'].unique().tolist()
+            
+            if len(available_dates) > 0:
+                selected_date = st.selectbox(
+                    "Compare current inventory to:",
+                    options=available_dates,
+                    key="history_compare_date",
+                    help="Select a previous inventory date to compare against current values"
+                )
+                
+                # Get historical values for selected date
+                historical_row = history[history['Date'] == selected_date].iloc[0]
+                
+                hist_spirits = float(historical_row.get('Spirits Value', 0))
+                hist_wine = float(historical_row.get('Wine Value', 0))
+                hist_beer = float(historical_row.get('Beer Value', 0))
+                hist_ingredients = float(historical_row.get('Ingredients Value', 0))
+                hist_total = float(historical_row.get('Total Value', 0))
+                
+                # Calculate deltas
+                delta_spirits = spirits_value - hist_spirits
+                delta_wine = wine_value - hist_wine
+                delta_beer = beer_value - hist_beer
+                delta_ingredients = ingredients_value - hist_ingredients
+                delta_total = total_value - hist_total
+                
+                st.markdown(f"**Comparing to inventory from {selected_date}:**")
+                
+                # Display comparison metrics with deltas
+                comp_col1, comp_col2, comp_col3, comp_col4, comp_col5 = st.columns(5)
+                
+                with comp_col1:
+                    st.metric(
+                        label="🥃 Spirits",
+                        value=format_currency(spirits_value),
+                        delta=f"{'+' if delta_spirits >= 0 else ''}{format_currency(delta_spirits)}"
+                    )
+                with comp_col2:
+                    st.metric(
+                        label="🍷 Wine",
+                        value=format_currency(wine_value),
+                        delta=f"{'+' if delta_wine >= 0 else ''}{format_currency(delta_wine)}"
+                    )
+                with comp_col3:
+                    st.metric(
+                        label="🍺 Beer",
+                        value=format_currency(beer_value),
+                        delta=f"{'+' if delta_beer >= 0 else ''}{format_currency(delta_beer)}"
+                    )
+                with comp_col4:
+                    st.metric(
+                        label="🧴 Ingredients",
+                        value=format_currency(ingredients_value),
+                        delta=f"{'+' if delta_ingredients >= 0 else ''}{format_currency(delta_ingredients)}"
+                    )
+                with comp_col5:
+                    st.metric(
+                        label="💰 Total",
+                        value=format_currency(total_value),
+                        delta=f"{'+' if delta_total >= 0 else ''}{format_currency(delta_total)}"
+                    )
+                
+                # Show historical values table
+                st.markdown("---")
+                st.markdown("**Historical Inventory Values:**")
+                
+                # Format history for display
+                display_history = history.copy()
+                for col in ['Spirits Value', 'Wine Value', 'Beer Value', 'Ingredients Value', 'Total Value']:
+                    if col in display_history.columns:
+                        display_history[col] = display_history[col].apply(lambda x: format_currency(x))
+                
+                st.dataframe(
+                    display_history,
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.info("No historical data available yet. Save inventory changes to start tracking history.")
+        else:
+            st.info("📊 No historical data available yet. Save inventory changes to start tracking value history.")
+    
     st.markdown("---")
     
     # CSV Upload
@@ -1629,6 +1819,7 @@ def show_inventory():
 def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, display_name: str):
     """
     Renders an inventory tab with search, filter, and editing.
+    Calculated fields are locked from manual editing.
     """
     
     st.markdown(f"#### Search & Filter {display_name}")
@@ -1660,16 +1851,41 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
     
     st.markdown(f"#### {display_name} Inventory")
     
+    # Define which columns are calculated (locked) vs editable for each category
+    if category == "spirits":
+        disabled_columns = ["Cost/Oz", "Value"]  # Calculated fields
+    elif category == "wine":
+        disabled_columns = ["Value"]  # Calculated field
+    elif category == "beer":
+        disabled_columns = ["Cost/Unit", "Value"]  # Calculated fields
+    elif category == "ingredients":
+        disabled_columns = ["Cost/Unit"]  # Calculated field
+    else:
+        disabled_columns = []
+    
     edited_df = st.data_editor(
         filtered_df,
         use_container_width=True,
         num_rows="dynamic",
         key=f"editor_{category}",
+        disabled=disabled_columns,  # Lock calculated columns
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
-            "Cost/Oz": st.column_config.NumberColumn(format="$%.4f"),
-            "Cost/Unit": st.column_config.NumberColumn(format="$%.4f"),
-            "Value": st.column_config.NumberColumn(format="$%.2f"),
+            "Cost/Oz": st.column_config.NumberColumn(
+                format="$%.4f", 
+                help="🔒 Calculated: Cost ÷ Size (oz.)",
+                disabled=True
+            ),
+            "Cost/Unit": st.column_config.NumberColumn(
+                format="$%.4f",
+                help="🔒 Calculated automatically",
+                disabled=True
+            ),
+            "Value": st.column_config.NumberColumn(
+                format="$%.2f",
+                help="🔒 Calculated: Cost × Inventory",
+                disabled=True
+            ),
             "Neat Price": st.column_config.NumberColumn(format="$%.2f"),
             "Bottle Price": st.column_config.NumberColumn(format="$%.2f"),
             "Menu Price": st.column_config.NumberColumn(format="$%.2f"),
