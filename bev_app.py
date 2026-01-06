@@ -15,6 +15,284 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import json
+
+# =============================================================================
+# GOOGLE SHEETS DATA PERSISTENCE
+# =============================================================================
+# Data is saved to Google Sheets for permanent storage
+# This persists across all sessions, refreshes, and redeployments
+#
+# SETUP INSTRUCTIONS:
+# 1. Create a Google Cloud project at https://console.cloud.google.com/
+# 2. Enable the Google Sheets API and Google Drive API
+# 3. Create a Service Account and download the JSON credentials
+# 4. Create a Google Sheet and share it with the service account email
+# 5. Add credentials to Streamlit secrets (see secrets.toml template below)
+#
+# Required in .streamlit/secrets.toml:
+# [gcp_service_account]
+# type = "service_account"
+# project_id = "your-project-id"
+# private_key_id = "..."
+# private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+# client_email = "your-service-account@your-project.iam.gserviceaccount.com"
+# client_id = "..."
+# auth_uri = "https://accounts.google.com/o/oauth2/auth"
+# token_uri = "https://oauth2.googleapis.com/token"
+# auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+# client_x509_cert_url = "..."
+#
+# [google_sheets]
+# spreadsheet_id = "your-spreadsheet-id-from-url"
+
+try:
+    import gspread
+    from google.oauth2.service_account import Credentials
+    GSHEETS_AVAILABLE = True
+except ImportError:
+    GSHEETS_AVAILABLE = False
+
+# Cache the Google Sheets connection
+@st.cache_resource
+def get_google_sheets_connection():
+    """
+    Creates and caches a connection to Google Sheets.
+    Returns None if credentials are not configured.
+    """
+    if not GSHEETS_AVAILABLE:
+        return None
+    
+    try:
+        # Check if secrets are configured
+        if "gcp_service_account" not in st.secrets:
+            return None
+        
+        # Define the scope
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        
+        # Create credentials from secrets
+        credentials = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=scopes
+        )
+        
+        # Connect to Google Sheets
+        client = gspread.authorize(credentials)
+        return client
+    
+    except Exception as e:
+        st.error(f"Error connecting to Google Sheets: {e}")
+        return None
+
+def get_spreadsheet():
+    """Gets the configured spreadsheet."""
+    client = get_google_sheets_connection()
+    if client is None:
+        return None
+    
+    try:
+        spreadsheet_id = st.secrets["google_sheets"]["spreadsheet_id"]
+        return client.open_by_key(spreadsheet_id)
+    except Exception as e:
+        st.error(f"Error opening spreadsheet: {e}")
+        return None
+
+def get_or_create_worksheet(spreadsheet, sheet_name: str):
+    """Gets a worksheet by name, creating it if it doesn't exist."""
+    try:
+        return spreadsheet.worksheet(sheet_name)
+    except gspread.WorksheetNotFound:
+        return spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=26)
+
+def save_dataframe_to_sheets(df: pd.DataFrame, sheet_name: str):
+    """
+    Saves a DataFrame to a Google Sheets worksheet.
+    
+    Args:
+        df: DataFrame to save
+        sheet_name: Name of the worksheet
+    """
+    spreadsheet = get_spreadsheet()
+    if spreadsheet is None:
+        return False
+    
+    try:
+        worksheet = get_or_create_worksheet(spreadsheet, sheet_name)
+        
+        # Clear existing data
+        worksheet.clear()
+        
+        # Convert DataFrame to list of lists (handle NaN values)
+        df_clean = df.fillna("")
+        data = [df_clean.columns.tolist()] + df_clean.values.tolist()
+        
+        # Update the worksheet
+        worksheet.update(data, value_input_option='RAW')
+        return True
+    
+    except Exception as e:
+        st.error(f"Error saving to Google Sheets ({sheet_name}): {e}")
+        return False
+
+def load_dataframe_from_sheets(sheet_name: str) -> pd.DataFrame:
+    """
+    Loads a DataFrame from a Google Sheets worksheet.
+    
+    Args:
+        sheet_name: Name of the worksheet
+        
+    Returns:
+        pd.DataFrame or None if sheet doesn't exist or error occurs
+    """
+    spreadsheet = get_spreadsheet()
+    if spreadsheet is None:
+        return None
+    
+    try:
+        worksheet = spreadsheet.worksheet(sheet_name)
+        data = worksheet.get_all_values()
+        
+        if len(data) < 2:  # No data (only header or empty)
+            return None
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(data[1:], columns=data[0])
+        
+        # Convert numeric columns back to numbers
+        for col in df.columns:
+            try:
+                df[col] = pd.to_numeric(df[col])
+            except (ValueError, TypeError):
+                pass  # Keep as string if conversion fails
+        
+        return df
+    
+    except gspread.WorksheetNotFound:
+        return None
+    except Exception as e:
+        st.error(f"Error loading from Google Sheets ({sheet_name}): {e}")
+        return None
+
+def save_json_to_sheets(data: list, sheet_name: str):
+    """
+    Saves JSON data (like cocktail recipes) to a Google Sheets worksheet.
+    Stores as a single cell with JSON string.
+    
+    Args:
+        data: List or dict to save as JSON
+        sheet_name: Name of the worksheet
+    """
+    spreadsheet = get_spreadsheet()
+    if spreadsheet is None:
+        return False
+    
+    try:
+        worksheet = get_or_create_worksheet(spreadsheet, sheet_name)
+        worksheet.clear()
+        
+        # Store JSON as a single cell
+        json_str = json.dumps(data, indent=2)
+        worksheet.update('A1', [[json_str]], value_input_option='RAW')
+        return True
+    
+    except Exception as e:
+        st.error(f"Error saving JSON to Google Sheets ({sheet_name}): {e}")
+        return False
+
+def load_json_from_sheets(sheet_name: str) -> list:
+    """
+    Loads JSON data from a Google Sheets worksheet.
+    
+    Args:
+        sheet_name: Name of the worksheet
+        
+    Returns:
+        list or None if sheet doesn't exist or error occurs
+    """
+    spreadsheet = get_spreadsheet()
+    if spreadsheet is None:
+        return None
+    
+    try:
+        worksheet = spreadsheet.worksheet(sheet_name)
+        json_str = worksheet.acell('A1').value
+        
+        if json_str:
+            return json.loads(json_str)
+        return None
+    
+    except gspread.WorksheetNotFound:
+        return None
+    except Exception as e:
+        st.error(f"Error loading JSON from Google Sheets ({sheet_name}): {e}")
+        return None
+
+def save_text_to_sheets(text: str, sheet_name: str):
+    """Saves a text value to a Google Sheets worksheet."""
+    spreadsheet = get_spreadsheet()
+    if spreadsheet is None:
+        return False
+    
+    try:
+        worksheet = get_or_create_worksheet(spreadsheet, sheet_name)
+        worksheet.clear()
+        worksheet.update('A1', [[text]], value_input_option='RAW')
+        return True
+    except Exception as e:
+        st.error(f"Error saving text to Google Sheets ({sheet_name}): {e}")
+        return False
+
+def load_text_from_sheets(sheet_name: str) -> str:
+    """Loads a text value from a Google Sheets worksheet."""
+    spreadsheet = get_spreadsheet()
+    if spreadsheet is None:
+        return None
+    
+    try:
+        worksheet = spreadsheet.worksheet(sheet_name)
+        return worksheet.acell('A1').value
+    except gspread.WorksheetNotFound:
+        return None
+    except Exception as e:
+        return None
+
+def is_google_sheets_configured() -> bool:
+    """Checks if Google Sheets is properly configured."""
+    if not GSHEETS_AVAILABLE:
+        return False
+    return get_google_sheets_connection() is not None
+
+def save_all_inventory_data():
+    """Saves all inventory DataFrames to Google Sheets."""
+    if not is_google_sheets_configured():
+        return
+    
+    if 'spirits_inventory' in st.session_state:
+        save_dataframe_to_sheets(st.session_state.spirits_inventory, 'spirits_inventory')
+    if 'wine_inventory' in st.session_state:
+        save_dataframe_to_sheets(st.session_state.wine_inventory, 'wine_inventory')
+    if 'beer_inventory' in st.session_state:
+        save_dataframe_to_sheets(st.session_state.beer_inventory, 'beer_inventory')
+    if 'ingredients_inventory' in st.session_state:
+        save_dataframe_to_sheets(st.session_state.ingredients_inventory, 'ingredients_inventory')
+    if 'weekly_inventory' in st.session_state:
+        save_dataframe_to_sheets(st.session_state.weekly_inventory, 'weekly_inventory')
+    if 'order_history' in st.session_state:
+        save_dataframe_to_sheets(st.session_state.order_history, 'order_history')
+    if 'last_inventory_date' in st.session_state:
+        save_text_to_sheets(st.session_state.last_inventory_date, 'last_inventory_date')
+
+def save_cocktail_recipes():
+    """Saves cocktail recipes to Google Sheets."""
+    if not is_google_sheets_configured():
+        return
+    
+    if 'cocktail_recipes' in st.session_state:
+        save_json_to_sheets(st.session_state.cocktail_recipes, 'cocktail_recipes')
 
 # =============================================================================
 # PAGE CONFIGURATION
@@ -575,41 +853,80 @@ def get_sample_cocktails():
 def init_session_state():
     """
     Initializes all session state variables.
+    First tries to load from Google Sheets, then falls back to sample data.
     """
     
     # Navigation state
     if 'current_page' not in st.session_state:
         st.session_state.current_page = 'home'
     
-    # Inventory data
+    # Check if Google Sheets is configured
+    sheets_configured = is_google_sheets_configured()
+    
+    # ----- Load Inventory Data (from Google Sheets or sample data) -----
+    
     if 'spirits_inventory' not in st.session_state:
-        st.session_state.spirits_inventory = get_sample_spirits()
+        saved_spirits = load_dataframe_from_sheets('spirits_inventory') if sheets_configured else None
+        if saved_spirits is not None and len(saved_spirits) > 0:
+            st.session_state.spirits_inventory = saved_spirits
+        else:
+            st.session_state.spirits_inventory = get_sample_spirits()
     
     if 'wine_inventory' not in st.session_state:
-        st.session_state.wine_inventory = get_sample_wines()
+        saved_wine = load_dataframe_from_sheets('wine_inventory') if sheets_configured else None
+        if saved_wine is not None and len(saved_wine) > 0:
+            st.session_state.wine_inventory = saved_wine
+        else:
+            st.session_state.wine_inventory = get_sample_wines()
     
     if 'beer_inventory' not in st.session_state:
-        st.session_state.beer_inventory = get_sample_beers()
+        saved_beer = load_dataframe_from_sheets('beer_inventory') if sheets_configured else None
+        if saved_beer is not None and len(saved_beer) > 0:
+            st.session_state.beer_inventory = saved_beer
+        else:
+            st.session_state.beer_inventory = get_sample_beers()
     
     if 'ingredients_inventory' not in st.session_state:
-        st.session_state.ingredients_inventory = get_sample_ingredients()
+        saved_ingredients = load_dataframe_from_sheets('ingredients_inventory') if sheets_configured else None
+        if saved_ingredients is not None and len(saved_ingredients) > 0:
+            st.session_state.ingredients_inventory = saved_ingredients
+        else:
+            st.session_state.ingredients_inventory = get_sample_ingredients()
     
     if 'last_inventory_date' not in st.session_state:
-        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+        saved_date = load_text_from_sheets('last_inventory_date') if sheets_configured else None
+        if saved_date is not None:
+            st.session_state.last_inventory_date = saved_date
+        else:
+            st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
     
-    # Weekly Order Builder data
+    # ----- Load Weekly Order Builder Data -----
+    
     if 'weekly_inventory' not in st.session_state:
-        st.session_state.weekly_inventory = get_sample_weekly_inventory()
+        saved_weekly = load_dataframe_from_sheets('weekly_inventory') if sheets_configured else None
+        if saved_weekly is not None and len(saved_weekly) > 0:
+            st.session_state.weekly_inventory = saved_weekly
+        else:
+            st.session_state.weekly_inventory = get_sample_weekly_inventory()
     
     if 'order_history' not in st.session_state:
-        st.session_state.order_history = get_sample_order_history()
+        saved_history = load_dataframe_from_sheets('order_history') if sheets_configured else None
+        if saved_history is not None and len(saved_history) > 0:
+            st.session_state.order_history = saved_history
+        else:
+            st.session_state.order_history = get_sample_order_history()
     
     if 'current_order' not in st.session_state:
         st.session_state.current_order = pd.DataFrame()
     
-    # Cocktail Builds Book data
+    # ----- Load Cocktail Recipes -----
+    
     if 'cocktail_recipes' not in st.session_state:
-        st.session_state.cocktail_recipes = get_sample_cocktails()
+        saved_cocktails = load_json_from_sheets('cocktail_recipes') if sheets_configured else None
+        if saved_cocktails is not None and len(saved_cocktails) > 0:
+            st.session_state.cocktail_recipes = saved_cocktails
+        else:
+            st.session_state.cocktail_recipes = get_sample_cocktails()
 
 
 # =============================================================================
@@ -1136,6 +1453,13 @@ def show_home():
             st.rerun()
     
     st.markdown("---")
+    
+    # Show Google Sheets connection status
+    if is_google_sheets_configured():
+        st.success("✅ Connected to Google Sheets - Data will persist permanently")
+    else:
+        st.warning("⚠️ Google Sheets not configured - Data will reset on app restart. See setup instructions in secrets_template.toml")
+    
     st.markdown(
         "<p style='text-align: center; color: #888;'>Canter Inn • Madison, WI</p>",
         unsafe_allow_html=True
@@ -1252,7 +1576,11 @@ def show_inventory():
                         st.session_state.ingredients_inventory = processed_data
                     
                     st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-                    st.success(f"✅ {upload_category} inventory uploaded and processed successfully!")
+                    
+                    # Save all inventory data to files for persistence
+                    save_all_inventory_data()
+                    
+                    st.success(f"✅ {upload_category} inventory uploaded and saved successfully!")
                     st.rerun()
                     
             except Exception as e:
@@ -1378,6 +1706,10 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
                 st.session_state.ingredients_inventory = edited_df
             
             st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+            
+            # Save to files for persistence
+            save_all_inventory_data()
+            
             st.success("✅ Changes saved!")
             st.rerun()
     
@@ -1485,6 +1817,10 @@ def show_ordering():
             st.session_state.weekly_inventory['Par'] = edited_weekly['Par'].values
             order = generate_order_from_inventory(st.session_state.weekly_inventory)
             st.session_state.current_order = order
+            
+            # Save weekly inventory to files for persistence
+            save_all_inventory_data()
+            
             st.success("✅ Inventory updated and order generated!")
             st.rerun()
         
@@ -1550,6 +1886,10 @@ def show_ordering():
                         st.session_state.order_history, pd.DataFrame(new_orders)
                     ], ignore_index=True)
                     st.session_state.current_order = pd.DataFrame()
+                    
+                    # Save to files for persistence
+                    save_all_inventory_data()
+                    
                     st.success("✅ Order saved to history!")
                     st.balloons()
                     st.rerun()
@@ -1804,6 +2144,10 @@ def show_cocktails():
                                     if r['name'] == recipe['name']:
                                         r['sale_price'] = new_price
                                         break
+                                
+                                # Save to files for persistence
+                                save_cocktail_recipes()
+                                
                                 st.success("✅ Price updated!")
                                 st.rerun()
                     
@@ -1816,6 +2160,10 @@ def show_cocktails():
                                 r for r in st.session_state.cocktail_recipes 
                                 if r['name'] != recipe['name']
                             ]
+                            
+                            # Save to files for persistence
+                            save_cocktail_recipes()
+                            
                             st.success(f"✅ {recipe['name']} deleted!")
                             st.rerun()
         else:
@@ -1992,6 +2340,9 @@ def show_cocktails():
                     
                     # Clear the form
                     st.session_state.new_recipe_ingredients = []
+                    
+                    # Save to files for persistence
+                    save_cocktail_recipes()
                     
                     st.success(f"✅ {new_name} saved successfully!")
                     st.balloons()
