@@ -516,6 +516,29 @@ st.markdown("""
     .stTabs [data-baseweb="tab"]:hover {
         background-color: #e6e9ef;
     }
+    
+    /* ----- Expander Styling ----- */
+    .streamlit-expanderHeader {
+        font-size: 20px !important;
+        font-weight: 600 !important;
+        padding: 16px 12px !important;
+    }
+    
+    .streamlit-expanderHeader p {
+        font-size: 20px !important;
+        font-weight: 600 !important;
+    }
+    
+    details[data-testid="stExpander"] > summary {
+        font-size: 20px !important;
+        font-weight: 600 !important;
+        padding: 16px 12px !important;
+    }
+    
+    details[data-testid="stExpander"] > summary > span {
+        font-size: 20px !important;
+        font-weight: 600 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1625,7 +1648,48 @@ def show_inventory():
     
     st.caption(f"Last inventory recorded: {st.session_state.last_inventory_date}")
     
-    # Historical Comparison Section with COGS Calculation
+    st.markdown("---")
+    
+    # Tabbed inventory views
+    tab_spirits, tab_wine, tab_beer, tab_ingredients = st.tabs([
+        "🥃 Spirits", "🍷 Wine", "🍺 Beer", "🧴 Ingredients"
+    ])
+    
+    with tab_spirits:
+        show_inventory_tab(
+            df=st.session_state.spirits_inventory,
+            category="spirits",
+            filter_columns=["Type", "Distributor", "Use"],
+            display_name="Spirits"
+        )
+    
+    with tab_wine:
+        show_inventory_tab(
+            df=st.session_state.wine_inventory,
+            category="wine",
+            filter_columns=["Type", "Distributor"],
+            display_name="Wine"
+        )
+    
+    with tab_beer:
+        show_inventory_tab(
+            df=st.session_state.beer_inventory,
+            category="beer",
+            filter_columns=["Type", "Distributor"],
+            display_name="Beer"
+        )
+    
+    with tab_ingredients:
+        show_inventory_tab(
+            df=st.session_state.ingredients_inventory,
+            category="ingredients",
+            filter_columns=["Distributor"],
+            display_name="Ingredients"
+        )
+    
+    st.markdown("---")
+    
+    # Historical Comparison Section with COGS Calculation (moved below inventory tabs)
     with st.expander("📈 Historical Value Comparison & COGS", expanded=False):
         history = load_inventory_history()
         
@@ -1830,45 +1894,6 @@ def show_inventory():
                 st.info("No historical data available yet. Save inventory changes to start tracking history.")
         else:
             st.info("📊 No historical data available yet. Save inventory changes to start tracking value history.")
-    
-    st.markdown("---")
-    
-    # Tabbed inventory views
-    tab_spirits, tab_wine, tab_beer, tab_ingredients = st.tabs([
-        "🥃 Spirits", "🍷 Wine", "🍺 Beer", "🧴 Ingredients"
-    ])
-    
-    with tab_spirits:
-        show_inventory_tab(
-            df=st.session_state.spirits_inventory,
-            category="spirits",
-            filter_columns=["Type", "Distributor", "Use"],
-            display_name="Spirits"
-        )
-    
-    with tab_wine:
-        show_inventory_tab(
-            df=st.session_state.wine_inventory,
-            category="wine",
-            filter_columns=["Type", "Distributor"],
-            display_name="Wine"
-        )
-    
-    with tab_beer:
-        show_inventory_tab(
-            df=st.session_state.beer_inventory,
-            category="beer",
-            filter_columns=["Type", "Distributor"],
-            display_name="Beer"
-        )
-    
-    with tab_ingredients:
-        show_inventory_tab(
-            df=st.session_state.ingredients_inventory,
-            category="ingredients",
-            filter_columns=["Distributor"],
-            display_name="Ingredients"
-        )
     
     st.markdown("---")
     
