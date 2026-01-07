@@ -1214,12 +1214,12 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
         # Recalculate derived fields
         if 'Cost' in df.columns and 'Size (oz.)' in df.columns:
             df['Cost/Oz'] = df.apply(
-                lambda row: row['Cost'] / row['Size (oz.)'] if row['Size (oz.)'] > 0 else 0, 
+                lambda row: round(row['Cost'] / row['Size (oz.)'], 2) if row['Size (oz.)'] > 0 else 0, 
                 axis=1
             )
         
         if 'Cost' in df.columns and 'Inventory' in df.columns:
-            df['Value'] = df['Cost'] * df['Inventory']
+            df['Value'] = round(df['Cost'] * df['Inventory'], 2)
         
         return df
     except Exception as e:
@@ -1252,7 +1252,7 @@ def process_uploaded_wine(df: pd.DataFrame) -> pd.DataFrame:
         
         # Recalculate Value
         if 'Cost' in df.columns and 'Inventory' in df.columns:
-            df['Value'] = df['Cost'] * df['Inventory']
+            df['Value'] = round(df['Cost'] * df['Inventory'], 2)
         
         return df
     except Exception as e:
@@ -1286,12 +1286,12 @@ def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
         # Recalculate derived fields
         if 'Cost per Keg/Case' in df.columns and 'Size' in df.columns:
             df['Cost/Unit'] = df.apply(
-                lambda row: row['Cost per Keg/Case'] / row['Size'] if row['Size'] > 0 else 0, 
+                lambda row: round(row['Cost per Keg/Case'] / row['Size'], 2) if row['Size'] > 0 else 0, 
                 axis=1
             )
         
         if 'Cost per Keg/Case' in df.columns and 'Inventory' in df.columns:
-            df['Value'] = df['Cost per Keg/Case'] * df['Inventory']
+            df['Value'] = round(df['Cost per Keg/Case'] * df['Inventory'], 2)
         
         return df
     except Exception as e:
@@ -1321,7 +1321,7 @@ def process_uploaded_ingredients(df: pd.DataFrame) -> pd.DataFrame:
         # Recalculate Cost/Unit
         if 'Cost' in df.columns and 'Size/Yield' in df.columns:
             df['Cost/Unit'] = df.apply(
-                lambda row: row['Cost'] / row['Size/Yield'] if row['Size/Yield'] > 0 else 0, 
+                lambda row: round(row['Cost'] / row['Size/Yield'], 2) if row['Size/Yield'] > 0 else 0, 
                 axis=1
             )
         
@@ -2015,12 +2015,12 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Cost/Oz": st.column_config.NumberColumn(
-                format="$%.4f", 
+                format="$%.2f", 
                 help="🔒 Calculated: Cost ÷ Size (oz.)",
                 disabled=True
             ),
             "Cost/Unit": st.column_config.NumberColumn(
-                format="$%.4f",
+                format="$%.2f",
                 help="🔒 Calculated automatically",
                 disabled=True
             ),
@@ -2043,25 +2043,35 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
     
     with col_save:
         if st.button(f"💾 Save Changes", key=f"save_{category}"):
+            # Recalculate derived fields before saving
             if category == "spirits":
                 if "Cost" in edited_df.columns and "Size (oz.)" in edited_df.columns:
-                    edited_df["Cost/Oz"] = edited_df["Cost"] / edited_df["Size (oz.)"]
+                    edited_df["Cost/Oz"] = edited_df.apply(
+                        lambda row: round(row['Cost'] / row['Size (oz.)'], 2) if row['Size (oz.)'] > 0 else 0, 
+                        axis=1
+                    )
                 if "Cost" in edited_df.columns and "Inventory" in edited_df.columns:
-                    edited_df["Value"] = edited_df["Cost"] * edited_df["Inventory"]
+                    edited_df["Value"] = round(edited_df["Cost"] * edited_df["Inventory"], 2)
                 st.session_state.spirits_inventory = edited_df
             elif category == "wine":
                 if "Cost" in edited_df.columns and "Inventory" in edited_df.columns:
-                    edited_df["Value"] = edited_df["Cost"] * edited_df["Inventory"]
+                    edited_df["Value"] = round(edited_df["Cost"] * edited_df["Inventory"], 2)
                 st.session_state.wine_inventory = edited_df
             elif category == "beer":
                 if "Cost per Keg/Case" in edited_df.columns and "Size" in edited_df.columns:
-                    edited_df["Cost/Unit"] = edited_df["Cost per Keg/Case"] / edited_df["Size"]
+                    edited_df["Cost/Unit"] = edited_df.apply(
+                        lambda row: round(row['Cost per Keg/Case'] / row['Size'], 2) if row['Size'] > 0 else 0, 
+                        axis=1
+                    )
                 if "Cost per Keg/Case" in edited_df.columns and "Inventory" in edited_df.columns:
-                    edited_df["Value"] = edited_df["Cost per Keg/Case"] * edited_df["Inventory"]
+                    edited_df["Value"] = round(edited_df["Cost per Keg/Case"] * edited_df["Inventory"], 2)
                 st.session_state.beer_inventory = edited_df
             elif category == "ingredients":
                 if "Cost" in edited_df.columns and "Size/Yield" in edited_df.columns:
-                    edited_df["Cost/Unit"] = edited_df["Cost"] / edited_df["Size/Yield"]
+                    edited_df["Cost/Unit"] = edited_df.apply(
+                        lambda row: round(row['Cost'] / row['Size/Yield'], 2) if row['Size/Yield'] > 0 else 0, 
+                        axis=1
+                    )
                 st.session_state.ingredients_inventory = edited_df
             
             st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
@@ -2074,6 +2084,40 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
     
     with col_recalc:
         if st.button(f"🔄 Recalculate", key=f"recalc_{category}"):
+            # Recalculate derived fields and update session state
+            recalc_df = df.copy()
+            
+            if category == "spirits":
+                if "Cost" in recalc_df.columns and "Size (oz.)" in recalc_df.columns:
+                    recalc_df["Cost/Oz"] = recalc_df.apply(
+                        lambda row: round(row['Cost'] / row['Size (oz.)'], 2) if row['Size (oz.)'] > 0 else 0, 
+                        axis=1
+                    )
+                if "Cost" in recalc_df.columns and "Inventory" in recalc_df.columns:
+                    recalc_df["Value"] = round(recalc_df["Cost"] * recalc_df["Inventory"], 2)
+                st.session_state.spirits_inventory = recalc_df
+            elif category == "wine":
+                if "Cost" in recalc_df.columns and "Inventory" in recalc_df.columns:
+                    recalc_df["Value"] = round(recalc_df["Cost"] * recalc_df["Inventory"], 2)
+                st.session_state.wine_inventory = recalc_df
+            elif category == "beer":
+                if "Cost per Keg/Case" in recalc_df.columns and "Size" in recalc_df.columns:
+                    recalc_df["Cost/Unit"] = recalc_df.apply(
+                        lambda row: round(row['Cost per Keg/Case'] / row['Size'], 2) if row['Size'] > 0 else 0, 
+                        axis=1
+                    )
+                if "Cost per Keg/Case" in recalc_df.columns and "Inventory" in recalc_df.columns:
+                    recalc_df["Value"] = round(recalc_df["Cost per Keg/Case"] * recalc_df["Inventory"], 2)
+                st.session_state.beer_inventory = recalc_df
+            elif category == "ingredients":
+                if "Cost" in recalc_df.columns and "Size/Yield" in recalc_df.columns:
+                    recalc_df["Cost/Unit"] = recalc_df.apply(
+                        lambda row: round(row['Cost'] / row['Size/Yield'], 2) if row['Size/Yield'] > 0 else 0, 
+                        axis=1
+                    )
+                st.session_state.ingredients_inventory = recalc_df
+            
+            st.success("✅ Values recalculated!")
             st.rerun()
 
 
