@@ -1625,39 +1625,119 @@ def show_inventory():
     
     st.caption(f"Last inventory recorded: {st.session_state.last_inventory_date}")
     
-    # Historical Comparison Section
-    with st.expander("📈 Historical Value Comparison", expanded=False):
+    # Historical Comparison Section with COGS Calculation
+    with st.expander("📈 Historical Value Comparison & COGS", expanded=False):
         history = load_inventory_history()
         
         if history is not None and len(history) > 0:
-            # Get list of dates for dropdown (excluding today if present)
+            # Get list of dates for dropdown
             available_dates = history['Date'].unique().tolist()
             
-            if len(available_dates) > 0:
-                selected_date = st.selectbox(
-                    "Compare current inventory to:",
-                    options=available_dates,
-                    key="history_compare_date",
-                    help="Select a previous inventory date to compare against current values"
-                )
+            if len(available_dates) >= 1:
+                st.markdown("**Select inventory periods to compare:**")
                 
-                # Get historical values for selected date
-                historical_row = history[history['Date'] == selected_date].iloc[0]
+                # Two columns for date selection
+                date_col1, date_col2 = st.columns(2)
                 
-                hist_spirits = float(historical_row.get('Spirits Value', 0))
-                hist_wine = float(historical_row.get('Wine Value', 0))
-                hist_beer = float(historical_row.get('Beer Value', 0))
-                hist_ingredients = float(historical_row.get('Ingredients Value', 0))
-                hist_total = float(historical_row.get('Total Value', 0))
+                with date_col1:
+                    # Default to oldest date for starting inventory
+                    start_date = st.selectbox(
+                        "Starting Inventory Date:",
+                        options=available_dates,
+                        index=len(available_dates) - 1 if len(available_dates) > 1 else 0,
+                        key="history_start_date",
+                        help="Select the beginning period for comparison"
+                    )
                 
-                # Calculate deltas
-                delta_spirits = spirits_value - hist_spirits
-                delta_wine = wine_value - hist_wine
-                delta_beer = beer_value - hist_beer
-                delta_ingredients = ingredients_value - hist_ingredients
-                delta_total = total_value - hist_total
+                with date_col2:
+                    # Default to most recent date for ending inventory
+                    end_date = st.selectbox(
+                        "Ending Inventory Date:",
+                        options=available_dates,
+                        index=0,
+                        key="history_end_date",
+                        help="Select the ending period for comparison"
+                    )
                 
-                st.markdown(f"**Comparing current inventory to {selected_date}:**")
+                # Get values for selected dates
+                start_row = history[history['Date'] == start_date].iloc[0]
+                end_row = history[history['Date'] == end_date].iloc[0]
+                
+                start_spirits = float(start_row.get('Spirits Value', 0))
+                start_wine = float(start_row.get('Wine Value', 0))
+                start_beer = float(start_row.get('Beer Value', 0))
+                start_ingredients = float(start_row.get('Ingredients Value', 0))
+                start_total = float(start_row.get('Total Value', 0))
+                
+                end_spirits = float(end_row.get('Spirits Value', 0))
+                end_wine = float(end_row.get('Wine Value', 0))
+                end_beer = float(end_row.get('Beer Value', 0))
+                end_ingredients = float(end_row.get('Ingredients Value', 0))
+                end_total = float(end_row.get('Total Value', 0))
+                
+                # Calculate differences
+                delta_spirits = end_spirits - start_spirits
+                delta_wine = end_wine - start_wine
+                delta_beer = end_beer - start_beer
+                delta_ingredients = end_ingredients - start_ingredients
+                delta_total = end_total - start_total
+                
+                st.markdown("---")
+                st.markdown("**Enter purchases for the period:**")
+                
+                # Purchase input fields
+                purch_col1, purch_col2, purch_col3, purch_col4 = st.columns(4)
+                
+                with purch_col1:
+                    purchase_spirits = st.number_input(
+                        "🥃 Spirits Purchases",
+                        min_value=0.0,
+                        value=0.0,
+                        step=100.0,
+                        format="%.2f",
+                        key="purchase_spirits"
+                    )
+                
+                with purch_col2:
+                    purchase_wine = st.number_input(
+                        "🍷 Wine Purchases",
+                        min_value=0.0,
+                        value=0.0,
+                        step=100.0,
+                        format="%.2f",
+                        key="purchase_wine"
+                    )
+                
+                with purch_col3:
+                    purchase_beer = st.number_input(
+                        "🍺 Beer Purchases",
+                        min_value=0.0,
+                        value=0.0,
+                        step=100.0,
+                        format="%.2f",
+                        key="purchase_beer"
+                    )
+                
+                with purch_col4:
+                    purchase_ingredients = st.number_input(
+                        "🧴 Ingredients Purchases",
+                        min_value=0.0,
+                        value=0.0,
+                        step=100.0,
+                        format="%.2f",
+                        key="purchase_ingredients"
+                    )
+                
+                total_purchases = purchase_spirits + purchase_wine + purchase_beer + purchase_ingredients
+                
+                # Calculate COGS: (Starting Inventory + Purchases) - Ending Inventory
+                cogs_spirits = (start_spirits + purchase_spirits) - end_spirits
+                cogs_wine = (start_wine + purchase_wine) - end_wine
+                cogs_beer = (start_beer + purchase_beer) - end_beer
+                cogs_ingredients = (start_ingredients + purchase_ingredients) - end_ingredients
+                cogs_total = (start_total + total_purchases) - end_total
+                
+                st.markdown("---")
                 
                 # Helper function to format difference with color
                 def format_difference(delta):
@@ -1668,53 +1748,68 @@ def show_inventory():
                     else:
                         return f'<span style="color: #808080;">{format_currency(delta)}</span>'
                 
-                # Create comparison table with Current, Historical, and Difference
+                # Create comparison table with Starting, Ending, Difference, Purchases, and COGS
                 comparison_data = f"""
                 <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
                     <thead>
                         <tr style="border-bottom: 2px solid #ddd; text-align: left;">
-                            <th style="padding: 12px 8px; font-size: 16px;">Category</th>
-                            <th style="padding: 12px 8px; font-size: 16px; text-align: right;">Current Value</th>
-                            <th style="padding: 12px 8px; font-size: 16px; text-align: right;">{selected_date} Value</th>
-                            <th style="padding: 12px 8px; font-size: 16px; text-align: right;">Difference</th>
+                            <th style="padding: 12px 8px; font-size: 15px;">Category</th>
+                            <th style="padding: 12px 8px; font-size: 15px; text-align: right;">Starting<br/>({start_date})</th>
+                            <th style="padding: 12px 8px; font-size: 15px; text-align: right;">Ending<br/>({end_date})</th>
+                            <th style="padding: 12px 8px; font-size: 15px; text-align: right;">Difference</th>
+                            <th style="padding: 12px 8px; font-size: 15px; text-align: right;">Purchases</th>
+                            <th style="padding: 12px 8px; font-size: 15px; text-align: right;">COGS</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr style="border-bottom: 1px solid #eee;">
-                            <td style="padding: 12px 8px; font-size: 15px;">🥃 Spirits</td>
-                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(spirits_value)}</td>
-                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(hist_spirits)}</td>
-                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_difference(delta_spirits)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px;">🥃 Spirits</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_currency(start_spirits)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_currency(end_spirits)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_difference(delta_spirits)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_currency(purchase_spirits)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right; font-weight: 600;">{format_currency(cogs_spirits)}</td>
                         </tr>
                         <tr style="border-bottom: 1px solid #eee;">
-                            <td style="padding: 12px 8px; font-size: 15px;">🍷 Wine</td>
-                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(wine_value)}</td>
-                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(hist_wine)}</td>
-                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_difference(delta_wine)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px;">🍷 Wine</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_currency(start_wine)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_currency(end_wine)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_difference(delta_wine)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_currency(purchase_wine)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right; font-weight: 600;">{format_currency(cogs_wine)}</td>
                         </tr>
                         <tr style="border-bottom: 1px solid #eee;">
-                            <td style="padding: 12px 8px; font-size: 15px;">🍺 Beer</td>
-                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(beer_value)}</td>
-                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(hist_beer)}</td>
-                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_difference(delta_beer)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px;">🍺 Beer</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_currency(start_beer)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_currency(end_beer)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_difference(delta_beer)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_currency(purchase_beer)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right; font-weight: 600;">{format_currency(cogs_beer)}</td>
                         </tr>
                         <tr style="border-bottom: 1px solid #eee;">
-                            <td style="padding: 12px 8px; font-size: 15px;">🧴 Ingredients</td>
-                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(ingredients_value)}</td>
-                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(hist_ingredients)}</td>
-                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_difference(delta_ingredients)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px;">🧴 Ingredients</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_currency(start_ingredients)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_currency(end_ingredients)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_difference(delta_ingredients)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right;">{format_currency(purchase_ingredients)}</td>
+                            <td style="padding: 12px 8px; font-size: 14px; text-align: right; font-weight: 600;">{format_currency(cogs_ingredients)}</td>
                         </tr>
                         <tr style="border-top: 2px solid #ddd; background-color: #f8f9fa;">
-                            <td style="padding: 12px 8px; font-size: 16px; font-weight: 700;">💰 Total</td>
-                            <td style="padding: 12px 8px; font-size: 16px; font-weight: 700; text-align: right;">{format_currency(total_value)}</td>
-                            <td style="padding: 12px 8px; font-size: 16px; font-weight: 700; text-align: right;">{format_currency(hist_total)}</td>
-                            <td style="padding: 12px 8px; font-size: 16px; font-weight: 700; text-align: right;">{format_difference(delta_total)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; font-weight: 700;">💰 Total</td>
+                            <td style="padding: 12px 8px; font-size: 15px; font-weight: 700; text-align: right;">{format_currency(start_total)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; font-weight: 700; text-align: right;">{format_currency(end_total)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; font-weight: 700; text-align: right;">{format_difference(delta_total)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; font-weight: 700; text-align: right;">{format_currency(total_purchases)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; font-weight: 700; text-align: right;">{format_currency(cogs_total)}</td>
                         </tr>
                     </tbody>
                 </table>
                 """
                 
                 st.markdown(comparison_data, unsafe_allow_html=True)
+                
+                # COGS formula explanation
+                st.caption("**COGS Formula:** (Starting Inventory + Purchases) − Ending Inventory")
                 
                 # Show historical values table
                 st.markdown("---")
