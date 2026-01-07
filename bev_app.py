@@ -1657,41 +1657,64 @@ def show_inventory():
                 delta_ingredients = ingredients_value - hist_ingredients
                 delta_total = total_value - hist_total
                 
-                st.markdown(f"**Comparing to inventory from {selected_date}:**")
+                st.markdown(f"**Comparing current inventory to {selected_date}:**")
                 
-                # Display comparison metrics with deltas
-                comp_col1, comp_col2, comp_col3, comp_col4, comp_col5 = st.columns(5)
+                # Helper function to format difference with color
+                def format_difference(delta):
+                    if delta < 0:
+                        return f'<span style="color: #ff4b4b; font-weight: 600;">{format_currency(delta)}</span>'
+                    elif delta > 0:
+                        return f'<span style="color: #21c354; font-weight: 600;">+{format_currency(delta)}</span>'
+                    else:
+                        return f'<span style="color: #808080;">{format_currency(delta)}</span>'
                 
-                with comp_col1:
-                    st.metric(
-                        label="🥃 Spirits",
-                        value=format_currency(spirits_value),
-                        delta=f"{'+' if delta_spirits >= 0 else ''}{format_currency(delta_spirits)}"
-                    )
-                with comp_col2:
-                    st.metric(
-                        label="🍷 Wine",
-                        value=format_currency(wine_value),
-                        delta=f"{'+' if delta_wine >= 0 else ''}{format_currency(delta_wine)}"
-                    )
-                with comp_col3:
-                    st.metric(
-                        label="🍺 Beer",
-                        value=format_currency(beer_value),
-                        delta=f"{'+' if delta_beer >= 0 else ''}{format_currency(delta_beer)}"
-                    )
-                with comp_col4:
-                    st.metric(
-                        label="🧴 Ingredients",
-                        value=format_currency(ingredients_value),
-                        delta=f"{'+' if delta_ingredients >= 0 else ''}{format_currency(delta_ingredients)}"
-                    )
-                with comp_col5:
-                    st.metric(
-                        label="💰 Total",
-                        value=format_currency(total_value),
-                        delta=f"{'+' if delta_total >= 0 else ''}{format_currency(delta_total)}"
-                    )
+                # Create comparison table with Current, Historical, and Difference
+                comparison_data = f"""
+                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #ddd; text-align: left;">
+                            <th style="padding: 12px 8px; font-size: 16px;">Category</th>
+                            <th style="padding: 12px 8px; font-size: 16px; text-align: right;">Current Value</th>
+                            <th style="padding: 12px 8px; font-size: 16px; text-align: right;">{selected_date} Value</th>
+                            <th style="padding: 12px 8px; font-size: 16px; text-align: right;">Difference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 12px 8px; font-size: 15px;">🥃 Spirits</td>
+                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(spirits_value)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(hist_spirits)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_difference(delta_spirits)}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 12px 8px; font-size: 15px;">🍷 Wine</td>
+                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(wine_value)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(hist_wine)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_difference(delta_wine)}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 12px 8px; font-size: 15px;">🍺 Beer</td>
+                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(beer_value)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(hist_beer)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_difference(delta_beer)}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 12px 8px; font-size: 15px;">🧴 Ingredients</td>
+                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(ingredients_value)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_currency(hist_ingredients)}</td>
+                            <td style="padding: 12px 8px; font-size: 15px; text-align: right;">{format_difference(delta_ingredients)}</td>
+                        </tr>
+                        <tr style="border-top: 2px solid #ddd; background-color: #f8f9fa;">
+                            <td style="padding: 12px 8px; font-size: 16px; font-weight: 700;">💰 Total</td>
+                            <td style="padding: 12px 8px; font-size: 16px; font-weight: 700; text-align: right;">{format_currency(total_value)}</td>
+                            <td style="padding: 12px 8px; font-size: 16px; font-weight: 700; text-align: right;">{format_currency(hist_total)}</td>
+                            <td style="padding: 12px 8px; font-size: 16px; font-weight: 700; text-align: right;">{format_difference(delta_total)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                """
+                
+                st.markdown(comparison_data, unsafe_allow_html=True)
                 
                 # Show historical values table
                 st.markdown("---")
