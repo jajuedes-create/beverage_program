@@ -2039,7 +2039,7 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
         }
     )
     
-    col_save, col_recalc, col_spacer = st.columns([1, 1, 4])
+    col_save, col_spacer = st.columns([1, 5])
     
     with col_save:
         if st.button(f"💾 Save Changes", key=f"save_{category}"):
@@ -2080,44 +2080,6 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
             save_all_inventory_data()
             
             st.success("✅ Changes saved!")
-            st.rerun()
-    
-    with col_recalc:
-        if st.button(f"🔄 Recalculate", key=f"recalc_{category}"):
-            # Recalculate derived fields and update session state
-            recalc_df = df.copy()
-            
-            if category == "spirits":
-                if "Cost" in recalc_df.columns and "Size (oz.)" in recalc_df.columns:
-                    recalc_df["Cost/Oz"] = recalc_df.apply(
-                        lambda row: round(row['Cost'] / row['Size (oz.)'], 2) if row['Size (oz.)'] > 0 else 0, 
-                        axis=1
-                    )
-                if "Cost" in recalc_df.columns and "Inventory" in recalc_df.columns:
-                    recalc_df["Value"] = round(recalc_df["Cost"] * recalc_df["Inventory"], 2)
-                st.session_state.spirits_inventory = recalc_df
-            elif category == "wine":
-                if "Cost" in recalc_df.columns and "Inventory" in recalc_df.columns:
-                    recalc_df["Value"] = round(recalc_df["Cost"] * recalc_df["Inventory"], 2)
-                st.session_state.wine_inventory = recalc_df
-            elif category == "beer":
-                if "Cost per Keg/Case" in recalc_df.columns and "Size" in recalc_df.columns:
-                    recalc_df["Cost/Unit"] = recalc_df.apply(
-                        lambda row: round(row['Cost per Keg/Case'] / row['Size'], 2) if row['Size'] > 0 else 0, 
-                        axis=1
-                    )
-                if "Cost per Keg/Case" in recalc_df.columns and "Inventory" in recalc_df.columns:
-                    recalc_df["Value"] = round(recalc_df["Cost per Keg/Case"] * recalc_df["Inventory"], 2)
-                st.session_state.beer_inventory = recalc_df
-            elif category == "ingredients":
-                if "Cost" in recalc_df.columns and "Size/Yield" in recalc_df.columns:
-                    recalc_df["Cost/Unit"] = recalc_df.apply(
-                        lambda row: round(row['Cost'] / row['Size/Yield'], 2) if row['Size/Yield'] > 0 else 0, 
-                        axis=1
-                    )
-                st.session_state.ingredients_inventory = recalc_df
-            
-            st.success("✅ Values recalculated!")
             st.rerun()
 
 
