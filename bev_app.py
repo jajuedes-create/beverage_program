@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.3
+# BEVERAGE MANAGEMENT APP V2.5
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -12,6 +12,7 @@
 #   V2.1 - Fixed currency formatting in CSV uploads
 #   V2.2 - UI improvements and locked calculated fields
 #   V2.3 - Weekly Ordering: Added helper function to pull products from Master Inventory
+#   V2.5 - Weekly Ordering: Added category filter, renamed section title
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -384,7 +385,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.3",
+    page_title="Beverage Management App V2.5",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1625,7 +1626,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.3</h1>
+        <h1>🍸 Beverage Management App V2.5</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2257,7 +2258,7 @@ def show_ordering():
     ])
     
     with tab_build:
-        st.markdown("### Step 1: Update Current Inventory Counts")
+        st.markdown("### Step 1: Update Weekly Inventory")
         st.markdown("Enter your current inventory counts below. Products below par will be added to the order.")
         
         # =====================================================================
@@ -2369,16 +2370,46 @@ def show_ordering():
         # END V2.3 ADD/REMOVE SECTION
         # =====================================================================
         
+        # =====================================================================
+        # V2.5: CATEGORY FILTER FOR WEEKLY INVENTORY
+        # =====================================================================
+        
         weekly_inv = st.session_state.weekly_inventory.copy()
         weekly_inv['Status'] = weekly_inv.apply(
             lambda row: "🔴 Order" if row['Current Inventory'] < row['Par'] else "✅ OK", axis=1
         )
         
+        # Get unique categories for filter
+        all_categories = weekly_inv['Category'].unique().tolist()
+        
+        # Category filter
+        col_filter, col_count = st.columns([2, 3])
+        
+        with col_filter:
+            selected_category = st.selectbox(
+                "🔍 Filter by Category:",
+                options=["All Categories"] + sorted(all_categories),
+                key="weekly_category_filter"
+            )
+        
+        # Apply filter
+        if selected_category != "All Categories":
+            filtered_weekly_inv = weekly_inv[weekly_inv['Category'] == selected_category].copy()
+        else:
+            filtered_weekly_inv = weekly_inv.copy()
+        
+        with col_count:
+            st.caption(f"Showing {len(filtered_weekly_inv)} of {len(weekly_inv)} products")
+        
+        # =====================================================================
+        # END V2.5 CATEGORY FILTER
+        # =====================================================================
+        
         display_cols = ['Product', 'Category', 'Par', 'Current Inventory', 'Status', 
                        'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
         
         edited_weekly = st.data_editor(
-            weekly_inv[display_cols],
+            filtered_weekly_inv[display_cols],
             use_container_width=True,
             key="weekly_inv_editor",
             column_config={
@@ -2391,8 +2422,12 @@ def show_ordering():
         )
         
         if st.button("🔄 Update Inventory & Generate Order", key="update_weekly"):
-            st.session_state.weekly_inventory['Current Inventory'] = edited_weekly['Current Inventory'].values
-            st.session_state.weekly_inventory['Par'] = edited_weekly['Par'].values
+            # Update values only for products that were displayed (filtered view)
+            for idx, row in edited_weekly.iterrows():
+                mask = st.session_state.weekly_inventory['Product'] == row['Product']
+                st.session_state.weekly_inventory.loc[mask, 'Current Inventory'] = row['Current Inventory']
+                st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
+            
             order = generate_order_from_inventory(st.session_state.weekly_inventory)
             st.session_state.current_order = order
             
