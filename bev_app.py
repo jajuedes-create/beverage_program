@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.6
+# BEVERAGE MANAGEMENT APP V2.7
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -14,6 +14,7 @@
 #   V2.3 - Weekly Ordering: Added helper function to pull products from Master Inventory
 #   V2.5 - Weekly Ordering: Added category filter, renamed section title
 #   V2.6 - Weekly Ordering: Added distributor filter, dedicated save button for persistence
+#   V2.7 - Weekly Ordering: Moved Top Products to Order Analytics tab, renamed tab
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -386,7 +387,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.6",
+    page_title="Beverage Management App V2.7",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1627,7 +1628,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.6</h1>
+        <h1>🍸 Beverage Management App V2.7</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2218,13 +2219,8 @@ def show_ordering():
             prev_week_total = order_history[order_history['Week'] == prev_week]['Total Cost'].sum()
         else:
             prev_week_total = 0
-        top_products = order_history.groupby('Product').agg({
-            'Quantity Ordered': 'sum',
-            'Total Cost': 'sum'
-        }).sort_values('Total Cost', ascending=False).head(5)
     else:
         prev_week_total = 0
-        top_products = pd.DataFrame()
     
     if 'current_order' in st.session_state and len(st.session_state.current_order) > 0:
         current_order_total = st.session_state.current_order['Order Value'].sum()
@@ -2241,21 +2237,11 @@ def show_ordering():
         st.metric(label="📈 6-Week Avg Order", 
                   value=format_currency(order_history.groupby('Week')['Total Cost'].sum().mean() if len(order_history) > 0 else 0))
     
-    if len(top_products) > 0:
-        with st.expander("🏆 Top Products (by total spend)", expanded=False):
-            st.dataframe(
-                top_products.reset_index().rename(columns={
-                    'Product': 'Product', 'Quantity Ordered': 'Total Units Ordered', 'Total Cost': 'Total Spend'
-                }),
-                use_container_width=True, hide_index=True,
-                column_config={"Total Spend": st.column_config.NumberColumn(format="$%.2f")}
-            )
-    
     st.markdown("---")
     
     # Tabs
     tab_build, tab_history, tab_analytics = st.tabs([
-        "🛒 Build This Week's Order", "📜 Order History", "📈 Demand Analytics"
+        "🛒 Build This Week's Order", "📜 Order History", "📈 Order Analytics"
     ])
     
     with tab_build:
@@ -2578,8 +2564,25 @@ def show_ordering():
             st.info("No order history yet. Save an order to see it here.")
     
     with tab_analytics:
-        st.markdown("### 📈 Demand Analytics")
+        st.markdown("### 📈 Order Analytics")
         if len(order_history) > 0:
+            # V2.7: Top Products section moved here from dashboard
+            with st.expander("🏆 Top Products (by total spend)", expanded=True):
+                top_products = order_history.groupby('Product').agg({
+                    'Quantity Ordered': 'sum',
+                    'Total Cost': 'sum'
+                }).sort_values('Total Cost', ascending=False).head(10)
+                
+                st.dataframe(
+                    top_products.reset_index().rename(columns={
+                        'Product': 'Product', 'Quantity Ordered': 'Total Units Ordered', 'Total Cost': 'Total Spend'
+                    }),
+                    use_container_width=True, hide_index=True,
+                    column_config={"Total Spend": st.column_config.NumberColumn(format="$%.2f")}
+                )
+            
+            st.markdown("---")
+            
             products = sorted(order_history['Product'].unique())
             selected_products = st.multiselect("Select products to analyze:", options=products,
                 default=products[:3] if len(products) >= 3 else products, key="analytics_products")
