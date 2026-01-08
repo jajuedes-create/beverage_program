@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.5
+# BEVERAGE MANAGEMENT APP V2.6
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -13,6 +13,7 @@
 #   V2.2 - UI improvements and locked calculated fields
 #   V2.3 - Weekly Ordering: Added helper function to pull products from Master Inventory
 #   V2.5 - Weekly Ordering: Added category filter, renamed section title
+#   V2.6 - Weekly Ordering: Added distributor filter, dedicated save button for persistence
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -385,7 +386,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.5",
+    page_title="Beverage Management App V2.6",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1626,7 +1627,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.5</h1>
+        <h1>🍸 Beverage Management App V2.6</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2371,7 +2372,7 @@ def show_ordering():
         # =====================================================================
         
         # =====================================================================
-        # V2.5: CATEGORY FILTER FOR WEEKLY INVENTORY
+        # V2.6: CATEGORY AND DISTRIBUTOR FILTERS FOR WEEKLY INVENTORY
         # =====================================================================
         
         weekly_inv = st.session_state.weekly_inventory.copy()
@@ -2379,30 +2380,42 @@ def show_ordering():
             lambda row: "🔴 Order" if row['Current Inventory'] < row['Par'] else "✅ OK", axis=1
         )
         
-        # Get unique categories for filter
+        # Get unique categories and distributors for filters
         all_categories = weekly_inv['Category'].unique().tolist()
+        all_distributors = weekly_inv['Distributor'].unique().tolist()
         
-        # Category filter
-        col_filter, col_count = st.columns([2, 3])
+        # Filter row
+        col_cat_filter, col_dist_filter, col_count = st.columns([2, 2, 2])
         
-        with col_filter:
+        with col_cat_filter:
             selected_category = st.selectbox(
                 "🔍 Filter by Category:",
                 options=["All Categories"] + sorted(all_categories),
                 key="weekly_category_filter"
             )
         
-        # Apply filter
+        with col_dist_filter:
+            selected_distributor = st.selectbox(
+                "🚚 Filter by Distributor:",
+                options=["All Distributors"] + sorted(all_distributors),
+                key="weekly_distributor_filter"
+            )
+        
+        # Apply filters
+        filtered_weekly_inv = weekly_inv.copy()
+        
         if selected_category != "All Categories":
-            filtered_weekly_inv = weekly_inv[weekly_inv['Category'] == selected_category].copy()
-        else:
-            filtered_weekly_inv = weekly_inv.copy()
+            filtered_weekly_inv = filtered_weekly_inv[filtered_weekly_inv['Category'] == selected_category]
+        
+        if selected_distributor != "All Distributors":
+            filtered_weekly_inv = filtered_weekly_inv[filtered_weekly_inv['Distributor'] == selected_distributor]
         
         with col_count:
+            st.write("")  # Spacer to align with dropdowns
             st.caption(f"Showing {len(filtered_weekly_inv)} of {len(weekly_inv)} products")
         
         # =====================================================================
-        # END V2.5 CATEGORY FILTER
+        # END V2.6 FILTERS
         # =====================================================================
         
         display_cols = ['Product', 'Category', 'Par', 'Current Inventory', 'Status', 
@@ -2421,21 +2434,39 @@ def show_ordering():
             disabled=["Product", "Category", "Status", "Unit", "Unit Cost", "Distributor", "Order Notes"]
         )
         
-        if st.button("🔄 Update Inventory & Generate Order", key="update_weekly"):
-            # Update values only for products that were displayed (filtered view)
-            for idx, row in edited_weekly.iterrows():
-                mask = st.session_state.weekly_inventory['Product'] == row['Product']
-                st.session_state.weekly_inventory.loc[mask, 'Current Inventory'] = row['Current Inventory']
-                st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
-            
-            order = generate_order_from_inventory(st.session_state.weekly_inventory)
-            st.session_state.current_order = order
-            
-            # Save weekly inventory to files for persistence
-            save_all_inventory_data()
-            
-            st.success("✅ Inventory updated and order generated!")
-            st.rerun()
+        # V2.6: Action buttons - Save and Update/Generate Order
+        col_save, col_update, col_spacer = st.columns([1, 2, 3])
+        
+        with col_save:
+            if st.button("💾 Save Changes", key="save_weekly_only", help="Save inventory changes without generating an order"):
+                # Update values only for products that were displayed (filtered view)
+                for idx, row in edited_weekly.iterrows():
+                    mask = st.session_state.weekly_inventory['Product'] == row['Product']
+                    st.session_state.weekly_inventory.loc[mask, 'Current Inventory'] = row['Current Inventory']
+                    st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
+                
+                # Save weekly inventory to Google Sheets for persistence
+                save_all_inventory_data()
+                
+                st.success("✅ Weekly Inventory saved!")
+                st.rerun()
+        
+        with col_update:
+            if st.button("🔄 Update Inventory & Generate Order", key="update_weekly"):
+                # Update values only for products that were displayed (filtered view)
+                for idx, row in edited_weekly.iterrows():
+                    mask = st.session_state.weekly_inventory['Product'] == row['Product']
+                    st.session_state.weekly_inventory.loc[mask, 'Current Inventory'] = row['Current Inventory']
+                    st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
+                
+                order = generate_order_from_inventory(st.session_state.weekly_inventory)
+                st.session_state.current_order = order
+                
+                # Save weekly inventory to files for persistence
+                save_all_inventory_data()
+                
+                st.success("✅ Inventory updated and order generated!")
+                st.rerun()
         
         st.markdown("---")
         st.markdown("### Step 2: Review & Adjust This Week's Order")
