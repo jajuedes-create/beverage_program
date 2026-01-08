@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.7
+# BEVERAGE MANAGEMENT APP V2.8
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -15,6 +15,7 @@
 #   V2.5 - Weekly Ordering: Added category filter, renamed section title
 #   V2.6 - Weekly Ordering: Added distributor filter, dedicated save button for persistence
 #   V2.7 - Weekly Ordering: Moved Top Products to Order Analytics tab, renamed tab
+#   V2.8 - Weekly Ordering: Added Product Analysis title and description
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -387,7 +388,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.7",
+    page_title="Beverage Management App V2.8",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1628,7 +1629,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.7</h1>
+        <h1>🍸 Beverage Management App V2.8</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2583,8 +2584,12 @@ def show_ordering():
             
             st.markdown("---")
             
+            # V2.8: Product Analysis section with title and description
+            st.markdown("#### 📊 Product Analysis")
+            st.markdown("Select products below to view order trends, spending patterns, and summary statistics over time.")
+            
             products = sorted(order_history['Product'].unique())
-            selected_products = st.multiselect("Select products to analyze:", options=products,
+            selected_products = st.multiselect("Select products:", options=products,
                 default=products[:3] if len(products) >= 3 else products, key="analytics_products")
             
             if selected_products:
