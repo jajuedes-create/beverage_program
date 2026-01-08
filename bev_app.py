@@ -1,10 +1,17 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V1
+# BEVERAGE MANAGEMENT APP V2.3
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
 #   - Weekly Order Builder
 #   - Cocktail Builds Book
+#
+# Version History:
+#   V1.0 - Initial release with all core modules
+#   V2.0 - Added historical comparison and COGS calculation
+#   V2.1 - Fixed currency formatting in CSV uploads
+#   V2.2 - UI improvements and locked calculated fields
+#   V2.3 - Weekly Ordering: Added helper function to pull products from Master Inventory
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -377,7 +384,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V1",
+    page_title="Beverage Management App V2.3",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1511,6 +1518,103 @@ def get_available_products():
 
 
 # =============================================================================
+# WEEKLY ORDERING - MASTER INVENTORY PRODUCT LOOKUP (V2.3)
+# =============================================================================
+
+def get_master_inventory_products():
+    """
+    Returns a DataFrame of all products from Master Inventory (Spirits, Wine, Beer, Ingredients)
+    with standardized columns for use in Weekly Inventory.
+    
+    This function pulls product details from the Master Inventory so that Weekly Inventory
+    products are always sourced from the master list (not hardcoded).
+    
+    Returns:
+        pd.DataFrame with columns: Product, Category, Unit Cost, Distributor, Source
+    """
+    all_products = []
+    
+    # Spirits
+    if 'spirits_inventory' in st.session_state:
+        spirits = st.session_state.spirits_inventory
+        for _, row in spirits.iterrows():
+            all_products.append({
+                'Product': row['Product'],
+                'Category': 'Spirits',
+                'Unit Cost': clean_currency_value(row.get('Cost', 0)),
+                'Distributor': row.get('Distributor', ''),
+                'Order Notes': row.get('Order Notes', ''),
+                'Source': 'Spirits'
+            })
+    
+    # Wine
+    if 'wine_inventory' in st.session_state:
+        wine = st.session_state.wine_inventory
+        for _, row in wine.iterrows():
+            all_products.append({
+                'Product': row['Product'],
+                'Category': 'Wine',
+                'Unit Cost': clean_currency_value(row.get('Cost', 0)),
+                'Distributor': row.get('Distributor', ''),
+                'Order Notes': '',  # Wine doesn't have Order Notes column
+                'Source': 'Wine'
+            })
+    
+    # Beer
+    if 'beer_inventory' in st.session_state:
+        beer = st.session_state.beer_inventory
+        for _, row in beer.iterrows():
+            all_products.append({
+                'Product': row['Product'],
+                'Category': 'Beer',
+                'Unit Cost': clean_currency_value(row.get('Cost per Keg/Case', 0)),
+                'Distributor': row.get('Distributor', ''),
+                'Order Notes': row.get('Order Notes', ''),
+                'Source': 'Beer'
+            })
+    
+    # Ingredients
+    if 'ingredients_inventory' in st.session_state:
+        ingredients = st.session_state.ingredients_inventory
+        for _, row in ingredients.iterrows():
+            all_products.append({
+                'Product': row['Product'],
+                'Category': 'Ingredients',
+                'Unit Cost': clean_currency_value(row.get('Cost', 0)),
+                'Distributor': row.get('Distributor', ''),
+                'Order Notes': row.get('Order Notes', ''),
+                'Source': 'Ingredients'
+            })
+    
+    return pd.DataFrame(all_products)
+
+
+def get_products_not_in_weekly_inventory():
+    """
+    Returns a list of products from Master Inventory that are NOT already 
+    in the Weekly Inventory. Used to populate the "Add Product" dropdown.
+    
+    Returns:
+        pd.DataFrame: Products available to add (not already in weekly inventory)
+    """
+    # Get all master inventory products
+    master_products = get_master_inventory_products()
+    
+    if master_products.empty:
+        return pd.DataFrame()
+    
+    # Get current weekly inventory product names
+    weekly_products = []
+    if 'weekly_inventory' in st.session_state:
+        weekly_products = st.session_state.weekly_inventory['Product'].tolist()
+    
+    # Filter to products not already in weekly inventory
+    available = master_products[~master_products['Product'].isin(weekly_products)]
+    
+    return available
+
+
+# =============================================================================
 # PAGE: HOMESCREEN
 # =============================================================================
 
@@ -1521,7 +1625,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V1</h1>
+        <h1>🍸 Beverage Management App V2.3</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2155,6 +2259,115 @@ def show_ordering():
     with tab_build:
         st.markdown("### Step 1: Update Current Inventory Counts")
         st.markdown("Enter your current inventory counts below. Products below par will be added to the order.")
+        
+        # =====================================================================
+        # V2.3: ADD/REMOVE PRODUCTS FROM WEEKLY INVENTORY
+        # =====================================================================
+        
+        with st.expander("➕ Add / ➖ Remove Products from Weekly Inventory", expanded=False):
+            st.markdown("**Add a product from Master Inventory:**")
+            
+            # Get products not already in weekly inventory
+            available_products = get_products_not_in_weekly_inventory()
+            
+            if len(available_products) > 0:
+                col_select, col_par, col_unit, col_add = st.columns([3, 1, 1, 1])
+                
+                with col_select:
+                    # Create display options with category
+                    available_products['Display'] = available_products['Product'] + " (" + available_products['Category'] + ")"
+                    product_options = available_products['Display'].tolist()
+                    
+                    selected_display = st.selectbox(
+                        "Select Product:",
+                        options=[""] + product_options,
+                        key="add_weekly_product"
+                    )
+                
+                with col_par:
+                    new_par = st.number_input(
+                        "Par Level:",
+                        min_value=1,
+                        value=2,
+                        step=1,
+                        key="add_weekly_par"
+                    )
+                
+                with col_unit:
+                    unit_options = ["Bottle", "Case", "Sixtel", "Keg", "Each", "Quart", "Gallon"]
+                    new_unit = st.selectbox(
+                        "Unit:",
+                        options=unit_options,
+                        key="add_weekly_unit"
+                    )
+                
+                with col_add:
+                    st.write("")  # Spacer
+                    st.write("")  # Spacer
+                    if st.button("➕ Add", key="btn_add_weekly_product"):
+                        if selected_display:
+                            # Get the product details from available_products
+                            selected_row = available_products[available_products['Display'] == selected_display].iloc[0]
+                            
+                            # Create new row for weekly inventory
+                            new_row = pd.DataFrame([{
+                                'Product': selected_row['Product'],
+                                'Category': selected_row['Category'],
+                                'Par': new_par,
+                                'Current Inventory': 0,
+                                'Unit': new_unit,
+                                'Unit Cost': selected_row['Unit Cost'],
+                                'Distributor': selected_row['Distributor'],
+                                'Order Notes': selected_row['Order Notes']
+                            }])
+                            
+                            # Add to weekly inventory
+                            st.session_state.weekly_inventory = pd.concat(
+                                [st.session_state.weekly_inventory, new_row],
+                                ignore_index=True
+                            )
+                            
+                            # Save changes
+                            save_all_inventory_data()
+                            
+                            st.success(f"✅ Added {selected_row['Product']} to Weekly Inventory!")
+                            st.rerun()
+                        else:
+                            st.warning("Please select a product to add.")
+            else:
+                st.info("All Master Inventory products are already in Weekly Inventory.")
+            
+            st.markdown("---")
+            st.markdown("**Remove products from Weekly Inventory:**")
+            
+            # Multi-select for removal
+            weekly_products = st.session_state.weekly_inventory['Product'].tolist()
+            
+            if weekly_products:
+                products_to_remove = st.multiselect(
+                    "Select products to remove:",
+                    options=weekly_products,
+                    key="remove_weekly_products"
+                )
+                
+                if products_to_remove:
+                    if st.button("🗑️ Remove Selected Products", key="btn_remove_weekly_products"):
+                        # Remove selected products
+                        st.session_state.weekly_inventory = st.session_state.weekly_inventory[
+                            ~st.session_state.weekly_inventory['Product'].isin(products_to_remove)
+                        ].reset_index(drop=True)
+                        
+                        # Save changes
+                        save_all_inventory_data()
+                        
+                        st.success(f"✅ Removed {len(products_to_remove)} product(s) from Weekly Inventory!")
+                        st.rerun()
+            else:
+                st.info("No products in Weekly Inventory.")
+        
+        # =====================================================================
+        # END V2.3 ADD/REMOVE SECTION
+        # =====================================================================
         
         weekly_inv = st.session_state.weekly_inventory.copy()
         weekly_inv['Status'] = weekly_inv.apply(
