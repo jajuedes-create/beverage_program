@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.8
+# BEVERAGE MANAGEMENT APP V2.9
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -16,6 +16,7 @@
 #   V2.6 - Weekly Ordering: Added distributor filter, dedicated save button for persistence
 #   V2.7 - Weekly Ordering: Moved Top Products to Order Analytics tab, renamed tab
 #   V2.8 - Weekly Ordering: Added Product Analysis title and description
+#   V2.9 - Weekly Ordering: Renamed tab, added category filter to Add Product dropdown
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -388,7 +389,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.8",
+    page_title="Beverage Management App V2.9",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1629,7 +1630,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.8</h1>
+        <h1>🍸 Beverage Management App V2.9</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2242,7 +2243,7 @@ def show_ordering():
     
     # Tabs
     tab_build, tab_history, tab_analytics = st.tabs([
-        "🛒 Build This Week's Order", "📜 Order History", "📈 Order Analytics"
+        "🛒 Weekly Order Builder", "📜 Order History", "📈 Order Analytics"
     ])
     
     with tab_build:
@@ -2260,69 +2261,89 @@ def show_ordering():
             available_products = get_products_not_in_weekly_inventory()
             
             if len(available_products) > 0:
-                col_select, col_par, col_unit, col_add = st.columns([3, 1, 1, 1])
+                # V2.9: Category filter for Add Product dropdown
+                add_categories = sorted(available_products['Category'].unique().tolist())
                 
-                with col_select:
-                    # Create display options with category
-                    available_products['Display'] = available_products['Product'] + " (" + available_products['Category'] + ")"
-                    product_options = available_products['Display'].tolist()
+                col_cat_filter, col_spacer = st.columns([2, 4])
+                with col_cat_filter:
+                    add_category_filter = st.selectbox(
+                        "🔍 Filter by Category:",
+                        options=["All Categories"] + add_categories,
+                        key="add_product_category_filter"
+                    )
+                
+                # Filter available products by selected category
+                if add_category_filter != "All Categories":
+                    filtered_available = available_products[available_products['Category'] == add_category_filter].copy()
+                else:
+                    filtered_available = available_products.copy()
+                
+                if len(filtered_available) > 0:
+                    col_select, col_par, col_unit, col_add = st.columns([3, 1, 1, 1])
                     
-                    selected_display = st.selectbox(
-                        "Select Product:",
-                        options=[""] + product_options,
-                        key="add_weekly_product"
-                    )
-                
-                with col_par:
-                    new_par = st.number_input(
-                        "Par Level:",
-                        min_value=1,
-                        value=2,
-                        step=1,
-                        key="add_weekly_par"
-                    )
-                
-                with col_unit:
-                    unit_options = ["Bottle", "Case", "Sixtel", "Keg", "Each", "Quart", "Gallon"]
-                    new_unit = st.selectbox(
-                        "Unit:",
-                        options=unit_options,
-                        key="add_weekly_unit"
-                    )
-                
-                with col_add:
-                    st.write("")  # Spacer
-                    st.write("")  # Spacer
-                    if st.button("➕ Add", key="btn_add_weekly_product"):
-                        if selected_display:
-                            # Get the product details from available_products
-                            selected_row = available_products[available_products['Display'] == selected_display].iloc[0]
-                            
-                            # Create new row for weekly inventory
-                            new_row = pd.DataFrame([{
-                                'Product': selected_row['Product'],
-                                'Category': selected_row['Category'],
-                                'Par': new_par,
-                                'Current Inventory': 0,
-                                'Unit': new_unit,
-                                'Unit Cost': selected_row['Unit Cost'],
-                                'Distributor': selected_row['Distributor'],
-                                'Order Notes': selected_row['Order Notes']
-                            }])
-                            
-                            # Add to weekly inventory
-                            st.session_state.weekly_inventory = pd.concat(
-                                [st.session_state.weekly_inventory, new_row],
-                                ignore_index=True
-                            )
-                            
-                            # Save changes
-                            save_all_inventory_data()
-                            
-                            st.success(f"✅ Added {selected_row['Product']} to Weekly Inventory!")
-                            st.rerun()
-                        else:
-                            st.warning("Please select a product to add.")
+                    with col_select:
+                        # Create display options with category
+                        filtered_available['Display'] = filtered_available['Product'] + " (" + filtered_available['Category'] + ")"
+                        product_options = filtered_available['Display'].tolist()
+                        
+                        selected_display = st.selectbox(
+                            "Select Product:",
+                            options=[""] + product_options,
+                            key="add_weekly_product"
+                        )
+                    
+                    with col_par:
+                        new_par = st.number_input(
+                            "Par Level:",
+                            min_value=1,
+                            value=2,
+                            step=1,
+                            key="add_weekly_par"
+                        )
+                    
+                    with col_unit:
+                        unit_options = ["Bottle", "Case", "Sixtel", "Keg", "Each", "Quart", "Gallon"]
+                        new_unit = st.selectbox(
+                            "Unit:",
+                            options=unit_options,
+                            key="add_weekly_unit"
+                        )
+                    
+                    with col_add:
+                        st.write("")  # Spacer
+                        st.write("")  # Spacer
+                        if st.button("➕ Add", key="btn_add_weekly_product"):
+                            if selected_display:
+                                # Get the product details from filtered_available
+                                selected_row = filtered_available[filtered_available['Display'] == selected_display].iloc[0]
+                                
+                                # Create new row for weekly inventory
+                                new_row = pd.DataFrame([{
+                                    'Product': selected_row['Product'],
+                                    'Category': selected_row['Category'],
+                                    'Par': new_par,
+                                    'Current Inventory': 0,
+                                    'Unit': new_unit,
+                                    'Unit Cost': selected_row['Unit Cost'],
+                                    'Distributor': selected_row['Distributor'],
+                                    'Order Notes': selected_row['Order Notes']
+                                }])
+                                
+                                # Add to weekly inventory
+                                st.session_state.weekly_inventory = pd.concat(
+                                    [st.session_state.weekly_inventory, new_row],
+                                    ignore_index=True
+                                )
+                                
+                                # Save changes
+                                save_all_inventory_data()
+                                
+                                st.success(f"✅ Added {selected_row['Product']} to Weekly Inventory!")
+                                st.rerun()
+                            else:
+                                st.warning("Please select a product to add.")
+                else:
+                    st.info(f"No products available in {add_category_filter} category.")
             else:
                 st.info("All Master Inventory products are already in Weekly Inventory.")
             
