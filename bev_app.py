@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.17
+# BEVERAGE MANAGEMENT APP V2.18
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -27,6 +27,7 @@
 #           Order Notes, added Invoice # column in Step 3
 #   V2.16 - Weekly Ordering: Renamed Order Notes to Order Deals in Step 1
 #   V2.17 - Order History: Added Month filter and TOTAL row in Weekly Order Totals
+#   V2.18 - Added Unit column to Step 3 verification and Order History tables
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -426,7 +427,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.17",
+    page_title="Beverage Management App V2.18",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1695,7 +1696,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.17</h1>
+        <h1>🍸 Beverage Management App V2.18</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2864,8 +2865,8 @@ def show_ordering():
             
             pending_df['Status'] = pending_df.apply(get_status_with_changes, axis=1)
             
-            # V2.15: Updated display columns with Invoice #
-            verify_display_cols = ['Status', 'Product', 'Category', 'Distributor', 'Unit Cost', 
+            # V2.18: Updated display columns with Unit and Invoice #
+            verify_display_cols = ['Status', 'Product', 'Category', 'Distributor', 'Unit', 'Unit Cost', 
                                    'Order Quantity', 'Order Value', 'Invoice #', 'Verification Notes']
             
             edited_verification = st.data_editor(
@@ -2875,13 +2876,14 @@ def show_ordering():
                 key="verification_editor",
                 column_config={
                     "Status": st.column_config.TextColumn("Status", disabled=True, width="small"),
+                    "Unit": st.column_config.TextColumn("Unit", disabled=True),
                     "Unit Cost": st.column_config.NumberColumn(format="$%.2f", min_value=0, step=0.01),
                     "Order Quantity": st.column_config.NumberColumn(min_value=0, step=0.5),
                     "Order Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
                     "Invoice #": st.column_config.TextColumn("Invoice #", width="small"),
                     "Verification Notes": st.column_config.TextColumn("Order Notes", width="medium"),
                 },
-                disabled=["Status", "Product", "Category", "Distributor", "Order Value"]
+                disabled=["Status", "Product", "Category", "Distributor", "Unit", "Order Value"]
             )
             
             col_recalc, col_save_progress = st.columns([1, 1])
@@ -2999,6 +3001,7 @@ def show_ordering():
                                 'Product': row['Product'],
                                 'Category': row['Category'],
                                 'Quantity Ordered': row['Order Quantity'],
+                                'Unit': row.get('Unit', ''),
                                 'Unit Cost': row['Unit Cost'],
                                 'Total Cost': row['Order Value'],
                                 'Distributor': row['Distributor'],
@@ -3125,8 +3128,8 @@ def show_ordering():
                         column_config={"Total Cost": st.column_config.NumberColumn(format="$%.2f")})
             
             st.markdown("#### Order Details")
-            # Select columns to display
-            detail_cols = ['Week', 'Product', 'Category', 'Quantity Ordered', 'Unit Cost', 
+            # Select columns to display - V2.18: Added Unit column
+            detail_cols = ['Week', 'Product', 'Category', 'Quantity Ordered', 'Unit', 'Unit Cost', 
                           'Total Cost', 'Distributor', 'Status', 'Verified By']
             # Only include columns that exist
             detail_cols = [c for c in detail_cols if c in filtered_history.columns]
