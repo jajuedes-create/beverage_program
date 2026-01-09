@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.14
+# BEVERAGE MANAGEMENT APP V2.16
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -23,6 +23,9 @@
 #   V2.13 - Weekly Ordering: UI improvements - inline row deletion, Copy Order button,
 #           renamed buttons, red flag status indicator, removed redundant Order Summary
 #   V2.14 - Weekly Ordering: Simplified Add Products dropdown, removed redundant remove section
+#   V2.15 - Weekly Ordering: Hidden table indexes, smaller Status column, renamed Notes to
+#           Order Notes, added Invoice # column in Step 3
+#   V2.16 - Weekly Ordering: Renamed Order Notes to Order Deals in Step 1
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -422,7 +425,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.14",
+    page_title="Beverage Management App V2.16",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1691,7 +1694,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.14</h1>
+        <h1>🍸 Beverage Management App V2.16</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2638,6 +2641,7 @@ def show_ordering():
         edited_weekly = st.data_editor(
             display_df[display_cols],
             use_container_width=True,
+            hide_index=True,
             key="weekly_inv_editor",
             column_config={
                 "Select": st.column_config.CheckboxColumn("🗑️", help="Select rows to delete", width="small"),
@@ -2647,6 +2651,7 @@ def show_ordering():
                 "Total Current Inventory": st.column_config.NumberColumn("Total", disabled=True),
                 "Par": st.column_config.NumberColumn(min_value=0, step=1),
                 "Status": st.column_config.TextColumn(disabled=True),
+                "Order Notes": st.column_config.TextColumn("Order Deals", disabled=True),
             },
             disabled=["Product", "Category", "Status", "Total Current Inventory", "Unit", "Unit Cost", "Distributor", "Order Notes"]
         )
@@ -2725,6 +2730,7 @@ def show_ordering():
             edited_order = st.data_editor(
                 order_df,
                 use_container_width=True,
+                hide_index=True,
                 key="order_editor",
                 column_config={
                     "Unit Cost": st.column_config.NumberColumn(format="$%.2f", disabled=True),
@@ -2823,11 +2829,16 @@ def show_ordering():
             # V2.12 Fix: Ensure Verification Notes is string type (fixes StreamlitAPIException)
             pending_df['Verification Notes'] = pending_df['Verification Notes'].fillna('').astype(str)
             
+            # V2.15: Add Invoice # column if not present
+            if 'Invoice #' not in pending_df.columns:
+                pending_df['Invoice #'] = ''
+            pending_df['Invoice #'] = pending_df['Invoice #'].fillna('').astype(str)
+            
             order_date = pending_df['Order Date'].iloc[0] if 'Order Date' in pending_df.columns else 'Unknown'
             st.markdown(f"**📅 Order Date:** {order_date}")
             st.markdown(f"**📦 {len(pending_df)} items pending verification:**")
             
-            # Display columns for verification (editable: Unit Cost, Order Quantity, Verification Notes)
+            # Display columns for verification (editable: Unit Cost, Order Quantity, Verification Notes, Invoice #)
             verify_display_cols = ['Product', 'Category', 'Distributor', 'Unit Cost', 'Order Quantity', 
                                    'Order Value', 'Verification Notes', 'Modified']
             
@@ -2852,19 +2863,22 @@ def show_ordering():
             
             pending_df['Status'] = pending_df.apply(get_status_with_changes, axis=1)
             
+            # V2.15: Updated display columns with Invoice #
             verify_display_cols = ['Status', 'Product', 'Category', 'Distributor', 'Unit Cost', 
-                                   'Order Quantity', 'Order Value', 'Verification Notes']
+                                   'Order Quantity', 'Order Value', 'Invoice #', 'Verification Notes']
             
             edited_verification = st.data_editor(
                 pending_df[verify_display_cols],
                 use_container_width=True,
+                hide_index=True,
                 key="verification_editor",
                 column_config={
-                    "Status": st.column_config.TextColumn("Status", disabled=True, width="large"),
+                    "Status": st.column_config.TextColumn("Status", disabled=True, width="small"),
                     "Unit Cost": st.column_config.NumberColumn(format="$%.2f", min_value=0, step=0.01),
                     "Order Quantity": st.column_config.NumberColumn(min_value=0, step=0.5),
                     "Order Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
-                    "Verification Notes": st.column_config.TextColumn("Notes", width="medium"),
+                    "Invoice #": st.column_config.TextColumn("Invoice #", width="small"),
+                    "Verification Notes": st.column_config.TextColumn("Order Notes", width="medium"),
                 },
                 disabled=["Status", "Product", "Category", "Distributor", "Order Value"]
             )
@@ -2879,6 +2893,7 @@ def show_ordering():
                         st.session_state.pending_order.loc[mask, 'Unit Cost'] = row['Unit Cost']
                         st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
                         st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
+                        st.session_state.pending_order.loc[mask, 'Invoice #'] = row['Invoice #']
                     
                     # Recalculate Order Value
                     st.session_state.pending_order['Order Value'] = (
@@ -2904,6 +2919,7 @@ def show_ordering():
                         st.session_state.pending_order.loc[mask, 'Unit Cost'] = row['Unit Cost']
                         st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
                         st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
+                        st.session_state.pending_order.loc[mask, 'Invoice #'] = row['Invoice #']
                     
                     # Recalculate
                     st.session_state.pending_order['Order Value'] = (
@@ -2965,6 +2981,7 @@ def show_ordering():
                         st.session_state.pending_order.loc[mask, 'Unit Cost'] = row['Unit Cost']
                         st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
                         st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
+                        st.session_state.pending_order.loc[mask, 'Invoice #'] = row['Invoice #']
                     
                     st.session_state.pending_order['Order Value'] = (
                         st.session_state.pending_order['Order Quantity'] * 
@@ -2986,6 +3003,7 @@ def show_ordering():
                                 'Distributor': row['Distributor'],
                                 'Status': 'Verified',
                                 'Verified By': verifier_initials.strip().upper(),
+                                'Invoice #': row.get('Invoice #', ''),
                                 'Verification Notes': row.get('Verification Notes', '')
                             })
                     
