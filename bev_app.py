@@ -2764,7 +2764,7 @@ def show_ordering():
             )
             
             # V2.12: Action buttons row with Recalculate and Copy options
-            col_recalc, col_copy_csv, col_copy_text, col_spacer = st.columns([1, 1, 1, 2])
+            col_recalc, col_copy_order, col_spacer = st.columns([1, 1, 3])
             
             with col_recalc:
                 if st.button("💰 Recalculate Total", key="recalc_order"):
@@ -2772,18 +2772,7 @@ def show_ordering():
                     st.session_state.current_order = edited_order
                     st.rerun()
             
-            with col_copy_csv:
-                # Download as CSV
-                csv_data = edited_order.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download CSV",
-                    data=csv_data,
-                    file_name=f"order_{datetime.now().strftime('%Y%m%d')}.csv",
-                    mime="text/csv",
-                    key="download_order_csv"
-                )
-            
-            with col_copy_text:
+            with col_copy_order:
                 # Create a simple text format for clipboard
                 copy_cols = ['Product', 'Order Quantity', 'Unit', 'Distributor']
                 copy_df = edited_order[copy_cols].copy()
@@ -2798,30 +2787,12 @@ def show_ordering():
                     copy_text += "\n"
                 
                 st.download_button(
-                    label="📋 Copy as Text",
+                    label="📋 Copy Order",
                     data=copy_text,
                     file_name=f"order_{datetime.now().strftime('%Y%m%d')}.txt",
                     mime="text/plain",
                     key="download_order_text"
                 )
-            
-            st.markdown("---")
-            st.markdown("### Order Summary")
-            
-            col_s1, col_s2, col_s3 = st.columns(3)
-            with col_s1:
-                st.metric("Total Items", len(edited_order))
-            with col_s2:
-                st.metric("Total Units", f"{edited_order['Order Quantity'].sum():.1f}")
-            with col_s3:
-                st.metric("Total Order Value", format_currency(edited_order['Order Value'].sum()))
-            
-            st.markdown("#### By Distributor:")
-            dist_summary = edited_order.groupby('Distributor').agg({
-                'Order Quantity': 'sum', 'Order Value': 'sum'
-            }).reset_index()
-            st.dataframe(dist_summary, use_container_width=True, hide_index=True,
-                        column_config={"Order Value": st.column_config.NumberColumn(format="$%.2f")})
             
             st.markdown("---")
             # V2.10: Send to Verification instead of Save to History
