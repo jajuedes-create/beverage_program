@@ -1093,6 +1093,9 @@ def init_session_state():
     if 'pending_order' not in st.session_state:
         saved_pending = load_dataframe_from_sheets('pending_order') if sheets_configured else None
         if saved_pending is not None and len(saved_pending) > 0:
+            # V2.12 Fix: Ensure Verification Notes is string type
+            if 'Verification Notes' in saved_pending.columns:
+                saved_pending['Verification Notes'] = saved_pending['Verification Notes'].fillna('').astype(str)
             st.session_state.pending_order = saved_pending
         else:
             st.session_state.pending_order = pd.DataFrame()
@@ -2765,7 +2768,8 @@ def show_ordering():
                 pending_df = edited_order.copy()
                 pending_df['Original Unit Cost'] = pending_df['Unit Cost']
                 pending_df['Original Order Quantity'] = pending_df['Order Quantity']
-                pending_df['Verification Notes'] = ''
+                pending_df['Verification Notes'] = ''  # Initialize as empty string
+                pending_df['Verification Notes'] = pending_df['Verification Notes'].astype(str)  # Ensure string type
                 pending_df['Modified'] = False
                 pending_df['Order Date'] = datetime.now().strftime("%Y-%m-%d")
                 
@@ -2807,6 +2811,9 @@ def show_ordering():
                 pending_df['Modified'] = False
             if 'Order Date' not in pending_df.columns:
                 pending_df['Order Date'] = datetime.now().strftime("%Y-%m-%d")
+            
+            # V2.12 Fix: Ensure Verification Notes is string type (fixes StreamlitAPIException)
+            pending_df['Verification Notes'] = pending_df['Verification Notes'].fillna('').astype(str)
             
             order_date = pending_df['Order Date'].iloc[0] if 'Order Date' in pending_df.columns else 'Unknown'
             st.markdown(f"**📅 Order Date:** {order_date}")
