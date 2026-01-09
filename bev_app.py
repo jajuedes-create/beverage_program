@@ -2541,7 +2541,7 @@ def show_ordering():
         col_save, col_update, col_spacer = st.columns([1, 2, 3])
         
         with col_save:
-            if st.button("💾 Save Changes", key="save_weekly_only", help="Save inventory changes without generating an order"):
+            if st.button("💾 Update Inventory Values", key="save_weekly_only", help="Save inventory changes without generating an order"):
                 # Update values only for products that were displayed (filtered view)
                 for idx, row in edited_weekly.iterrows():
                     mask = st.session_state.weekly_inventory['Product'] == row['Product']
@@ -2553,11 +2553,11 @@ def show_ordering():
                 # Save weekly inventory to Google Sheets for persistence
                 save_all_inventory_data()
                 
-                st.success("✅ Weekly Inventory saved!")
+                st.success("✅ Inventory values updated!")
                 st.rerun()
         
         with col_update:
-            if st.button("🔄 Update Inventory & Generate Order", key="update_weekly"):
+            if st.button("🔄 Generate Orders", key="update_weekly"):
                 # Update values only for products that were displayed (filtered view)
                 for idx, row in edited_weekly.iterrows():
                     mask = st.session_state.weekly_inventory['Product'] == row['Product']
@@ -2572,7 +2572,7 @@ def show_ordering():
                 # Save weekly inventory to files for persistence
                 save_all_inventory_data()
                 
-                st.success("✅ Inventory updated and order generated!")
+                st.success("✅ Orders generated!")
                 st.rerun()
         
         st.markdown("---")
@@ -2646,7 +2646,7 @@ def show_ordering():
             if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
                 st.info("📋 An order is pending verification. Complete Step 3 below to finalize.")
             else:
-                st.info("👆 Update inventory counts above and click 'Update Inventory & Generate Order' to see what needs ordering.")
+                st.info("👆 Update inventory counts above and click 'Generate Orders' to see what needs ordering.")
         
         # =====================================================================
         # V2.10: STEP 3 - ORDER VERIFICATION
