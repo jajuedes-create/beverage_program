@@ -2653,14 +2653,19 @@ def show_ordering():
         # =====================================================================
         
         # V2.11: Updated display columns with Bar/Storage/Total
-        display_cols = ['Product', 'Category', 'Par', 'Bar Inventory', 'Storage Inventory', 
+        # V2.12: Added Select column for row deletion
+        display_df = filtered_weekly_inv.copy()
+        display_df.insert(0, 'Select', False)  # Add checkbox column at the beginning
+        
+        display_cols = ['Select', 'Product', 'Category', 'Par', 'Bar Inventory', 'Storage Inventory', 
                        'Total Current Inventory', 'Status', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
         
         edited_weekly = st.data_editor(
-            filtered_weekly_inv[display_cols],
+            display_df[display_cols],
             use_container_width=True,
             key="weekly_inv_editor",
             column_config={
+                "Select": st.column_config.CheckboxColumn("🗑️", help="Select rows to delete", width="small"),
                 "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
                 "Bar Inventory": st.column_config.NumberColumn("🍸 Bar", min_value=0, step=0.5),
                 "Storage Inventory": st.column_config.NumberColumn("📦 Storage", min_value=0, step=0.5),
@@ -2677,11 +2682,14 @@ def show_ordering():
             lambda row: "🔴 Order" if row['Total Current Inventory'] < row['Par'] else "✅ OK", axis=1
         )
         
-        # V2.6: Action buttons - Save and Update/Generate Order
-        col_save, col_update, col_spacer = st.columns([1, 2, 3])
+        # V2.12: Check for selected rows to delete
+        selected_for_deletion = edited_weekly[edited_weekly['Select'] == True]['Product'].tolist()
+        
+        # V2.6: Action buttons - Save, Generate Order, and Delete
+        col_save, col_update, col_delete, col_spacer = st.columns([1, 1, 1, 3])
         
         with col_save:
-            if st.button("💾 Update Inventory Values", key="save_weekly_only", help="Save inventory changes without generating an order"):
+            if st.button("💾 Update Table", key="save_weekly_only", help="Save inventory changes without generating an order"):
                 # Update values only for products that were displayed (filtered view)
                 for idx, row in edited_weekly.iterrows():
                     mask = st.session_state.weekly_inventory['Product'] == row['Product']
@@ -2693,7 +2701,7 @@ def show_ordering():
                 # Save weekly inventory to Google Sheets for persistence
                 save_all_inventory_data()
                 
-                st.success("✅ Inventory values updated!")
+                st.success("✅ Table updated!")
                 st.rerun()
         
         with col_update:
@@ -2714,6 +2722,23 @@ def show_ordering():
                 
                 st.success("✅ Orders generated!")
                 st.rerun()
+        
+        with col_delete:
+            delete_disabled = len(selected_for_deletion) == 0
+            if st.button("🗑️ Delete Selected", key="delete_selected_rows", disabled=delete_disabled, 
+                        help="Select rows using checkboxes, then click to delete"):
+                if selected_for_deletion:
+                    st.session_state.weekly_inventory = st.session_state.weekly_inventory[
+                        ~st.session_state.weekly_inventory['Product'].isin(selected_for_deletion)
+                    ].reset_index(drop=True)
+                    
+                    save_all_inventory_data()
+                    st.success(f"✅ Deleted {len(selected_for_deletion)} product(s)!")
+                    st.rerun()
+        
+        # Show count of selected items
+        if len(selected_for_deletion) > 0:
+            st.caption(f"🗑️ {len(selected_for_deletion)} row(s) selected for deletion")
         
         st.markdown("---")
         st.markdown("### Step 2: Review & Adjust This Week's Order")
@@ -2738,10 +2763,47 @@ def show_ordering():
                          "Unit", "Unit Cost", "Distributor", "Order Notes"]
             )
             
-            if st.button("💰 Recalculate Order Total", key="recalc_order"):
-                edited_order['Order Value'] = edited_order['Order Quantity'] * edited_order['Unit Cost']
-                st.session_state.current_order = edited_order
-                st.rerun()
+            # V2.12: Action buttons row with Recalculate and Copy options
+            col_recalc, col_copy_csv, col_copy_text, col_spacer = st.columns([1, 1, 1, 2])
+            
+            with col_recalc:
+                if st.button("💰 Recalculate Total", key="recalc_order"):
+                    edited_order['Order Value'] = edited_order['Order Quantity'] * edited_order['Unit Cost']
+                    st.session_state.current_order = edited_order
+                    st.rerun()
+            
+            with col_copy_csv:
+                # Download as CSV
+                csv_data = edited_order.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download CSV",
+                    data=csv_data,
+                    file_name=f"order_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    key="download_order_csv"
+                )
+            
+            with col_copy_text:
+                # Create a simple text format for clipboard
+                copy_cols = ['Product', 'Order Quantity', 'Unit', 'Distributor']
+                copy_df = edited_order[copy_cols].copy()
+                
+                # Group by distributor for organized copying
+                copy_text = "ORDER LIST\n" + "=" * 40 + "\n\n"
+                for dist in copy_df['Distributor'].unique():
+                    dist_items = copy_df[copy_df['Distributor'] == dist]
+                    copy_text += f"📦 {dist}\n" + "-" * 30 + "\n"
+                    for _, row in dist_items.iterrows():
+                        copy_text += f"  • {row['Product']}: {row['Order Quantity']} {row['Unit']}\n"
+                    copy_text += "\n"
+                
+                st.download_button(
+                    label="📋 Copy as Text",
+                    data=copy_text,
+                    file_name=f"order_{datetime.now().strftime('%Y%m%d')}.txt",
+                    mime="text/plain",
+                    key="download_order_text"
+                )
             
             st.markdown("---")
             st.markdown("### Order Summary")
@@ -2829,8 +2891,20 @@ def show_ordering():
                 (pending_df['Order Quantity'] != pending_df['Original Order Quantity'])
             )
             
-            # Add visual indicator for modified rows
-            pending_df['Status'] = pending_df['Modified'].apply(lambda x: '🔄 Modified' if x else '✓')
+            # V2.12 Update: Red flag for modified rows with change details
+            def get_status_with_changes(row):
+                if not row['Modified']:
+                    return '✅'
+                
+                changes = []
+                if row['Unit Cost'] != row['Original Unit Cost']:
+                    changes.append(f"Cost: ${row['Original Unit Cost']:.2f}→${row['Unit Cost']:.2f}")
+                if row['Order Quantity'] != row['Original Order Quantity']:
+                    changes.append(f"Qty: {row['Original Order Quantity']}→{row['Order Quantity']}")
+                
+                return '🚩 ' + ', '.join(changes)
+            
+            pending_df['Status'] = pending_df.apply(get_status_with_changes, axis=1)
             
             verify_display_cols = ['Status', 'Product', 'Category', 'Distributor', 'Unit Cost', 
                                    'Order Quantity', 'Order Value', 'Verification Notes']
@@ -2840,7 +2914,7 @@ def show_ordering():
                 use_container_width=True,
                 key="verification_editor",
                 column_config={
-                    "Status": st.column_config.TextColumn("Status", disabled=True, width="small"),
+                    "Status": st.column_config.TextColumn("Status", disabled=True, width="large"),
                     "Unit Cost": st.column_config.NumberColumn(format="$%.2f", min_value=0, step=0.01),
                     "Order Quantity": st.column_config.NumberColumn(min_value=0, step=0.5),
                     "Order Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
