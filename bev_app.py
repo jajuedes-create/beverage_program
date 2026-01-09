@@ -874,6 +874,7 @@ def get_sample_weekly_inventory():
 def get_sample_order_history():
     """
     Returns a DataFrame with sample historical order data.
+    V2.18: Added Unit column
     """
     today = datetime.now()
     weeks = []
@@ -883,49 +884,49 @@ def get_sample_order_history():
     
     data = [
         {"Week": weeks[0], "Product": "Tito's", "Category": "Spirits", 
-         "Quantity Ordered": 2, "Unit Cost": 24.50, "Total Cost": 49.00, "Distributor": "Breakthru"},
+         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 24.50, "Total Cost": 49.00, "Distributor": "Breakthru"},
         {"Week": weeks[0], "Product": "New Glarus Moon Man", "Category": "Beer", 
-         "Quantity Ordered": 2, "Unit Cost": 26.40, "Total Cost": 52.80, "Distributor": "Frank Beer"},
+         "Quantity Ordered": 2, "Unit": "Case", "Unit Cost": 26.40, "Total Cost": 52.80, "Distributor": "Frank Beer"},
         {"Week": weeks[0], "Product": "Natalie's Lime Juice", "Category": "Ingredients", 
-         "Quantity Ordered": 3, "Unit Cost": 8.34, "Total Cost": 25.02, "Distributor": "US Foods"},
+         "Quantity Ordered": 3, "Unit": "Bottle", "Unit Cost": 8.34, "Total Cost": 25.02, "Distributor": "US Foods"},
         {"Week": weeks[1], "Product": "Tito's", "Category": "Spirits", 
-         "Quantity Ordered": 1, "Unit Cost": 24.50, "Total Cost": 24.50, "Distributor": "Breakthru"},
+         "Quantity Ordered": 1, "Unit": "Bottle", "Unit Cost": 24.50, "Total Cost": 24.50, "Distributor": "Breakthru"},
         {"Week": weeks[1], "Product": "Buffalo Trace", "Category": "Spirits", 
-         "Quantity Ordered": 2, "Unit Cost": 31.00, "Total Cost": 62.00, "Distributor": "Breakthru"},
+         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 31.00, "Total Cost": 62.00, "Distributor": "Breakthru"},
         {"Week": weeks[1], "Product": "Coors Light", "Category": "Beer", 
-         "Quantity Ordered": 1, "Unit Cost": 24.51, "Total Cost": 24.51, "Distributor": "Frank Beer"},
+         "Quantity Ordered": 1, "Unit": "Case", "Unit Cost": 24.51, "Total Cost": 24.51, "Distributor": "Frank Beer"},
         {"Week": weeks[2], "Product": "Espolòn Blanco", "Category": "Spirits", 
-         "Quantity Ordered": 2, "Unit Cost": 25.00, "Total Cost": 50.00, "Distributor": "Breakthru"},
+         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 25.00, "Total Cost": 50.00, "Distributor": "Breakthru"},
         {"Week": weeks[2], "Product": "New Glarus Moon Man", "Category": "Beer", 
-         "Quantity Ordered": 1, "Unit Cost": 26.40, "Total Cost": 26.40, "Distributor": "Frank Beer"},
+         "Quantity Ordered": 1, "Unit": "Case", "Unit Cost": 26.40, "Total Cost": 26.40, "Distributor": "Frank Beer"},
         {"Week": weeks[2], "Product": "Natalie's Lime Juice", "Category": "Ingredients", 
-         "Quantity Ordered": 2, "Unit Cost": 8.34, "Total Cost": 16.68, "Distributor": "US Foods"},
+         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 8.34, "Total Cost": 16.68, "Distributor": "US Foods"},
         {"Week": weeks[2], "Product": "Natalie's Lemon Juice", "Category": "Ingredients", 
-         "Quantity Ordered": 2, "Unit Cost": 8.34, "Total Cost": 16.68, "Distributor": "US Foods"},
+         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 8.34, "Total Cost": 16.68, "Distributor": "US Foods"},
         {"Week": weeks[3], "Product": "Tito's", "Category": "Spirits", 
-         "Quantity Ordered": 3, "Unit Cost": 24.50, "Total Cost": 73.50, "Distributor": "Breakthru"},
+         "Quantity Ordered": 3, "Unit": "Bottle", "Unit Cost": 24.50, "Total Cost": 73.50, "Distributor": "Breakthru"},
         {"Week": weeks[3], "Product": "Rittenhouse Rye", "Category": "Spirits", 
-         "Quantity Ordered": 1, "Unit Cost": 28.00, "Total Cost": 28.00, "Distributor": "Breakthru"},
+         "Quantity Ordered": 1, "Unit": "Bottle", "Unit Cost": 28.00, "Total Cost": 28.00, "Distributor": "Breakthru"},
         {"Week": weeks[3], "Product": "High Life", "Category": "Beer", 
-         "Quantity Ordered": 2, "Unit Cost": 21.15, "Total Cost": 42.30, "Distributor": "Frank Beer"},
+         "Quantity Ordered": 2, "Unit": "Case", "Unit Cost": 21.15, "Total Cost": 42.30, "Distributor": "Frank Beer"},
         {"Week": weeks[4], "Product": "Buffalo Trace", "Category": "Spirits", 
-         "Quantity Ordered": 1, "Unit Cost": 31.00, "Total Cost": 31.00, "Distributor": "Breakthru"},
+         "Quantity Ordered": 1, "Unit": "Bottle", "Unit Cost": 31.00, "Total Cost": 31.00, "Distributor": "Breakthru"},
         {"Week": weeks[4], "Product": "Botanist", "Category": "Spirits", 
-         "Quantity Ordered": 2, "Unit Cost": 33.74, "Total Cost": 67.48, "Distributor": "General Beverage"},
+         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 33.74, "Total Cost": 67.48, "Distributor": "General Beverage"},
         {"Week": weeks[4], "Product": "Hop Haus Yard Work IPA", "Category": "Beer", 
-         "Quantity Ordered": 1, "Unit Cost": 75.00, "Total Cost": 75.00, "Distributor": "GB Beer"},
+         "Quantity Ordered": 1, "Unit": "Sixtel", "Unit Cost": 75.00, "Total Cost": 75.00, "Distributor": "GB Beer"},
         {"Week": weeks[4], "Product": "Q Club Soda", "Category": "Ingredients", 
-         "Quantity Ordered": 2, "Unit Cost": 12.48, "Total Cost": 24.96, "Distributor": "Breakthru"},
+         "Quantity Ordered": 2, "Unit": "Case", "Unit Cost": 12.48, "Total Cost": 24.96, "Distributor": "Breakthru"},
         {"Week": weeks[5], "Product": "Tito's", "Category": "Spirits", 
-         "Quantity Ordered": 2, "Unit Cost": 24.50, "Total Cost": 49.00, "Distributor": "Breakthru"},
+         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 24.50, "Total Cost": 49.00, "Distributor": "Breakthru"},
         {"Week": weeks[5], "Product": "Espolòn Blanco", "Category": "Spirits", 
-         "Quantity Ordered": 1, "Unit Cost": 25.00, "Total Cost": 25.00, "Distributor": "Breakthru"},
+         "Quantity Ordered": 1, "Unit": "Bottle", "Unit Cost": 25.00, "Total Cost": 25.00, "Distributor": "Breakthru"},
         {"Week": weeks[5], "Product": "New Glarus Moon Man", "Category": "Beer", 
-         "Quantity Ordered": 2, "Unit Cost": 26.40, "Total Cost": 52.80, "Distributor": "Frank Beer"},
+         "Quantity Ordered": 2, "Unit": "Case", "Unit Cost": 26.40, "Total Cost": 52.80, "Distributor": "Frank Beer"},
         {"Week": weeks[5], "Product": "Natalie's Lime Juice", "Category": "Ingredients", 
-         "Quantity Ordered": 2, "Unit Cost": 8.34, "Total Cost": 16.68, "Distributor": "US Foods"},
+         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 8.34, "Total Cost": 16.68, "Distributor": "US Foods"},
         {"Week": weeks[5], "Product": "Heavy Cream", "Category": "Ingredients", 
-         "Quantity Ordered": 1, "Unit Cost": 9.59, "Total Cost": 9.59, "Distributor": "US Foods"},
+         "Quantity Ordered": 1, "Unit": "Quart", "Unit Cost": 9.59, "Total Cost": 9.59, "Distributor": "US Foods"},
     ]
     
     return pd.DataFrame(data)
@@ -3057,6 +3058,9 @@ def show_ordering():
                 display_history['Status'] = 'Verified'  # Default for legacy orders
             if 'Verified By' not in display_history.columns:
                 display_history['Verified By'] = ''
+            # V2.18: Ensure Unit column exists for display
+            if 'Unit' not in display_history.columns:
+                display_history['Unit'] = ''  # Default for legacy orders without Unit
             
             # V2.17: Add Month column for filtering
             display_history['Week'] = pd.to_datetime(display_history['Week'])
