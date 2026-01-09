@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.9
+# BEVERAGE MANAGEMENT APP V2.10
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -17,6 +17,7 @@
 #   V2.7 - Weekly Ordering: Moved Top Products to Order Analytics tab, renamed tab
 #   V2.8 - Weekly Ordering: Added Product Analysis title and description
 #   V2.9 - Weekly Ordering: Renamed tab, added category filter to Add Product dropdown
+#   V2.10 - Weekly Ordering: Added Step 3 Order Verification workflow with status tracking
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -298,8 +299,35 @@ def save_all_inventory_data():
     if 'last_inventory_date' in st.session_state:
         save_text_to_sheets(st.session_state.last_inventory_date, 'last_inventory_date')
     
+    # V2.10: Save pending order for verification workflow
+    if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
+        save_dataframe_to_sheets(st.session_state.pending_order, 'pending_order')
+    
     # Save historical snapshot for comparison tracking
     save_inventory_snapshot()
+
+
+def save_pending_order():
+    """Saves pending order to Google Sheets for verification workflow."""
+    if not is_google_sheets_configured():
+        return
+    
+    if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
+        save_dataframe_to_sheets(st.session_state.pending_order, 'pending_order')
+
+
+def clear_pending_order():
+    """Clears pending order from session state and Google Sheets."""
+    st.session_state.pending_order = pd.DataFrame()
+    
+    if is_google_sheets_configured():
+        spreadsheet = get_spreadsheet()
+        if spreadsheet:
+            try:
+                worksheet = spreadsheet.worksheet('pending_order')
+                worksheet.clear()
+            except:
+                pass  # Worksheet doesn't exist, that's fine
 
 def save_cocktail_recipes():
     """Saves cocktail recipes to Google Sheets."""
@@ -389,7 +417,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.9",
+    page_title="Beverage Management App V2.10",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1055,6 +1083,14 @@ def init_session_state():
     if 'current_order' not in st.session_state:
         st.session_state.current_order = pd.DataFrame()
     
+    # V2.10: Load pending order for verification workflow
+    if 'pending_order' not in st.session_state:
+        saved_pending = load_dataframe_from_sheets('pending_order') if sheets_configured else None
+        if saved_pending is not None and len(saved_pending) > 0:
+            st.session_state.pending_order = saved_pending
+        else:
+            st.session_state.pending_order = pd.DataFrame()
+    
     # ----- Load Cocktail Recipes -----
     
     if 'cocktail_recipes' not in st.session_state:
@@ -1630,7 +1666,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.9</h1>
+        <h1>🍸 Beverage Management App V2.10</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2229,13 +2265,23 @@ def show_ordering():
     else:
         current_order_total = 0
     
-    col1, col2, col3 = st.columns(3)
+    # V2.10: Check for pending verification
+    pending_verification_total = 0
+    if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
+        pending_verification_total = st.session_state.pending_order['Order Value'].sum() if 'Order Value' in st.session_state.pending_order.columns else 0
+    
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric(label="📅 Previous Week's Order", value=format_currency(prev_week_total))
     with col2:
         st.metric(label="🛒 Current Order (Building)", value=format_currency(current_order_total))
     with col3:
+        if pending_verification_total > 0:
+            st.metric(label="⏳ Pending Verification", value=format_currency(pending_verification_total))
+        else:
+            st.metric(label="⏳ Pending Verification", value="None")
+    with col4:
         st.metric(label="📈 6-Week Avg Order", 
                   value=format_currency(order_history.groupby('Week')['Total Cost'].sum().mean() if len(order_history) > 0 else 0))
     
@@ -2523,67 +2569,302 @@ def show_ordering():
                         column_config={"Order Value": st.column_config.NumberColumn(format="$%.2f")})
             
             st.markdown("---")
-            if st.button("✅ Save Order to History", key="save_order", type="primary"):
-                today = datetime.now().strftime("%Y-%m-%d")
-                new_orders = []
-                for _, row in edited_order.iterrows():
-                    if row['Order Quantity'] > 0:
-                        new_orders.append({
-                            'Week': today, 'Product': row['Product'], 'Category': row['Category'],
-                            'Quantity Ordered': row['Order Quantity'], 'Unit Cost': row['Unit Cost'],
-                            'Total Cost': row['Order Value'], 'Distributor': row['Distributor']
-                        })
-                if new_orders:
-                    st.session_state.order_history = pd.concat([
-                        st.session_state.order_history, pd.DataFrame(new_orders)
-                    ], ignore_index=True)
-                    st.session_state.current_order = pd.DataFrame()
-                    
-                    # Save to files for persistence
-                    save_all_inventory_data()
-                    
-                    st.success("✅ Order saved to history!")
-                    st.balloons()
-                    st.rerun()
-                else:
-                    st.warning("No items with quantity > 0 to save.")
+            # V2.10: Send to Verification instead of Save to History
+            if st.button("📋 Send to Verification", key="send_to_verification", type="primary"):
+                # Create pending order with original values for comparison
+                pending_df = edited_order.copy()
+                pending_df['Original Unit Cost'] = pending_df['Unit Cost']
+                pending_df['Original Order Quantity'] = pending_df['Order Quantity']
+                pending_df['Verification Notes'] = ''
+                pending_df['Modified'] = False
+                pending_df['Order Date'] = datetime.now().strftime("%Y-%m-%d")
+                
+                st.session_state.pending_order = pending_df
+                st.session_state.current_order = pd.DataFrame()  # Clear current order
+                
+                # Save pending order for persistence
+                save_pending_order()
+                save_all_inventory_data()
+                
+                st.success("✅ Order sent to verification! Complete Step 3 to finalize.")
+                st.rerun()
         else:
-            st.info("👆 Update inventory counts above and click 'Update Inventory & Generate Order' to see what needs ordering.")
+            # Check if there's a pending order waiting for verification
+            if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
+                st.info("📋 An order is pending verification. Complete Step 3 below to finalize.")
+            else:
+                st.info("👆 Update inventory counts above and click 'Update Inventory & Generate Order' to see what needs ordering.")
+        
+        # =====================================================================
+        # V2.10: STEP 3 - ORDER VERIFICATION
+        # =====================================================================
+        
+        st.markdown("---")
+        st.markdown("### Step 3: Order Verification")
+        st.markdown("Verify received products against the order. Update quantities and costs as needed, then finalize.")
+        
+        if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
+            pending_df = st.session_state.pending_order.copy()
+            
+            # Ensure all required columns exist
+            if 'Original Unit Cost' not in pending_df.columns:
+                pending_df['Original Unit Cost'] = pending_df['Unit Cost']
+            if 'Original Order Quantity' not in pending_df.columns:
+                pending_df['Original Order Quantity'] = pending_df['Order Quantity']
+            if 'Verification Notes' not in pending_df.columns:
+                pending_df['Verification Notes'] = ''
+            if 'Modified' not in pending_df.columns:
+                pending_df['Modified'] = False
+            if 'Order Date' not in pending_df.columns:
+                pending_df['Order Date'] = datetime.now().strftime("%Y-%m-%d")
+            
+            order_date = pending_df['Order Date'].iloc[0] if 'Order Date' in pending_df.columns else 'Unknown'
+            st.markdown(f"**📅 Order Date:** {order_date}")
+            st.markdown(f"**📦 {len(pending_df)} items pending verification:**")
+            
+            # Display columns for verification (editable: Unit Cost, Order Quantity, Verification Notes)
+            verify_display_cols = ['Product', 'Category', 'Distributor', 'Unit Cost', 'Order Quantity', 
+                                   'Order Value', 'Verification Notes', 'Modified']
+            
+            # Calculate Modified flag based on changes
+            pending_df['Modified'] = (
+                (pending_df['Unit Cost'] != pending_df['Original Unit Cost']) | 
+                (pending_df['Order Quantity'] != pending_df['Original Order Quantity'])
+            )
+            
+            # Add visual indicator for modified rows
+            pending_df['Status'] = pending_df['Modified'].apply(lambda x: '🔄 Modified' if x else '✓')
+            
+            verify_display_cols = ['Status', 'Product', 'Category', 'Distributor', 'Unit Cost', 
+                                   'Order Quantity', 'Order Value', 'Verification Notes']
+            
+            edited_verification = st.data_editor(
+                pending_df[verify_display_cols],
+                use_container_width=True,
+                key="verification_editor",
+                column_config={
+                    "Status": st.column_config.TextColumn("Status", disabled=True, width="small"),
+                    "Unit Cost": st.column_config.NumberColumn(format="$%.2f", min_value=0, step=0.01),
+                    "Order Quantity": st.column_config.NumberColumn(min_value=0, step=0.5),
+                    "Order Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
+                    "Verification Notes": st.column_config.TextColumn("Notes", width="medium"),
+                },
+                disabled=["Status", "Product", "Category", "Distributor", "Order Value"]
+            )
+            
+            col_recalc, col_save_progress = st.columns([1, 1])
+            
+            with col_recalc:
+                if st.button("💰 Recalculate Verification Total", key="recalc_verification"):
+                    # Update pending order with edited values
+                    for idx, row in edited_verification.iterrows():
+                        mask = st.session_state.pending_order['Product'] == row['Product']
+                        st.session_state.pending_order.loc[mask, 'Unit Cost'] = row['Unit Cost']
+                        st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
+                        st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
+                    
+                    # Recalculate Order Value
+                    st.session_state.pending_order['Order Value'] = (
+                        st.session_state.pending_order['Order Quantity'] * 
+                        st.session_state.pending_order['Unit Cost']
+                    )
+                    
+                    # Update Modified flag
+                    st.session_state.pending_order['Modified'] = (
+                        (st.session_state.pending_order['Unit Cost'] != st.session_state.pending_order['Original Unit Cost']) | 
+                        (st.session_state.pending_order['Order Quantity'] != st.session_state.pending_order['Original Order Quantity'])
+                    )
+                    
+                    save_pending_order()
+                    st.rerun()
+            
+            with col_save_progress:
+                if st.button("💾 Save Verification Progress", key="save_verification_progress"):
+                    # Update pending order with edited values
+                    for idx, row in edited_verification.iterrows():
+                        mask = st.session_state.pending_order['Product'] == row['Product']
+                        st.session_state.pending_order.loc[mask, 'Unit Cost'] = row['Unit Cost']
+                        st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
+                        st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
+                    
+                    # Recalculate
+                    st.session_state.pending_order['Order Value'] = (
+                        st.session_state.pending_order['Order Quantity'] * 
+                        st.session_state.pending_order['Unit Cost']
+                    )
+                    st.session_state.pending_order['Modified'] = (
+                        (st.session_state.pending_order['Unit Cost'] != st.session_state.pending_order['Original Unit Cost']) | 
+                        (st.session_state.pending_order['Order Quantity'] != st.session_state.pending_order['Original Order Quantity'])
+                    )
+                    
+                    save_pending_order()
+                    st.success("✅ Verification progress saved!")
+                    st.rerun()
+            
+            # Verification Summary
+            st.markdown("---")
+            st.markdown("### Verification Summary")
+            
+            # Recalculate for display
+            display_pending = pending_df.copy()
+            display_pending['Order Value'] = display_pending['Order Quantity'] * display_pending['Unit Cost']
+            
+            modified_count = display_pending['Modified'].sum()
+            
+            col_v1, col_v2, col_v3, col_v4 = st.columns(4)
+            with col_v1:
+                st.metric("Total Items", len(display_pending))
+            with col_v2:
+                st.metric("Modified Items", int(modified_count))
+            with col_v3:
+                st.metric("Total Units", f"{display_pending['Order Quantity'].sum():.1f}")
+            with col_v4:
+                st.metric("Final Order Value", format_currency(display_pending['Order Value'].sum()))
+            
+            # Finalize section
+            st.markdown("---")
+            st.markdown("### Finalize Order")
+            st.markdown("Enter your initials to sign off and save the verified order to history.")
+            
+            col_initials, col_finalize, col_cancel = st.columns([1, 1, 1])
+            
+            with col_initials:
+                verifier_initials = st.text_input(
+                    "Verifier Initials:",
+                    max_chars=5,
+                    key="verifier_initials",
+                    placeholder="e.g., JD"
+                )
+            
+            with col_finalize:
+                st.write("")  # Spacer
+                finalize_disabled = len(verifier_initials.strip()) == 0
+                if st.button("✅ Finalize & Save Order", key="finalize_order", type="primary", disabled=finalize_disabled):
+                    # Update with final edited values
+                    for idx, row in edited_verification.iterrows():
+                        mask = st.session_state.pending_order['Product'] == row['Product']
+                        st.session_state.pending_order.loc[mask, 'Unit Cost'] = row['Unit Cost']
+                        st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
+                        st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
+                    
+                    st.session_state.pending_order['Order Value'] = (
+                        st.session_state.pending_order['Order Quantity'] * 
+                        st.session_state.pending_order['Unit Cost']
+                    )
+                    
+                    # Save to order history
+                    order_date = st.session_state.pending_order['Order Date'].iloc[0]
+                    new_orders = []
+                    for _, row in st.session_state.pending_order.iterrows():
+                        if row['Order Quantity'] > 0:
+                            new_orders.append({
+                                'Week': order_date,
+                                'Product': row['Product'],
+                                'Category': row['Category'],
+                                'Quantity Ordered': row['Order Quantity'],
+                                'Unit Cost': row['Unit Cost'],
+                                'Total Cost': row['Order Value'],
+                                'Distributor': row['Distributor'],
+                                'Status': 'Verified',
+                                'Verified By': verifier_initials.strip().upper(),
+                                'Verification Notes': row.get('Verification Notes', '')
+                            })
+                    
+                    if new_orders:
+                        st.session_state.order_history = pd.concat([
+                            st.session_state.order_history, pd.DataFrame(new_orders)
+                        ], ignore_index=True)
+                        
+                        # Clear pending order
+                        clear_pending_order()
+                        
+                        # Save to files for persistence
+                        save_all_inventory_data()
+                        
+                        st.success(f"✅ Order verified by {verifier_initials.strip().upper()} and saved to history!")
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.warning("No items with quantity > 0 to save.")
+            
+            with col_cancel:
+                st.write("")  # Spacer
+                if st.button("❌ Cancel Verification", key="cancel_verification"):
+                    clear_pending_order()
+                    st.warning("Verification cancelled. Order has been discarded.")
+                    st.rerun()
+            
+            if finalize_disabled:
+                st.caption("⚠️ Enter your initials above to enable the Finalize button.")
+        
+        else:
+            st.info("📋 No orders pending verification. Complete Steps 1 and 2 to create an order.")
     
     with tab_history:
         st.markdown("### 📜 Previous Orders")
+        
+        # V2.10: Show pending verification notice
+        if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
+            pending_date = st.session_state.pending_order['Order Date'].iloc[0] if 'Order Date' in st.session_state.pending_order.columns else 'Unknown'
+            pending_value = st.session_state.pending_order['Order Value'].sum() if 'Order Value' in st.session_state.pending_order.columns else 0
+            st.warning(f"⏳ **Pending Verification:** Order from {pending_date} ({format_currency(pending_value)}) - Complete Step 3 to finalize.")
+        
         if len(order_history) > 0:
-            col_f1, col_f2 = st.columns(2)
+            # V2.10: Ensure Status column exists for display
+            display_history = order_history.copy()
+            if 'Status' not in display_history.columns:
+                display_history['Status'] = 'Verified'  # Default for legacy orders
+            if 'Verified By' not in display_history.columns:
+                display_history['Verified By'] = ''
+            
+            col_f1, col_f2, col_f3 = st.columns(3)
             with col_f1:
-                weeks = sorted(order_history['Week'].unique(), reverse=True)
+                weeks = sorted(display_history['Week'].unique(), reverse=True)
                 selected_weeks = st.multiselect("Filter by Week:", options=weeks,
                     default=weeks[:4] if len(weeks) >= 4 else weeks, key="history_week_filter")
             with col_f2:
-                categories = order_history['Category'].unique().tolist()
+                categories = display_history['Category'].unique().tolist()
                 selected_categories = st.multiselect("Filter by Category:", options=categories,
                     default=categories, key="history_category_filter")
+            with col_f3:
+                status_options = display_history['Status'].unique().tolist()
+                selected_statuses = st.multiselect("Filter by Status:", options=status_options,
+                    default=status_options, key="history_status_filter")
             
-            filtered_history = order_history.copy()
+            filtered_history = display_history.copy()
             if selected_weeks:
                 filtered_history = filtered_history[filtered_history['Week'].isin(selected_weeks)]
             if selected_categories:
                 filtered_history = filtered_history[filtered_history['Category'].isin(selected_categories)]
+            if selected_statuses:
+                filtered_history = filtered_history[filtered_history['Status'].isin(selected_statuses)]
             
             st.markdown("#### Weekly Order Totals")
-            weekly_totals = filtered_history.groupby('Week')['Total Cost'].sum().reset_index()
+            weekly_totals = filtered_history.groupby('Week').agg({
+                'Total Cost': 'sum',
+                'Verified By': 'first'
+            }).reset_index()
             weekly_totals = weekly_totals.sort_values('Week', ascending=False)
-            st.dataframe(weekly_totals, use_container_width=True, hide_index=True,
+            weekly_totals['Status'] = '✅ Verified'
+            st.dataframe(weekly_totals[['Week', 'Total Cost', 'Status', 'Verified By']], 
+                        use_container_width=True, hide_index=True,
                         column_config={"Total Cost": st.column_config.NumberColumn(format="$%.2f")})
             
             st.markdown("#### Order Details")
-            st.dataframe(filtered_history.sort_values(['Week', 'Product'], ascending=[False, True]),
+            # Select columns to display
+            detail_cols = ['Week', 'Product', 'Category', 'Quantity Ordered', 'Unit Cost', 
+                          'Total Cost', 'Distributor', 'Status', 'Verified By']
+            # Only include columns that exist
+            detail_cols = [c for c in detail_cols if c in filtered_history.columns]
+            
+            st.dataframe(filtered_history[detail_cols].sort_values(['Week', 'Product'], ascending=[False, True]),
                         use_container_width=True, hide_index=True,
                         column_config={
                             "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
                             "Total Cost": st.column_config.NumberColumn(format="$%.2f")
                         })
         else:
-            st.info("No order history yet. Save an order to see it here.")
+            st.info("No order history yet. Complete all 3 steps to save an order.")
     
     with tab_analytics:
         st.markdown("### 📈 Order Analytics")
