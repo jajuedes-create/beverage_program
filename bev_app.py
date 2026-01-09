@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.18
+# BEVERAGE MANAGEMENT APP V2.19
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -28,6 +28,8 @@
 #   V2.16 - Weekly Ordering: Renamed Order Notes to Order Deals in Step 1
 #   V2.17 - Order History: Added Month filter and TOTAL row in Weekly Order Totals
 #   V2.18 - Added Unit column to Step 3 verification and Order History tables
+#   V2.19 - Order Analytics: Category-specific top 10 dropdowns, dollar y-axis formatting,
+#           removed redundant Top Products expander
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -427,7 +429,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.18",
+    page_title="Beverage Management App V2.19",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1697,7 +1699,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.18</h1>
+        <h1>🍸 Beverage Management App V2.19</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -3150,22 +3152,7 @@ def show_ordering():
     with tab_analytics:
         st.markdown("### 📈 Order Analytics")
         if len(order_history) > 0:
-            # V2.7: Top Products section moved here from dashboard
-            with st.expander("🏆 Top Products (by total spend)", expanded=True):
-                top_products = order_history.groupby('Product').agg({
-                    'Quantity Ordered': 'sum',
-                    'Total Cost': 'sum'
-                }).sort_values('Total Cost', ascending=False).head(10)
-                
-                st.dataframe(
-                    top_products.reset_index().rename(columns={
-                        'Product': 'Product', 'Quantity Ordered': 'Total Units Ordered', 'Total Cost': 'Total Spend'
-                    }),
-                    use_container_width=True, hide_index=True,
-                    column_config={"Total Spend": st.column_config.NumberColumn(format="$%.2f")}
-                )
-            
-            st.markdown("---")
+            # V2.19: Removed Top Products expander (now shown per category below pie chart)
             
             # V2.8: Product Analysis section with title and description
             st.markdown("#### 📊 Product Analysis")
@@ -3186,6 +3173,8 @@ def show_ordering():
                 st.markdown("#### Spending Over Time")
                 fig_cost = px.line(plot_data, x='Week', y='Total Cost', color='Product',
                                   markers=True, title='Weekly Spending by Product')
+                # V2.19: Add dollar formatting to y-axis
+                fig_cost.update_layout(yaxis_tickprefix='$', yaxis_tickformat=',.2f')
                 st.plotly_chart(fig_cost, use_container_width=True)
                 
                 st.markdown("#### Product Summary Statistics")
@@ -3205,6 +3194,39 @@ def show_ordering():
             cat_spend = order_history.groupby('Category')['Total Cost'].sum().reset_index()
             fig_pie = px.pie(cat_spend, values='Total Cost', names='Category', title='Total Spending by Category')
             st.plotly_chart(fig_pie, use_container_width=True)
+            
+            # V2.19: Category-specific Top 10 Products dropdowns
+            st.markdown("---")
+            st.markdown("#### 🏆 Top Products by Category")
+            st.markdown("Expand each category below to see the top 10 products by total spend.")
+            
+            categories = sorted(order_history['Category'].unique())
+            
+            for category in categories:
+                category_data = order_history[order_history['Category'] == category]
+                category_total = category_data['Total Cost'].sum()
+                
+                with st.expander(f"**{category}** - Total Spend: ${category_total:,.2f}", expanded=False):
+                    top_in_category = category_data.groupby('Product').agg({
+                        'Quantity Ordered': 'sum',
+                        'Total Cost': 'sum'
+                    }).sort_values('Total Cost', ascending=False).head(10)
+                    
+                    if len(top_in_category) > 0:
+                        st.dataframe(
+                            top_in_category.reset_index().rename(columns={
+                                'Product': 'Product', 
+                                'Quantity Ordered': 'Total Units Ordered', 
+                                'Total Cost': 'Total Spend'
+                            }),
+                            use_container_width=True, 
+                            hide_index=True,
+                            column_config={
+                                "Total Spend": st.column_config.NumberColumn(format="$%.2f")
+                            }
+                        )
+                    else:
+                        st.info(f"No orders found for {category}.")
         else:
             st.info("No order history yet. Save some orders to see analytics.")
 
