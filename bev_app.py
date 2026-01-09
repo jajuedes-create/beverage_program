@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.12
+# BEVERAGE MANAGEMENT APP V2.14
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -20,6 +20,9 @@
 #   V2.10 - Weekly Ordering: Added Step 3 Order Verification workflow with status tracking
 #   V2.11 - Weekly Ordering: Added Bar/Storage Inventory columns with auto-calculated total
 #   V2.12 - Weekly Ordering: Added CSV upload option to populate weekly inventory
+#   V2.13 - Weekly Ordering: UI improvements - inline row deletion, Copy Order button,
+#           renamed buttons, red flag status indicator, removed redundant Order Summary
+#   V2.14 - Weekly Ordering: Simplified Add Products dropdown, removed redundant remove section
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -419,7 +422,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.12",
+    page_title="Beverage Management App V2.14",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1688,7 +1691,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.12</h1>
+        <h1>🍸 Beverage Management App V2.14</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2322,7 +2325,7 @@ def show_ordering():
         # V2.3: ADD/REMOVE PRODUCTS FROM WEEKLY INVENTORY
         # =====================================================================
         
-        with st.expander("➕ Add / ➖ Remove Products from Weekly Inventory", expanded=False):
+        with st.expander("➕ Add Products to your Weekly Order Inventory", expanded=False):
             st.markdown("**Add a product from Master Inventory:**")
             
             # Get products not already in weekly inventory
@@ -2417,34 +2420,6 @@ def show_ordering():
                     st.info(f"No products available in {add_category_filter} category.")
             else:
                 st.info("All Master Inventory products are already in Weekly Inventory.")
-            
-            st.markdown("---")
-            st.markdown("**Remove products from Weekly Inventory:**")
-            
-            # Multi-select for removal
-            weekly_products = st.session_state.weekly_inventory['Product'].tolist()
-            
-            if weekly_products:
-                products_to_remove = st.multiselect(
-                    "Select products to remove:",
-                    options=weekly_products,
-                    key="remove_weekly_products"
-                )
-                
-                if products_to_remove:
-                    if st.button("🗑️ Remove Selected Products", key="btn_remove_weekly_products"):
-                        # Remove selected products
-                        st.session_state.weekly_inventory = st.session_state.weekly_inventory[
-                            ~st.session_state.weekly_inventory['Product'].isin(products_to_remove)
-                        ].reset_index(drop=True)
-                        
-                        # Save changes
-                        save_all_inventory_data()
-                        
-                        st.success(f"✅ Removed {len(products_to_remove)} product(s) from Weekly Inventory!")
-                        st.rerun()
-            else:
-                st.info("No products in Weekly Inventory.")
             
             # =================================================================
             # V2.12: CSV UPLOAD FOR WEEKLY INVENTORY
