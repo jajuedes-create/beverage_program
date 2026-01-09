@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.10
+# BEVERAGE MANAGEMENT APP V2.11
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -18,6 +18,7 @@
 #   V2.8 - Weekly Ordering: Added Product Analysis title and description
 #   V2.9 - Weekly Ordering: Renamed tab, added category filter to Add Product dropdown
 #   V2.10 - Weekly Ordering: Added Step 3 Order Verification workflow with status tracking
+#   V2.11 - Weekly Ordering: Added Bar/Storage Inventory columns with auto-calculated total
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -417,7 +418,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.10",
+    page_title="Beverage Management App V2.11",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -801,56 +802,60 @@ def get_sample_ingredients():
 def get_sample_weekly_inventory():
     """
     Returns a DataFrame with weekly inventory items and par levels.
+    V2.11: Added Bar Inventory and Storage Inventory columns.
     """
     data = [
         {"Product": "New Glarus Moon Man", "Category": "Beer", "Par": 3, 
-         "Current Inventory": 2, "Unit": "Case", "Unit Cost": 26.40, 
+         "Bar Inventory": 1, "Storage Inventory": 1, "Unit": "Case", "Unit Cost": 26.40, 
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "Coors Light", "Category": "Beer", "Par": 2, 
-         "Current Inventory": 1, "Unit": "Case", "Unit Cost": 24.51, 
+         "Bar Inventory": 0.5, "Storage Inventory": 0.5, "Unit": "Case", "Unit Cost": 24.51, 
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "New Glarus Fat Squirrel", "Category": "Beer", "Par": 2, 
-         "Current Inventory": 1, "Unit": "Case", "Unit Cost": 26.40, 
+         "Bar Inventory": 0.5, "Storage Inventory": 0.5, "Unit": "Case", "Unit Cost": 26.40, 
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "Hop Haus Yard Work IPA", "Category": "Beer", "Par": 1, 
-         "Current Inventory": 0.5, "Unit": "Sixtel", "Unit Cost": 75.00, 
+         "Bar Inventory": 0.5, "Storage Inventory": 0, "Unit": "Sixtel", "Unit Cost": 75.00, 
          "Distributor": "GB Beer", "Order Notes": ""},
         {"Product": "High Life", "Category": "Beer", "Par": 3, 
-         "Current Inventory": 2, "Unit": "Case", "Unit Cost": 21.15, 
+         "Bar Inventory": 1, "Storage Inventory": 1, "Unit": "Case", "Unit Cost": 21.15, 
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "Tito's", "Category": "Spirits", "Par": 4, 
-         "Current Inventory": 3, "Unit": "Bottle", "Unit Cost": 24.50, 
+         "Bar Inventory": 1, "Storage Inventory": 2, "Unit": "Bottle", "Unit Cost": 24.50, 
          "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
         {"Product": "Espolòn Blanco", "Category": "Spirits", "Par": 3, 
-         "Current Inventory": 2, "Unit": "Bottle", "Unit Cost": 25.00, 
+         "Bar Inventory": 1, "Storage Inventory": 1, "Unit": "Bottle", "Unit Cost": 25.00, 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Buffalo Trace", "Category": "Spirits", "Par": 3, 
-         "Current Inventory": 2, "Unit": "Bottle", "Unit Cost": 31.00, 
+         "Bar Inventory": 1, "Storage Inventory": 1, "Unit": "Bottle", "Unit Cost": 31.00, 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Rittenhouse Rye", "Category": "Spirits", "Par": 2, 
-         "Current Inventory": 1, "Unit": "Bottle", "Unit Cost": 28.00, 
+         "Bar Inventory": 0.5, "Storage Inventory": 0.5, "Unit": "Bottle", "Unit Cost": 28.00, 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Botanist", "Category": "Spirits", "Par": 2, 
-         "Current Inventory": 1, "Unit": "Bottle", "Unit Cost": 33.74, 
+         "Bar Inventory": 0.5, "Storage Inventory": 0.5, "Unit": "Bottle", "Unit Cost": 33.74, 
          "Distributor": "General Beverage", "Order Notes": ""},
         {"Product": "Natalie's Lime Juice", "Category": "Ingredients", "Par": 4, 
-         "Current Inventory": 2, "Unit": "Bottle", "Unit Cost": 8.34, 
+         "Bar Inventory": 1, "Storage Inventory": 1, "Unit": "Bottle", "Unit Cost": 8.34, 
          "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Natalie's Lemon Juice", "Category": "Ingredients", "Par": 4, 
-         "Current Inventory": 3, "Unit": "Bottle", "Unit Cost": 8.34, 
+         "Bar Inventory": 1, "Storage Inventory": 2, "Unit": "Bottle", "Unit Cost": 8.34, 
          "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Agave Nectar", "Category": "Ingredients", "Par": 2, 
-         "Current Inventory": 1, "Unit": "Bottle", "Unit Cost": 17.56, 
+         "Bar Inventory": 0.5, "Storage Inventory": 0.5, "Unit": "Bottle", "Unit Cost": 17.56, 
          "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Q Club Soda", "Category": "Ingredients", "Par": 3, 
-         "Current Inventory": 1, "Unit": "Case", "Unit Cost": 12.48, 
+         "Bar Inventory": 0.5, "Storage Inventory": 0.5, "Unit": "Case", "Unit Cost": 12.48, 
          "Distributor": "Breakthru", "Order Notes": "3cs mix n' match + 1cs Ginger Beer NC"},
         {"Product": "Heavy Cream", "Category": "Ingredients", "Par": 2, 
-         "Current Inventory": 1, "Unit": "Quart", "Unit Cost": 9.59, 
+         "Bar Inventory": 0.5, "Storage Inventory": 0.5, "Unit": "Quart", "Unit Cost": 9.59, 
          "Distributor": "US Foods", "Order Notes": ""},
     ]
     
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    # V2.11: Calculate Total Current Inventory
+    df['Total Current Inventory'] = df['Bar Inventory'] + df['Storage Inventory']
+    return df
 
 
 # =============================================================================
@@ -1448,15 +1453,28 @@ def filter_dataframe(df: pd.DataFrame, search_term: str, column_filters: dict) -
 def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
     """
     Generates an order list based on items below par level.
+    V2.11: Updated to use Total Current Inventory (Bar + Storage)
     """
-    needs_order = weekly_inv[weekly_inv['Current Inventory'] < weekly_inv['Par']].copy()
+    # V2.11: Handle both old and new column names
+    inventory_col = 'Total Current Inventory' if 'Total Current Inventory' in weekly_inv.columns else 'Current Inventory'
+    
+    # Ensure Total Current Inventory exists
+    if 'Total Current Inventory' not in weekly_inv.columns:
+        if 'Bar Inventory' in weekly_inv.columns and 'Storage Inventory' in weekly_inv.columns:
+            weekly_inv['Total Current Inventory'] = weekly_inv['Bar Inventory'] + weekly_inv['Storage Inventory']
+            inventory_col = 'Total Current Inventory'
+    
+    needs_order = weekly_inv[weekly_inv[inventory_col] < weekly_inv['Par']].copy()
     
     if len(needs_order) == 0:
         return pd.DataFrame()
     
-    needs_order['Suggested Order'] = needs_order['Par'] - needs_order['Current Inventory']
+    needs_order['Suggested Order'] = needs_order['Par'] - needs_order[inventory_col]
     needs_order['Order Quantity'] = needs_order['Suggested Order']
     needs_order['Order Value'] = needs_order['Order Quantity'] * needs_order['Unit Cost']
+    
+    # V2.11: Use Total Current Inventory in display
+    needs_order['Current Inventory'] = needs_order[inventory_col]  # For display compatibility
     
     order_columns = ['Product', 'Category', 'Current Inventory', 'Par', 
                      'Suggested Order', 'Order Quantity', 'Unit', 'Unit Cost', 
@@ -1666,7 +1684,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.10</h1>
+        <h1>🍸 Beverage Management App V2.11</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2364,11 +2382,14 @@ def show_ordering():
                                 selected_row = filtered_available[filtered_available['Display'] == selected_display].iloc[0]
                                 
                                 # Create new row for weekly inventory
+                                # V2.11: Include Bar/Storage Inventory columns
                                 new_row = pd.DataFrame([{
                                     'Product': selected_row['Product'],
                                     'Category': selected_row['Category'],
                                     'Par': new_par,
-                                    'Current Inventory': 0,
+                                    'Bar Inventory': 0,
+                                    'Storage Inventory': 0,
+                                    'Total Current Inventory': 0,
                                     'Unit': new_unit,
                                     'Unit Cost': selected_row['Unit Cost'],
                                     'Distributor': selected_row['Distributor'],
@@ -2427,11 +2448,30 @@ def show_ordering():
         
         # =====================================================================
         # V2.6: CATEGORY AND DISTRIBUTOR FILTERS FOR WEEKLY INVENTORY
+        # V2.11: Added Bar/Storage Inventory columns with auto-calculated total
         # =====================================================================
         
         weekly_inv = st.session_state.weekly_inventory.copy()
+        
+        # V2.11: Ensure Bar/Storage Inventory columns exist (backwards compatibility)
+        if 'Bar Inventory' not in weekly_inv.columns:
+            # Migrate from old Current Inventory column
+            if 'Current Inventory' in weekly_inv.columns:
+                weekly_inv['Bar Inventory'] = weekly_inv['Current Inventory'] / 2
+                weekly_inv['Storage Inventory'] = weekly_inv['Current Inventory'] / 2
+            else:
+                weekly_inv['Bar Inventory'] = 0
+                weekly_inv['Storage Inventory'] = 0
+        
+        if 'Storage Inventory' not in weekly_inv.columns:
+            weekly_inv['Storage Inventory'] = 0
+        
+        # V2.11: Calculate Total Current Inventory
+        weekly_inv['Total Current Inventory'] = weekly_inv['Bar Inventory'] + weekly_inv['Storage Inventory']
+        
+        # Status based on Total Current Inventory vs Par
         weekly_inv['Status'] = weekly_inv.apply(
-            lambda row: "🔴 Order" if row['Current Inventory'] < row['Par'] else "✅ OK", axis=1
+            lambda row: "🔴 Order" if row['Total Current Inventory'] < row['Par'] else "✅ OK", axis=1
         )
         
         # Get unique categories and distributors for filters
@@ -2472,8 +2512,9 @@ def show_ordering():
         # END V2.6 FILTERS
         # =====================================================================
         
-        display_cols = ['Product', 'Category', 'Par', 'Current Inventory', 'Status', 
-                       'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
+        # V2.11: Updated display columns with Bar/Storage/Total
+        display_cols = ['Product', 'Category', 'Par', 'Bar Inventory', 'Storage Inventory', 
+                       'Total Current Inventory', 'Status', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
         
         edited_weekly = st.data_editor(
             filtered_weekly_inv[display_cols],
@@ -2481,11 +2522,19 @@ def show_ordering():
             key="weekly_inv_editor",
             column_config={
                 "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
-                "Current Inventory": st.column_config.NumberColumn(min_value=0, step=0.5),
+                "Bar Inventory": st.column_config.NumberColumn("🍸 Bar", min_value=0, step=0.5),
+                "Storage Inventory": st.column_config.NumberColumn("📦 Storage", min_value=0, step=0.5),
+                "Total Current Inventory": st.column_config.NumberColumn("Total", disabled=True),
                 "Par": st.column_config.NumberColumn(min_value=0, step=1),
                 "Status": st.column_config.TextColumn(disabled=True),
             },
-            disabled=["Product", "Category", "Status", "Unit", "Unit Cost", "Distributor", "Order Notes"]
+            disabled=["Product", "Category", "Status", "Total Current Inventory", "Unit", "Unit Cost", "Distributor", "Order Notes"]
+        )
+        
+        # V2.11: Recalculate Total Current Inventory in real-time from edited values
+        edited_weekly['Total Current Inventory'] = edited_weekly['Bar Inventory'] + edited_weekly['Storage Inventory']
+        edited_weekly['Status'] = edited_weekly.apply(
+            lambda row: "🔴 Order" if row['Total Current Inventory'] < row['Par'] else "✅ OK", axis=1
         )
         
         # V2.6: Action buttons - Save and Update/Generate Order
@@ -2496,7 +2545,9 @@ def show_ordering():
                 # Update values only for products that were displayed (filtered view)
                 for idx, row in edited_weekly.iterrows():
                     mask = st.session_state.weekly_inventory['Product'] == row['Product']
-                    st.session_state.weekly_inventory.loc[mask, 'Current Inventory'] = row['Current Inventory']
+                    st.session_state.weekly_inventory.loc[mask, 'Bar Inventory'] = row['Bar Inventory']
+                    st.session_state.weekly_inventory.loc[mask, 'Storage Inventory'] = row['Storage Inventory']
+                    st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = row['Bar Inventory'] + row['Storage Inventory']
                     st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
                 
                 # Save weekly inventory to Google Sheets for persistence
@@ -2510,7 +2561,9 @@ def show_ordering():
                 # Update values only for products that were displayed (filtered view)
                 for idx, row in edited_weekly.iterrows():
                     mask = st.session_state.weekly_inventory['Product'] == row['Product']
-                    st.session_state.weekly_inventory.loc[mask, 'Current Inventory'] = row['Current Inventory']
+                    st.session_state.weekly_inventory.loc[mask, 'Bar Inventory'] = row['Bar Inventory']
+                    st.session_state.weekly_inventory.loc[mask, 'Storage Inventory'] = row['Storage Inventory']
+                    st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = row['Bar Inventory'] + row['Storage Inventory']
                     st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
                 
                 order = generate_order_from_inventory(st.session_state.weekly_inventory)
