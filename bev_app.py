@@ -2708,8 +2708,8 @@ def show_ordering():
             col_recalc, col_save_progress = st.columns([1, 1])
             
             with col_recalc:
-                if st.button("💰 Recalculate Verification Total", key="recalc_verification"):
-                    # Update pending order with edited values
+                if st.button("💰 Recalculate Total", key="recalc_verification", help="Update totals in display (does not save)"):
+                    # Update pending order with edited values (session state only, no save)
                     for idx, row in edited_verification.iterrows():
                         mask = st.session_state.pending_order['Product'] == row['Product']
                         st.session_state.pending_order.loc[mask, 'Unit Cost'] = row['Unit Cost']
@@ -2728,11 +2728,12 @@ def show_ordering():
                         (st.session_state.pending_order['Order Quantity'] != st.session_state.pending_order['Original Order Quantity'])
                     )
                     
-                    save_pending_order()
+                    # No save - just refresh display
+                    st.success("✅ Totals recalculated!")
                     st.rerun()
             
             with col_save_progress:
-                if st.button("💾 Save Verification Progress", key="save_verification_progress"):
+                if st.button("💾 Save Progress", key="save_verification_progress", help="Save verification progress to Google Sheets"):
                     # Update pending order with edited values
                     for idx, row in edited_verification.iterrows():
                         mask = st.session_state.pending_order['Product'] == row['Product']
@@ -2750,8 +2751,9 @@ def show_ordering():
                         (st.session_state.pending_order['Order Quantity'] != st.session_state.pending_order['Original Order Quantity'])
                     )
                     
+                    # Save to Google Sheets for persistence
                     save_pending_order()
-                    st.success("✅ Verification progress saved!")
+                    st.success("✅ Progress saved to Google Sheets!")
                     st.rerun()
             
             # Verification Summary
