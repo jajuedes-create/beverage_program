@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.11
+# BEVERAGE MANAGEMENT APP V2.12
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -19,6 +19,7 @@
 #   V2.9 - Weekly Ordering: Renamed tab, added category filter to Add Product dropdown
 #   V2.10 - Weekly Ordering: Added Step 3 Order Verification workflow with status tracking
 #   V2.11 - Weekly Ordering: Added Bar/Storage Inventory columns with auto-calculated total
+#   V2.12 - Weekly Ordering: Added CSV upload option to populate weekly inventory
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -418,7 +419,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.11",
+    page_title="Beverage Management App V2.12",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1684,7 +1685,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.11</h1>
+        <h1>🍸 Beverage Management App V2.12</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2441,6 +2442,142 @@ def show_ordering():
                         st.rerun()
             else:
                 st.info("No products in Weekly Inventory.")
+            
+            # =================================================================
+            # V2.12: CSV UPLOAD FOR WEEKLY INVENTORY
+            # =================================================================
+            st.markdown("---")
+            st.markdown("**📤 Upload CSV to populate Weekly Inventory:**")
+            
+            with st.expander("ℹ️ CSV Format Requirements", expanded=False):
+                st.markdown("""
+                Your CSV file should include the following columns:
+                
+                | Column | Required | Description |
+                |--------|----------|-------------|
+                | Product | ✅ Yes | Product name |
+                | Category | ✅ Yes | Spirits, Wine, Beer, or Ingredients |
+                | Par | ✅ Yes | Par level (number) |
+                | Bar Inventory | Optional | Inventory at bar (default: 0) |
+                | Storage Inventory | Optional | Inventory in storage (default: 0) |
+                | Unit | Optional | Bottle, Case, Sixtel, Keg, Each, Quart, Gallon (default: Bottle) |
+                | Unit Cost | Optional | Cost per unit (default: 0) |
+                | Distributor | Optional | Distributor name (default: blank) |
+                | Order Notes | Optional | Notes for ordering (default: blank) |
+                
+                **Note:** Products already in Weekly Inventory will be skipped.
+                """)
+                
+                # Download template button
+                template_df = pd.DataFrame({
+                    'Product': ['Example Product 1', 'Example Product 2'],
+                    'Category': ['Spirits', 'Beer'],
+                    'Par': [3, 2],
+                    'Bar Inventory': [1, 0.5],
+                    'Storage Inventory': [1, 0.5],
+                    'Unit': ['Bottle', 'Case'],
+                    'Unit Cost': [25.00, 24.00],
+                    'Distributor': ['Breakthru', 'Frank Beer'],
+                    'Order Notes': ['', '']
+                })
+                
+                csv_template = template_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download CSV Template",
+                    data=csv_template,
+                    file_name="weekly_inventory_template.csv",
+                    mime="text/csv",
+                    key="download_weekly_template"
+                )
+            
+            uploaded_csv = st.file_uploader(
+                "Choose a CSV file:",
+                type=['csv'],
+                key="weekly_inventory_csv_upload"
+            )
+            
+            if uploaded_csv is not None:
+                try:
+                    # Read CSV
+                    upload_df = pd.read_csv(uploaded_csv)
+                    
+                    # Validate required columns
+                    required_cols = ['Product', 'Category', 'Par']
+                    missing_cols = [col for col in required_cols if col not in upload_df.columns]
+                    
+                    if missing_cols:
+                        st.error(f"❌ Missing required columns: {', '.join(missing_cols)}")
+                    else:
+                        # Preview the data
+                        st.markdown(f"**Preview ({len(upload_df)} products):**")
+                        st.dataframe(upload_df.head(10), use_container_width=True, hide_index=True)
+                        
+                        # Check for duplicates with existing inventory
+                        existing_products = st.session_state.weekly_inventory['Product'].tolist()
+                        new_products = upload_df[~upload_df['Product'].isin(existing_products)]
+                        duplicate_products = upload_df[upload_df['Product'].isin(existing_products)]
+                        
+                        if len(duplicate_products) > 0:
+                            st.warning(f"⚠️ {len(duplicate_products)} product(s) already exist and will be skipped: {', '.join(duplicate_products['Product'].tolist()[:5])}{'...' if len(duplicate_products) > 5 else ''}")
+                        
+                        if len(new_products) > 0:
+                            col_upload_btn, col_upload_info = st.columns([1, 2])
+                            
+                            with col_upload_btn:
+                                if st.button(f"✅ Import {len(new_products)} Product(s)", key="btn_import_csv", type="primary"):
+                                    # Prepare the data with all required columns
+                                    import_df = new_products.copy()
+                                    
+                                    # Add default values for optional columns
+                                    if 'Bar Inventory' not in import_df.columns:
+                                        import_df['Bar Inventory'] = 0
+                                    if 'Storage Inventory' not in import_df.columns:
+                                        import_df['Storage Inventory'] = 0
+                                    if 'Unit' not in import_df.columns:
+                                        import_df['Unit'] = 'Bottle'
+                                    if 'Unit Cost' not in import_df.columns:
+                                        import_df['Unit Cost'] = 0
+                                    else:
+                                        # Clean currency values
+                                        import_df['Unit Cost'] = import_df['Unit Cost'].apply(clean_currency_value)
+                                    if 'Distributor' not in import_df.columns:
+                                        import_df['Distributor'] = ''
+                                    if 'Order Notes' not in import_df.columns:
+                                        import_df['Order Notes'] = ''
+                                    
+                                    # Calculate Total Current Inventory
+                                    import_df['Total Current Inventory'] = import_df['Bar Inventory'] + import_df['Storage Inventory']
+                                    
+                                    # Ensure numeric columns are proper types
+                                    import_df['Par'] = pd.to_numeric(import_df['Par'], errors='coerce').fillna(0)
+                                    import_df['Bar Inventory'] = pd.to_numeric(import_df['Bar Inventory'], errors='coerce').fillna(0)
+                                    import_df['Storage Inventory'] = pd.to_numeric(import_df['Storage Inventory'], errors='coerce').fillna(0)
+                                    import_df['Unit Cost'] = pd.to_numeric(import_df['Unit Cost'], errors='coerce').fillna(0)
+                                    
+                                    # Select and order columns to match existing structure
+                                    cols_to_keep = ['Product', 'Category', 'Par', 'Bar Inventory', 'Storage Inventory', 
+                                                   'Total Current Inventory', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
+                                    import_df = import_df[cols_to_keep]
+                                    
+                                    # Append to weekly inventory
+                                    st.session_state.weekly_inventory = pd.concat(
+                                        [st.session_state.weekly_inventory, import_df],
+                                        ignore_index=True
+                                    )
+                                    
+                                    # Save changes
+                                    save_all_inventory_data()
+                                    
+                                    st.success(f"✅ Successfully imported {len(new_products)} product(s)!")
+                                    st.rerun()
+                            
+                            with col_upload_info:
+                                st.caption(f"Ready to import {len(new_products)} new product(s)")
+                        else:
+                            st.info("All products in the CSV already exist in Weekly Inventory.")
+                
+                except Exception as e:
+                    st.error(f"❌ Error reading CSV: {str(e)}")
         
         # =====================================================================
         # END V2.3 ADD/REMOVE SECTION
