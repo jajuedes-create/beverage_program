@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.16
+# BEVERAGE MANAGEMENT APP V2.17
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -26,6 +26,7 @@
 #   V2.15 - Weekly Ordering: Hidden table indexes, smaller Status column, renamed Notes to
 #           Order Notes, added Invoice # column in Step 3
 #   V2.16 - Weekly Ordering: Renamed Order Notes to Order Deals in Step 1
+#   V2.17 - Order History: Added Month filter and TOTAL row in Weekly Order Totals
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -425,7 +426,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.16",
+    page_title="Beverage Management App V2.17",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1694,7 +1695,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.16</h1>
+        <h1>🍸 Beverage Management App V2.17</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -3054,21 +3055,43 @@ def show_ordering():
             if 'Verified By' not in display_history.columns:
                 display_history['Verified By'] = ''
             
-            col_f1, col_f2, col_f3 = st.columns(3)
+            # V2.17: Add Month column for filtering
+            display_history['Week'] = pd.to_datetime(display_history['Week'])
+            display_history['Month'] = display_history['Week'].dt.to_period('M').astype(str)
+            display_history['Week'] = display_history['Week'].dt.strftime('%Y-%m-%d')
+            
+            # V2.17: Updated filter row with Month filter
+            col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+            
             with col_f1:
-                weeks = sorted(display_history['Week'].unique(), reverse=True)
-                selected_weeks = st.multiselect("Filter by Week:", options=weeks,
-                    default=weeks[:4] if len(weeks) >= 4 else weeks, key="history_week_filter")
+                # Month filter
+                months = sorted(display_history['Month'].unique(), reverse=True)
+                selected_months = st.multiselect("Filter by Month:", options=months,
+                    default=months[:2] if len(months) >= 2 else months, key="history_month_filter")
+            
             with col_f2:
+                # Week filter - dynamically update based on selected months
+                if selected_months:
+                    available_weeks = display_history[display_history['Month'].isin(selected_months)]['Week'].unique()
+                else:
+                    available_weeks = display_history['Week'].unique()
+                weeks = sorted(available_weeks, reverse=True)
+                selected_weeks = st.multiselect("Filter by Week:", options=weeks,
+                    default=weeks, key="history_week_filter")
+            
+            with col_f3:
                 categories = display_history['Category'].unique().tolist()
                 selected_categories = st.multiselect("Filter by Category:", options=categories,
                     default=categories, key="history_category_filter")
-            with col_f3:
+            
+            with col_f4:
                 status_options = display_history['Status'].unique().tolist()
                 selected_statuses = st.multiselect("Filter by Status:", options=status_options,
                     default=status_options, key="history_status_filter")
             
             filtered_history = display_history.copy()
+            if selected_months:
+                filtered_history = filtered_history[filtered_history['Month'].isin(selected_months)]
             if selected_weeks:
                 filtered_history = filtered_history[filtered_history['Week'].isin(selected_weeks)]
             if selected_categories:
@@ -3083,7 +3106,21 @@ def show_ordering():
             }).reset_index()
             weekly_totals = weekly_totals.sort_values('Week', ascending=False)
             weekly_totals['Status'] = '✅ Verified'
-            st.dataframe(weekly_totals[['Week', 'Total Cost', 'Status', 'Verified By']], 
+            
+            # V2.17: Add total row at the bottom
+            if len(weekly_totals) > 0:
+                total_cost = weekly_totals['Total Cost'].sum()
+                total_row = pd.DataFrame([{
+                    'Week': '📊 TOTAL',
+                    'Total Cost': total_cost,
+                    'Status': '',
+                    'Verified By': f'{len(weekly_totals)} orders'
+                }])
+                weekly_totals_with_total = pd.concat([weekly_totals, total_row], ignore_index=True)
+            else:
+                weekly_totals_with_total = weekly_totals
+            
+            st.dataframe(weekly_totals_with_total[['Week', 'Total Cost', 'Status', 'Verified By']], 
                         use_container_width=True, hide_index=True,
                         column_config={"Total Cost": st.column_config.NumberColumn(format="$%.2f")})
             
