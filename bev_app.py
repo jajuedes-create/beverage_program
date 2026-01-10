@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.20
+# BEVERAGE MANAGEMENT APP V2.21
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -33,6 +33,7 @@
 #   V2.20 - Order Analytics: Major enhancement - Key Metrics Dashboard with trend indicators,
 #           Date Range Filter, Budget vs Actual tracker, Price Change Tracker, Distributor
 #           Analytics, consistent category colors, horizontal bar charts, export reports
+#   V2.21 - Weekly Order Builder: Added Invoice Date column with calendar date picker in Step 3
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -432,7 +433,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.20",
+    page_title="Beverage Management App V2.21",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1702,7 +1703,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.20</h1>
+        <h1>🍸 Beverage Management App V2.21</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2842,11 +2843,15 @@ def show_ordering():
                 pending_df['Invoice #'] = ''
             pending_df['Invoice #'] = pending_df['Invoice #'].fillna('').astype(str)
             
+            # V2.21: Add Invoice Date column if not present (for calendar date picker)
+            if 'Invoice Date' not in pending_df.columns:
+                pending_df['Invoice Date'] = None
+            
             order_date = pending_df['Order Date'].iloc[0] if 'Order Date' in pending_df.columns else 'Unknown'
             st.markdown(f"**📅 Order Date:** {order_date}")
             st.markdown(f"**📦 {len(pending_df)} items pending verification:**")
             
-            # Display columns for verification (editable: Unit Cost, Order Quantity, Verification Notes, Invoice #)
+            # Display columns for verification (editable: Unit Cost, Order Quantity, Verification Notes, Invoice #, Invoice Date)
             verify_display_cols = ['Product', 'Category', 'Distributor', 'Unit Cost', 'Order Quantity', 
                                    'Order Value', 'Verification Notes', 'Modified']
             
@@ -2871,9 +2876,9 @@ def show_ordering():
             
             pending_df['Status'] = pending_df.apply(get_status_with_changes, axis=1)
             
-            # V2.18: Updated display columns with Unit and Invoice #
+            # V2.21: Updated display columns with Invoice Date
             verify_display_cols = ['Status', 'Product', 'Category', 'Distributor', 'Unit', 'Unit Cost', 
-                                   'Order Quantity', 'Order Value', 'Invoice #', 'Verification Notes']
+                                   'Order Quantity', 'Order Value', 'Invoice #', 'Invoice Date', 'Verification Notes']
             
             edited_verification = st.data_editor(
                 pending_df[verify_display_cols],
@@ -2887,6 +2892,7 @@ def show_ordering():
                     "Order Quantity": st.column_config.NumberColumn(min_value=0, step=0.5),
                     "Order Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
                     "Invoice #": st.column_config.TextColumn("Invoice #", width="small"),
+                    "Invoice Date": st.column_config.DateColumn("Invoice Date", width="small", format="MM/DD/YYYY"),
                     "Verification Notes": st.column_config.TextColumn("Order Notes", width="medium"),
                 },
                 disabled=["Status", "Product", "Category", "Distributor", "Unit", "Order Value"]
@@ -2903,6 +2909,7 @@ def show_ordering():
                         st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
                         st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
                         st.session_state.pending_order.loc[mask, 'Invoice #'] = row['Invoice #']
+                        st.session_state.pending_order.loc[mask, 'Invoice Date'] = row['Invoice Date']
                     
                     # Recalculate Order Value
                     st.session_state.pending_order['Order Value'] = (
@@ -2929,6 +2936,7 @@ def show_ordering():
                         st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
                         st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
                         st.session_state.pending_order.loc[mask, 'Invoice #'] = row['Invoice #']
+                        st.session_state.pending_order.loc[mask, 'Invoice Date'] = row['Invoice Date']
                     
                     # Recalculate
                     st.session_state.pending_order['Order Value'] = (
@@ -2991,6 +2999,7 @@ def show_ordering():
                         st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
                         st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
                         st.session_state.pending_order.loc[mask, 'Invoice #'] = row['Invoice #']
+                        st.session_state.pending_order.loc[mask, 'Invoice Date'] = row['Invoice Date']
                     
                     st.session_state.pending_order['Order Value'] = (
                         st.session_state.pending_order['Order Quantity'] * 
@@ -3002,6 +3011,16 @@ def show_ordering():
                     new_orders = []
                     for _, row in st.session_state.pending_order.iterrows():
                         if row['Order Quantity'] > 0:
+                            # V2.21: Format Invoice Date for storage
+                            invoice_date_val = row.get('Invoice Date', None)
+                            if pd.notna(invoice_date_val):
+                                if hasattr(invoice_date_val, 'strftime'):
+                                    invoice_date_str = invoice_date_val.strftime('%Y-%m-%d')
+                                else:
+                                    invoice_date_str = str(invoice_date_val)
+                            else:
+                                invoice_date_str = ''
+                            
                             new_orders.append({
                                 'Week': order_date,
                                 'Product': row['Product'],
@@ -3014,6 +3033,7 @@ def show_ordering():
                                 'Status': 'Verified',
                                 'Verified By': verifier_initials.strip().upper(),
                                 'Invoice #': row.get('Invoice #', ''),
+                                'Invoice Date': invoice_date_str,
                                 'Verification Notes': row.get('Verification Notes', '')
                             })
                     
@@ -3066,6 +3086,11 @@ def show_ordering():
             # V2.18: Ensure Unit column exists for display
             if 'Unit' not in display_history.columns:
                 display_history['Unit'] = ''  # Default for legacy orders without Unit
+            # V2.21: Ensure Invoice # and Invoice Date columns exist for display
+            if 'Invoice #' not in display_history.columns:
+                display_history['Invoice #'] = ''  # Default for legacy orders without Invoice #
+            if 'Invoice Date' not in display_history.columns:
+                display_history['Invoice Date'] = ''  # Default for legacy orders without Invoice Date
             
             # V2.17: Add Month column for filtering
             display_history['Week'] = pd.to_datetime(display_history['Week'])
@@ -3137,9 +3162,9 @@ def show_ordering():
                         column_config={"Total Cost": st.column_config.NumberColumn(format="$%.2f")})
             
             st.markdown("#### Order Details")
-            # Select columns to display - V2.18: Added Unit column
+            # Select columns to display - V2.21: Added Invoice Date column
             detail_cols = ['Week', 'Product', 'Category', 'Quantity Ordered', 'Unit', 'Unit Cost', 
-                          'Total Cost', 'Distributor', 'Status', 'Verified By']
+                          'Total Cost', 'Distributor', 'Invoice #', 'Invoice Date', 'Status', 'Verified By']
             # Only include columns that exist
             detail_cols = [c for c in detail_cols if c in filtered_history.columns]
             
