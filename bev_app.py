@@ -2843,9 +2843,12 @@ def show_ordering():
                 pending_df['Invoice #'] = ''
             pending_df['Invoice #'] = pending_df['Invoice #'].fillna('').astype(str)
             
-            # V2.21: Add Invoice Date column if not present (for calendar date picker)
+            # V2.21: Add Invoice Date column if not present and convert to datetime type
             if 'Invoice Date' not in pending_df.columns:
-                pending_df['Invoice Date'] = None
+                pending_df['Invoice Date'] = pd.NaT
+            else:
+                # Convert existing Invoice Date to datetime (handles strings from Google Sheets)
+                pending_df['Invoice Date'] = pd.to_datetime(pending_df['Invoice Date'], errors='coerce')
             
             order_date = pending_df['Order Date'].iloc[0] if 'Order Date' in pending_df.columns else 'Unknown'
             st.markdown(f"**📅 Order Date:** {order_date}")
