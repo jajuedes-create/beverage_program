@@ -1,11 +1,12 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.26
+# BEVERAGE MANAGEMENT APP V2.27
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
 #   - Weekly Order Builder
 #   - Cocktail Builds Book
 #   - Cost of Goods Sold (COGS) Calculator
+#   - Bar Prep Recipe Book
 #
 # Version History:
 #   V1.0 - Initial release with all core modules
@@ -57,6 +58,12 @@
 #           - Granular breakdown by Wine, Beer, and Bar (Spirits + Ingredients)
 #           - Separate sales input fields for each category
 #           - Table display with COGS, Sales, and COGS % by category
+#   V2.27 - NEW MODULE: Bar Prep Recipe Book
+#           - Two categories: Syrups/Infusions/Tinctures and Batched Cocktails
+#           - Ingredients pulled from both Spirits and Ingredients inventories
+#           - Batch cost and cost/oz calculations
+#           - Shelf life and storage notes
+#           - Liquids in oz, solids in grams
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -413,6 +420,15 @@ def save_cocktail_recipes():
         save_json_to_sheets(st.session_state.cocktail_recipes, 'cocktail_recipes')
 
 
+def save_bar_prep_recipes():
+    """Saves bar prep recipes to Google Sheets."""
+    if not is_google_sheets_configured():
+        return
+    
+    if 'bar_prep_recipes' in st.session_state:
+        save_json_to_sheets(st.session_state.bar_prep_recipes, 'bar_prep_recipes')
+
+
 def save_inventory_snapshot():
     """
     Saves a snapshot of current inventory values with timestamp.
@@ -611,7 +627,7 @@ def get_purchases_by_category_and_date(start_date: str, end_date: str) -> dict:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.26",
+    page_title="Beverage Management App V2.27",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1209,6 +1225,220 @@ def get_sample_cocktails():
     return cocktails
 
 
+def get_sample_bar_prep_recipes():
+    """
+    Returns sample bar prep recipes for Syrups/Infusions and Batched Cocktails.
+    Units: Liquids in oz, Solids in grams
+    """
+    recipes = [
+        # ===== SYRUPS / INFUSIONS / TINCTURES =====
+        {
+            "name": "Simple Syrup",
+            "category": "Syrups/Infusions",
+            "yield_oz": 48,
+            "yield_description": "1.5 quarts",
+            "shelf_life": "1 month",
+            "storage": "Refrigerate in quart container",
+            "instructions": "1. Heat Sugar and Water in pot and stir until sugar is completely dissolved.\n2. Remove from heat as soon as water begins to steam and let cool.\n3. Once cool add ½ oz vodka.\n4. Label and date quart.",
+            "ingredients": [
+                {"product": "White Granulated Sugar", "amount": 800, "unit": "g"},
+                {"product": "Water", "amount": 32, "unit": "oz"},
+                {"product": "Vodka", "amount": 0.5, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Demerara Syrup",
+            "category": "Syrups/Infusions",
+            "yield_oz": 48,
+            "yield_description": "1.5 quarts",
+            "shelf_life": "1 month",
+            "storage": "Refrigerate in quart container",
+            "instructions": "1. Heat Sugar and Water in pot and stir until sugar is completely dissolved.\n2. Remove from heat as soon as water begins to steam and let cool.\n3. Once cool add ½ oz vodka.\n4. Label and date quart.",
+            "ingredients": [
+                {"product": "Demerara Sugar", "amount": 800, "unit": "g"},
+                {"product": "Water", "amount": 32, "unit": "oz"},
+                {"product": "Vodka", "amount": 0.5, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Sea Salt Saline",
+            "category": "Syrups/Infusions",
+            "yield_oz": 32,
+            "yield_description": "1 quart",
+            "shelf_life": "6 months",
+            "storage": "Room temp in quart container",
+            "instructions": "1. Combine salt and water and stir until dissolved.\n2. Label and date quart.",
+            "ingredients": [
+                {"product": "Sea Salt", "amount": 360, "unit": "g"},
+                {"product": "Water", "amount": 32, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Sour Mix",
+            "category": "Syrups/Infusions",
+            "yield_oz": 32,
+            "yield_description": "1 quart",
+            "shelf_life": "1 week",
+            "storage": "Refrigerate",
+            "instructions": "1. Combine juice and simple and stir well.\n2. Label and date quart.",
+            "ingredients": [
+                {"product": "Lemon Juice", "amount": 8, "unit": "oz"},
+                {"product": "Lime Juice", "amount": 8, "unit": "oz"},
+                {"product": "Simple Syrup", "amount": 16, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Limoncello",
+            "category": "Syrups/Infusions",
+            "yield_oz": 96,
+            "yield_description": "~3 quarts",
+            "shelf_life": "6 months",
+            "storage": "Store in freezer, serve cold",
+            "instructions": "1. Rinse citrus off and dry.\n2. Combine lemon peels and vodka.\n3. Let sit at room temp for 5-7 days.\n4. Strain mixture into new container.\n5. Add simple syrup and mix well.\n6. Label and date containers.",
+            "ingredients": [
+                {"product": "Lemon Peels", "amount": 400, "unit": "g"},
+                {"product": "Vodka", "amount": 67.6, "unit": "oz"},
+                {"product": "Simple Syrup", "amount": 32, "unit": "oz"},
+            ]
+        },
+        # ===== BATCHED COCKTAILS =====
+        {
+            "name": "Martini at The Inn",
+            "category": "Batched Cocktails",
+            "yield_oz": 66,
+            "yield_description": "~2 liters (22 cocktails)",
+            "shelf_life": "2-3 months",
+            "storage": "Room temp",
+            "instructions": "Serving: Pour 3oz batch into mixing glass. Add 1 dash Ango Orange Bitters, 0.5oz olive juice, ice and stir until ice cold. Strain into chilled coupe/martini glass. Garnish with two olives.",
+            "ingredients": [
+                {"product": "Botanist Gin", "amount": 55, "unit": "oz"},
+                {"product": "Bordiga Extra Dry", "amount": 11, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Old Pal",
+            "category": "Batched Cocktails",
+            "yield_oz": 66,
+            "yield_description": "~2 liters (22 cocktails)",
+            "shelf_life": "2-3 months",
+            "storage": "Room temp",
+            "instructions": "Serving: Pour 3oz batch into mixing glass. Add ice and stir until ice cold. Strain into Nick and Nora. Express orange peel and add as garnish.",
+            "ingredients": [
+                {"product": "Berto Bitter", "amount": 16.5, "unit": "oz"},
+                {"product": "Sazerac Rye", "amount": 33, "unit": "oz"},
+                {"product": "Bordiga Extra Dry", "amount": 16.5, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Mezcal Sour",
+            "category": "Batched Cocktails",
+            "yield_oz": 66,
+            "yield_description": "~2 liters (24 cocktails)",
+            "shelf_life": "2-3 months",
+            "storage": "Room temp",
+            "instructions": "Serving: Pour 2.75oz batch into tin. Add 1oz lime juice and 0.5oz egg white. Dry shake vigorously until frothy ~15 seconds. Add ice and shake vigorously. Double strain into chilled coupe. Garnish with three drops of Ango on top of foam.",
+            "ingredients": [
+                {"product": "Yuu Baal Reposado", "amount": 36, "unit": "oz"},
+                {"product": "Pasubio", "amount": 24, "unit": "oz"},
+                {"product": "Agave Nectar", "amount": 6, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Génépy Suisse",
+            "category": "Batched Cocktails",
+            "yield_oz": 64,
+            "yield_description": "~2 liters (32 cocktails)",
+            "shelf_life": "2-3 months",
+            "storage": "Room temp",
+            "instructions": "Serving: Pour 2oz batch into tin. Add 1 barspoon Absinthe, 0.75oz heavy cream, ice and shake vigorously. Double strain into chilled Nick and Nora. Garnish with three shaves of hazelnut.",
+            "ingredients": [
+                {"product": "Dolin Génépy", "amount": 24, "unit": "oz"},
+                {"product": "Tempus Fugit Crème de Cacao", "amount": 16, "unit": "oz"},
+                {"product": "Stateline Coffee Liqueur", "amount": 16, "unit": "oz"},
+                {"product": "Frangelico", "amount": 8, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Black Walnut Manhattan",
+            "category": "Batched Cocktails",
+            "yield_oz": 66,
+            "yield_description": "~2 liters (22 cocktails)",
+            "shelf_life": "2-3 months",
+            "storage": "Room temp",
+            "instructions": "Serving: Pour 3oz into mixing glass. Add 1 dash Ango orange bitters, 1 dash Ango bitters, ice, and stir until ice cold. Add cherry to bottom of chilled coupe. Strain into coupe. Express orange peel and discard.",
+            "ingredients": [
+                {"product": "Four Roses Bourbon", "amount": 44, "unit": "oz"},
+                {"product": "Sweet Vermouth", "amount": 11, "unit": "oz"},
+                {"product": "Nux Alpina Walnut Liqueur", "amount": 11, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Sazerac",
+            "category": "Batched Cocktails",
+            "yield_oz": 64,
+            "yield_description": "~2 liters (28 cocktails)",
+            "shelf_life": "2-3 months",
+            "storage": "Room temp",
+            "instructions": "Serving: Rinse Nick and Nora glass with absinthe. Pour 2.25oz batch into mixing glass. Add 1 dash Ango, 3 dashes Peychaud's, ice, and stir until ice cold. Strain into Nick and Nora. Express lemon peel and discard.",
+            "ingredients": [
+                {"product": "Sazerac Rye", "amount": 50, "unit": "oz"},
+                {"product": "Delord Armagnac", "amount": 7, "unit": "oz"},
+                {"product": "Demerara Syrup", "amount": 7, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Aperol Tequila Fizz",
+            "category": "Batched Cocktails",
+            "yield_oz": 65,
+            "yield_description": "~2 liters (28 cocktails)",
+            "shelf_life": "2-3 months",
+            "storage": "Room temp",
+            "instructions": "Serving: Fill Collins glass with ice. Pour 2.25oz batch into tin. Add Bittercube bitters, lime juice, egg whites and dry shake until frothy ~15 seconds. Add ice and shake until ice cold. Double strain into Collins and top with grapefruit soda. Garnish with lime wheel.",
+            "ingredients": [
+                {"product": "Aperol", "amount": 29, "unit": "oz"},
+                {"product": "Olmeca Altos Plata", "amount": 29, "unit": "oz"},
+                {"product": "Agave Nectar", "amount": 7, "unit": "oz"},
+                {"product": "Sea Salt Saline", "amount": 0.17, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Coconut Carajillo",
+            "category": "Batched Cocktails",
+            "yield_oz": 66,
+            "yield_description": "~2 liters (29 cocktails)",
+            "shelf_life": "2-3 months",
+            "storage": "Room temp",
+            "instructions": "Serving: Pull espresso as needed. Add large cube to rocks glass. Combine 2.25oz batch and 1.5oz espresso in tin and shake vigorously until frothy. Double strain into rocks glass. Shave charred cinnamon on top.",
+            "ingredients": [
+                {"product": "Planetary Cut n' Dry Coconut Rum", "amount": 44, "unit": "oz"},
+                {"product": "Tempus Fugit Crème de Cacao", "amount": 14.5, "unit": "oz"},
+                {"product": "Demerara Syrup", "amount": 7.5, "unit": "oz"},
+            ]
+        },
+        {
+            "name": "Mulled Wine",
+            "category": "Batched Cocktails",
+            "yield_oz": 145,
+            "yield_description": "~4.3 liters",
+            "shelf_life": "Can be reheated once, then discard",
+            "storage": "Refrigerate, serve hot at 140°F",
+            "instructions": "1. Combine all ingredients in cambro.\n2. Transfer to pot and heat on medium, stir sugar until dissolved.\n3. Bring to a boil then remove from heat to steep for 45min.\n4. Strain into heat resistant vessel.\n5. Pour into hot-hold and set to 140°F.\nServing: Pour 6oz into glass mug. Garnish with orange slice.",
+            "ingredients": [
+                {"product": "Boxed Red Wine", "amount": 101, "unit": "oz"},
+                {"product": "Brandy", "amount": 24, "unit": "oz"},
+                {"product": "White Granulated Sugar", "amount": 300, "unit": "g"},
+                {"product": "Orange Juice", "amount": 10, "unit": "oz"},
+                {"product": "Allspice", "amount": 18, "unit": "pieces"},
+                {"product": "Cloves", "amount": 18, "unit": "pieces"},
+                {"product": "Cinnamon Sticks", "amount": 6, "unit": "pieces"},
+                {"product": "Star Anise", "amount": 4, "unit": "pieces"},
+            ]
+        },
+    ]
+    
+    return recipes
+
+
 # =============================================================================
 # SESSION STATE INITIALIZATION
 # =============================================================================
@@ -1306,6 +1536,15 @@ def init_session_state():
             st.session_state.cocktail_recipes = saved_cocktails
         else:
             st.session_state.cocktail_recipes = get_sample_cocktails()
+    
+    # ----- Load Bar Prep Recipes -----
+    
+    if 'bar_prep_recipes' not in st.session_state:
+        saved_bar_prep = load_json_from_sheets('bar_prep_recipes') if sheets_configured else None
+        if saved_bar_prep is not None and len(saved_bar_prep) > 0:
+            st.session_state.bar_prep_recipes = saved_bar_prep
+        else:
+            st.session_state.bar_prep_recipes = get_sample_bar_prep_recipes()
 
 
 # =============================================================================
@@ -1354,6 +1593,12 @@ def show_sidebar_navigation():
         cock_label = "🍹 Cocktail Builds" + (" ●" if current == 'cocktails' else "")
         if st.button(cock_label, key="nav_cocktails", use_container_width=True, disabled=(current == 'cocktails')):
             navigate_to('cocktails')
+            st.rerun()
+        
+        # Bar Prep (V2.27)
+        prep_label = "🧪 Bar Prep" + (" ●" if current == 'bar_prep' else "")
+        if st.button(prep_label, key="nav_bar_prep", use_container_width=True, disabled=(current == 'bar_prep')):
+            navigate_to('bar_prep')
             st.rerun()
         
         # COGS
@@ -1719,13 +1964,13 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.26</h1>
+        <h1>🍸 Beverage Management App V2.27</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # V2.24: Updated to 2x2 grid for 4 modules
-    col1, col2 = st.columns(2)
+    # V2.27: Updated to 3-2 grid for 5 modules
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown("""
@@ -1759,8 +2004,6 @@ def show_home():
             navigate_to('ordering')
             st.rerun()
     
-    col3, col4 = st.columns(2)
-    
     with col3:
         st.markdown("""
         <div class="module-card card-cocktails">
@@ -1777,8 +2020,27 @@ def show_home():
             navigate_to('cocktails')
             st.rerun()
     
+    col4, col5, col6 = st.columns(3)
+    
     with col4:
-        # V2.24: New COGS Module
+        # V2.27: New Bar Prep Module
+        st.markdown("""
+        <div class="module-card" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%);">
+            <div class="card-icon">🧪</div>
+            <div class="card-title">Bar Prep Recipe Book</div>
+            <div class="card-description">
+                Syrups, infusions, and batched cocktails.<br>
+                Calculate batch costs and cost/oz.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("Open Bar Prep", key="btn_bar_prep", use_container_width=True):
+            navigate_to('bar_prep')
+            st.rerun()
+    
+    with col5:
+        # COGS Module
         st.markdown("""
         <div class="module-card" style="background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);">
             <div class="card-icon">📊</div>
@@ -1793,6 +2055,10 @@ def show_home():
         if st.button("Open COGS", key="btn_cogs", use_container_width=True):
             navigate_to('cogs')
             st.rerun()
+    
+    with col6:
+        # Empty placeholder for visual balance
+        st.markdown("")
     
     st.markdown("---")
     
@@ -4187,6 +4453,391 @@ Note: Bar = Spirits + Ingredients combined
 
 
 # =============================================================================
+# PAGE: BAR PREP RECIPE BOOK (V2.27)
+# =============================================================================
+
+def get_bar_prep_ingredient_cost(product_name: str, amount: float, unit: str) -> float:
+    """
+    Gets the cost for a bar prep ingredient.
+    Checks both Spirits and Ingredients inventories.
+    
+    Args:
+        product_name: Name of the product
+        amount: Amount needed
+        unit: Unit of measurement (oz or g)
+    
+    Returns:
+        Total cost for this ingredient
+    """
+    # Check Spirits inventory first
+    spirits_df = st.session_state.get('spirits_inventory', pd.DataFrame())
+    if len(spirits_df) > 0 and 'Product' in spirits_df.columns:
+        match = spirits_df[spirits_df['Product'].str.lower() == product_name.lower()]
+        if len(match) > 0:
+            if 'Cost/Oz' in match.columns:
+                cost_per_oz = float(match['Cost/Oz'].iloc[0])
+                if unit == 'oz':
+                    return cost_per_oz * amount
+                # For grams, assume it's a solid being measured
+    
+    # Check Ingredients inventory
+    ingredients_df = st.session_state.get('ingredients_inventory', pd.DataFrame())
+    if len(ingredients_df) > 0 and 'Product' in ingredients_df.columns:
+        match = ingredients_df[ingredients_df['Product'].str.lower() == product_name.lower()]
+        if len(match) > 0:
+            if 'Cost/Unit' in match.columns:
+                cost_per_unit = float(match['Cost/Unit'].iloc[0])
+                return cost_per_unit * amount
+    
+    # Default: return 0 if not found
+    return 0.0
+
+
+def calculate_bar_prep_cost(ingredients: list) -> float:
+    """
+    Calculates total cost for a bar prep recipe.
+    
+    Args:
+        ingredients: List of ingredient dicts with product, amount, unit
+    
+    Returns:
+        Total cost
+    """
+    total = 0.0
+    for ing in ingredients:
+        total += get_bar_prep_ingredient_cost(ing['product'], ing['amount'], ing['unit'])
+    return total
+
+
+def get_all_available_bar_ingredients():
+    """
+    Gets all available products from both Spirits and Ingredients inventories.
+    
+    Returns:
+        List of product names
+    """
+    products = []
+    
+    # Get spirits
+    spirits_df = st.session_state.get('spirits_inventory', pd.DataFrame())
+    if len(spirits_df) > 0 and 'Product' in spirits_df.columns:
+        products.extend(spirits_df['Product'].tolist())
+    
+    # Get ingredients
+    ingredients_df = st.session_state.get('ingredients_inventory', pd.DataFrame())
+    if len(ingredients_df) > 0 and 'Product' in ingredients_df.columns:
+        products.extend(ingredients_df['Product'].tolist())
+    
+    return sorted(list(set(products)))
+
+
+def show_bar_prep():
+    """Renders the Bar Prep Recipe Book module."""
+    
+    # Sidebar navigation
+    show_sidebar_navigation()
+    
+    col_back, col_title = st.columns([1, 11])
+    with col_back:
+        if st.button("← Home"):
+            navigate_to('home')
+            st.rerun()
+    with col_title:
+        st.title("🧪 Bar Prep Recipe Book")
+    
+    # Dashboard
+    st.markdown("### 📊 Bar Prep Dashboard")
+    recipes = st.session_state.bar_prep_recipes
+    
+    syrups = [r for r in recipes if r['category'] == 'Syrups/Infusions']
+    batches = [r for r in recipes if r['category'] == 'Batched Cocktails']
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Recipes", len(recipes))
+    with col2:
+        st.metric("🧴 Syrups/Infusions", len(syrups))
+    with col3:
+        st.metric("🍸 Batched Cocktails", len(batches))
+    
+    st.markdown("---")
+    
+    # Tabs for categories
+    tab_syrups, tab_batches, tab_add = st.tabs([
+        "🧴 Syrups/Infusions/Tinctures", "🍸 Batched Cocktails", "➕ Add New Recipe"
+    ])
+    
+    # -------------------------------------------------------------------------
+    # TAB: SYRUPS / INFUSIONS / TINCTURES
+    # -------------------------------------------------------------------------
+    with tab_syrups:
+        st.markdown("### 🧴 Syrups, Infusions & Tinctures")
+        
+        if syrups:
+            for idx, recipe in enumerate(syrups):
+                batch_cost = calculate_bar_prep_cost(recipe['ingredients'])
+                cost_per_oz = batch_cost / recipe['yield_oz'] if recipe['yield_oz'] > 0 else 0
+                
+                with st.expander(f"**{recipe['name']}** | Yield: {recipe['yield_description']} | Batch Cost: {format_currency(batch_cost)} | Cost/oz: {format_currency(cost_per_oz)}", expanded=False):
+                    col_info, col_cost = st.columns([2, 1])
+                    
+                    with col_info:
+                        st.markdown(f"**Yield:** {recipe['yield_description']} ({recipe['yield_oz']} oz)")
+                        st.markdown(f"**Shelf Life:** {recipe['shelf_life']}")
+                        st.markdown(f"**Storage:** {recipe['storage']}")
+                        
+                        st.markdown("**Ingredients:**")
+                        ing_data = []
+                        for ing in recipe['ingredients']:
+                            ing_cost = get_bar_prep_ingredient_cost(ing['product'], ing['amount'], ing['unit'])
+                            ing_data.append({
+                                "Ingredient": ing['product'],
+                                "Amount": ing['amount'],
+                                "Unit": ing['unit'],
+                                "Cost": ing_cost
+                            })
+                        
+                        st.dataframe(
+                            pd.DataFrame(ing_data),
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Cost": st.column_config.NumberColumn(format="$%.4f")
+                            }
+                        )
+                        
+                        st.markdown("**Instructions:**")
+                        st.text(recipe['instructions'])
+                    
+                    with col_cost:
+                        st.markdown("#### 💰 Costing")
+                        st.metric("Batch Cost", format_currency(batch_cost))
+                        st.metric("Cost per oz", format_currency(cost_per_oz))
+                        st.metric("Cost per quart (32oz)", format_currency(cost_per_oz * 32))
+                    
+                    st.markdown("---")
+                    if st.button("🗑️ Delete Recipe", key=f"delete_syrup_{idx}"):
+                        st.session_state.bar_prep_recipes = [r for r in st.session_state.bar_prep_recipes if r['name'] != recipe['name']]
+                        save_bar_prep_recipes()
+                        st.success(f"✅ {recipe['name']} deleted!")
+                        st.rerun()
+        else:
+            st.info("No syrups/infusions/tinctures yet. Add one in the 'Add New Recipe' tab.")
+    
+    # -------------------------------------------------------------------------
+    # TAB: BATCHED COCKTAILS
+    # -------------------------------------------------------------------------
+    with tab_batches:
+        st.markdown("### 🍸 Batched Cocktails")
+        
+        if batches:
+            for idx, recipe in enumerate(batches):
+                batch_cost = calculate_bar_prep_cost(recipe['ingredients'])
+                cost_per_oz = batch_cost / recipe['yield_oz'] if recipe['yield_oz'] > 0 else 0
+                
+                with st.expander(f"**{recipe['name']}** | Yield: {recipe['yield_description']} | Batch Cost: {format_currency(batch_cost)} | Cost/oz: {format_currency(cost_per_oz)}", expanded=False):
+                    col_info, col_cost = st.columns([2, 1])
+                    
+                    with col_info:
+                        st.markdown(f"**Yield:** {recipe['yield_description']} ({recipe['yield_oz']} oz)")
+                        st.markdown(f"**Shelf Life:** {recipe['shelf_life']}")
+                        st.markdown(f"**Storage:** {recipe['storage']}")
+                        
+                        st.markdown("**Ingredients:**")
+                        ing_data = []
+                        for ing in recipe['ingredients']:
+                            ing_cost = get_bar_prep_ingredient_cost(ing['product'], ing['amount'], ing['unit'])
+                            ing_data.append({
+                                "Ingredient": ing['product'],
+                                "Amount": ing['amount'],
+                                "Unit": ing['unit'],
+                                "Cost": ing_cost
+                            })
+                        
+                        st.dataframe(
+                            pd.DataFrame(ing_data),
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Cost": st.column_config.NumberColumn(format="$%.4f")
+                            }
+                        )
+                        
+                        st.markdown("**Instructions:**")
+                        st.text(recipe['instructions'])
+                    
+                    with col_cost:
+                        st.markdown("#### 💰 Costing")
+                        st.metric("Batch Cost", format_currency(batch_cost))
+                        st.metric("Cost per oz", format_currency(cost_per_oz))
+                        st.metric("Cost per quart (32oz)", format_currency(cost_per_oz * 32))
+                    
+                    st.markdown("---")
+                    if st.button("🗑️ Delete Recipe", key=f"delete_batch_{idx}"):
+                        st.session_state.bar_prep_recipes = [r for r in st.session_state.bar_prep_recipes if r['name'] != recipe['name']]
+                        save_bar_prep_recipes()
+                        st.success(f"✅ {recipe['name']} deleted!")
+                        st.rerun()
+        else:
+            st.info("No batched cocktails yet. Add one in the 'Add New Recipe' tab.")
+    
+    # -------------------------------------------------------------------------
+    # TAB: ADD NEW RECIPE
+    # -------------------------------------------------------------------------
+    with tab_add:
+        st.markdown("### ➕ Add New Bar Prep Recipe")
+        
+        # Initialize session state for new recipe
+        if 'new_bar_prep_ingredients' not in st.session_state:
+            st.session_state.new_bar_prep_ingredients = []
+        
+        col_name, col_cat = st.columns(2)
+        
+        with col_name:
+            new_name = st.text_input("Recipe Name:", key="bar_prep_name", placeholder="e.g., Simple Syrup")
+        
+        with col_cat:
+            new_category = st.selectbox("Category:", ["Syrups/Infusions", "Batched Cocktails"], key="bar_prep_category")
+        
+        col_yield, col_yield_desc = st.columns(2)
+        
+        with col_yield:
+            new_yield_oz = st.number_input("Yield (oz):", min_value=0.0, value=32.0, step=1.0, key="bar_prep_yield_oz")
+        
+        with col_yield_desc:
+            new_yield_desc = st.text_input("Yield Description:", key="bar_prep_yield_desc", placeholder="e.g., 1 quart")
+        
+        col_shelf, col_storage = st.columns(2)
+        
+        with col_shelf:
+            new_shelf_life = st.text_input("Shelf Life:", key="bar_prep_shelf_life", placeholder="e.g., 1 month")
+        
+        with col_storage:
+            new_storage = st.text_input("Storage Notes:", key="bar_prep_storage", placeholder="e.g., Refrigerate")
+        
+        new_instructions = st.text_area("Instructions:", key="bar_prep_instructions", height=100, placeholder="Step-by-step preparation instructions...")
+        
+        st.markdown("---")
+        st.markdown("#### 🧴 Add Ingredients")
+        
+        available_products = get_all_available_bar_ingredients()
+        
+        col_prod, col_amt, col_unit, col_add = st.columns([3, 1, 1, 1])
+        
+        with col_prod:
+            ing_product = st.selectbox("Product:", options=[""] + available_products, key="bar_prep_ing_product")
+        
+        with col_amt:
+            ing_amount = st.number_input("Amount:", min_value=0.0, step=0.5, value=1.0, key="bar_prep_ing_amount")
+        
+        with col_unit:
+            ing_unit = st.selectbox("Unit:", options=["oz", "g", "pieces"], key="bar_prep_ing_unit")
+        
+        with col_add:
+            st.write("")
+            st.write("")
+            if st.button("➕ Add", key="bar_prep_add_ing"):
+                if ing_product and ing_amount > 0:
+                    st.session_state.new_bar_prep_ingredients.append({
+                        "product": ing_product,
+                        "amount": ing_amount,
+                        "unit": ing_unit
+                    })
+                    st.rerun()
+        
+        # Display current ingredients
+        if st.session_state.new_bar_prep_ingredients:
+            st.markdown("**Current Ingredients:**")
+            
+            ing_data = []
+            for i, ing in enumerate(st.session_state.new_bar_prep_ingredients):
+                ing_cost = get_bar_prep_ingredient_cost(ing['product'], ing['amount'], ing['unit'])
+                ing_data.append({
+                    "#": i + 1,
+                    "Product": ing['product'],
+                    "Amount": ing['amount'],
+                    "Unit": ing['unit'],
+                    "Cost": ing_cost
+                })
+            
+            ing_df = pd.DataFrame(ing_data)
+            
+            # Use data_editor for editable amounts
+            unit_options = ["oz", "g", "pieces"]
+            
+            edited_ingredients = st.data_editor(
+                ing_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "#": st.column_config.NumberColumn(disabled=True, width="small"),
+                    "Product": st.column_config.TextColumn(disabled=True),
+                    "Amount": st.column_config.NumberColumn(min_value=0.0, step=0.25),
+                    "Unit": st.column_config.SelectboxColumn(options=unit_options),
+                    "Cost": st.column_config.NumberColumn(format="$%.4f", disabled=True, help="Cost updates after editing Amount")
+                },
+                disabled=["#", "Product", "Cost"],
+                key="bar_prep_edit_ingredients"
+            )
+            
+            # Update session state with edits
+            for i, row in edited_ingredients.iterrows():
+                if i < len(st.session_state.new_bar_prep_ingredients):
+                    st.session_state.new_bar_prep_ingredients[i]['amount'] = row['Amount']
+                    st.session_state.new_bar_prep_ingredients[i]['unit'] = row['Unit']
+            
+            # Calculate running cost
+            running_cost = sum(get_bar_prep_ingredient_cost(ing['product'], ing['amount'], ing['unit']) 
+                             for ing in st.session_state.new_bar_prep_ingredients)
+            
+            st.metric("Running Batch Cost", format_currency(running_cost))
+            
+            if new_yield_oz > 0:
+                st.caption(f"Cost per oz: {format_currency(running_cost / new_yield_oz)}")
+            
+            # Clear ingredients button
+            if st.button("🗑️ Clear All Ingredients", key="bar_prep_clear_ing"):
+                st.session_state.new_bar_prep_ingredients = []
+                st.rerun()
+        
+        st.markdown("---")
+        
+        # Save recipe button
+        if st.button("💾 Save Recipe", key="bar_prep_save", type="primary"):
+            if not new_name:
+                st.error("Please enter a recipe name.")
+            elif not st.session_state.new_bar_prep_ingredients:
+                st.error("Please add at least one ingredient.")
+            elif not new_yield_oz or new_yield_oz <= 0:
+                st.error("Please enter a valid yield.")
+            else:
+                # Check for duplicate name
+                existing_names = [r['name'].lower() for r in st.session_state.bar_prep_recipes]
+                if new_name.lower() in existing_names:
+                    st.error(f"A recipe named '{new_name}' already exists.")
+                else:
+                    new_recipe = {
+                        "name": new_name,
+                        "category": new_category,
+                        "yield_oz": new_yield_oz,
+                        "yield_description": new_yield_desc or f"{new_yield_oz} oz",
+                        "shelf_life": new_shelf_life or "Not specified",
+                        "storage": new_storage or "Not specified",
+                        "instructions": new_instructions or "No instructions provided.",
+                        "ingredients": st.session_state.new_bar_prep_ingredients.copy()
+                    }
+                    
+                    st.session_state.bar_prep_recipes.append(new_recipe)
+                    save_bar_prep_recipes()
+                    
+                    # Clear form
+                    st.session_state.new_bar_prep_ingredients = []
+                    
+                    st.success(f"✅ {new_name} added to {new_category}!")
+                    st.rerun()
+
+
+# =============================================================================
 # MAIN ROUTING LOGIC
 # =============================================================================
 
@@ -4202,6 +4853,8 @@ def main():
         show_ordering()
     elif st.session_state.current_page == 'cocktails':
         show_cocktails()
+    elif st.session_state.current_page == 'bar_prep':
+        show_bar_prep()
     elif st.session_state.current_page == 'cogs':
         show_cogs()
     else:
