@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.24
+# BEVERAGE MANAGEMENT APP V2.23
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -40,8 +40,6 @@
 #           Google Sheets persistence for reviewed status
 #   V2.23 - Cocktail Builds Book: Editable Amount and Unit columns in Add New Recipe
 #           ingredient table
-#   V2.24 - Cocktail Builds Book: Full recipe editing in View & Search Recipes tab -
-#           editable ingredients (amount, unit, add/remove), glass, instructions, and name
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -477,7 +475,7 @@ def load_inventory_history() -> pd.DataFrame:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.24",
+    page_title="Beverage Management App V2.23",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1538,7 +1536,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.24</h1>
+        <h1>🍸 Beverage Management App V2.23</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -2170,7 +2168,7 @@ def show_cocktails():
     tab_view, tab_add = st.tabs(["📖 View & Search Recipes", "➕ Add New Recipe"])
     
     # -------------------------------------------------------------------------
-    # TAB: VIEW & SEARCH RECIPES (V2.24: Full recipe editing)
+    # TAB: VIEW & SEARCH RECIPES
     # -------------------------------------------------------------------------
     with tab_view:
         st.markdown("### 🔍 Search Cocktails")
@@ -2192,167 +2190,57 @@ def show_cocktails():
             for idx, recipe in enumerate(filtered_recipes):
                 total_cost = calculate_cocktail_cost(recipe['ingredients'])
                 margin = calculate_margin(total_cost, recipe['sale_price'])
+                suggested_price = suggest_price_from_cost(total_cost, 0.20)
                 
                 with st.expander(f"🍸 **{recipe['name']}** | Cost: {format_currency(total_cost)} | Price: {format_currency(recipe['sale_price'])} | Margin: {margin:.1%}", expanded=False):
+                    col_info, col_pricing = st.columns([2, 1])
                     
-                    # V2.24: Editable recipe name
-                    st.markdown("#### 📝 Recipe Details")
-                    col_name_edit, col_glass_edit = st.columns(2)
-                    
-                    with col_name_edit:
-                        edited_name = st.text_input("Cocktail Name:", value=recipe['name'], key=f"edit_name_{idx}")
-                    
-                    with col_glass_edit:
-                        glass_options = ["Martini", "Coupe", "Rocks", "Collins", "Highball", "Copper Mug", "Nick & Nora", "Wine Glass", "Flute", "Other"]
-                        current_glass_idx = glass_options.index(recipe['glass']) if recipe['glass'] in glass_options else 0
-                        edited_glass = st.selectbox("Glass:", options=glass_options, index=current_glass_idx, key=f"edit_glass_{idx}")
-                    
-                    st.markdown("---")
-                    
-                    # V2.24: Editable ingredients table
-                    st.markdown("#### 🧴 Ingredients")
-                    
-                    # Build editable ingredients dataframe
-                    ing_data = []
-                    for i, ing in enumerate(recipe['ingredients']):
-                        unit_cost = get_ingredient_cost_per_unit(ing['product'])
-                        ing_cost = unit_cost * ing['amount']
-                        ing_data.append({
-                            "Remove": False,
-                            "Product": ing['product'],
-                            "Amount": ing['amount'],
-                            "Unit": ing['unit'],
-                            "Unit Cost": unit_cost,
-                            "Cost": ing_cost
-                        })
-                    
-                    ing_df = pd.DataFrame(ing_data)
-                    unit_options = ["oz", "pieces", "cherries", "dashes", "barspoon", "splash"]
-                    
-                    edited_ingredients = st.data_editor(
-                        ing_df,
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={
-                            "Remove": st.column_config.CheckboxColumn("🗑️", help="Check to remove ingredient", width="small"),
-                            "Product": st.column_config.TextColumn(disabled=True),
-                            "Amount": st.column_config.NumberColumn(min_value=0.0, step=0.25),
-                            "Unit": st.column_config.SelectboxColumn(options=unit_options),
-                            "Unit Cost": st.column_config.NumberColumn(format="$%.4f", disabled=True),
-                            "Cost": st.column_config.NumberColumn(format="$%.4f", disabled=True)
-                        },
-                        disabled=["Product", "Unit Cost", "Cost"],
-                        key=f"edit_ingredients_{idx}"
-                    )
-                    
-                    # V2.24: Add new ingredient to existing recipe
-                    st.markdown("**Add Ingredient:**")
-                    available_products = get_available_products()
-                    col_add_prod, col_add_amt, col_add_unit, col_add_btn = st.columns([3, 1, 1, 1])
-                    
-                    with col_add_prod:
-                        new_ing_product = st.selectbox("Product:", options=[""] + available_products, key=f"add_ing_product_{idx}")
-                    with col_add_amt:
-                        new_ing_amount = st.number_input("Amount:", min_value=0.0, step=0.25, value=1.0, key=f"add_ing_amount_{idx}")
-                    with col_add_unit:
-                        new_ing_unit = st.selectbox("Unit:", options=unit_options, key=f"add_ing_unit_{idx}")
-                    with col_add_btn:
-                        st.write("")
-                        st.write("")
-                        if st.button("➕ Add", key=f"add_ing_btn_{idx}"):
-                            if new_ing_product and new_ing_amount > 0:
-                                # Find the recipe and add the ingredient
-                                for r in st.session_state.cocktail_recipes:
-                                    if r['name'] == recipe['name']:
-                                        r['ingredients'].append({
-                                            "product": new_ing_product,
-                                            "amount": new_ing_amount,
-                                            "unit": new_ing_unit
-                                        })
-                                        break
-                                save_cocktail_recipes()
-                                st.success(f"✅ Added {new_ing_product}!")
-                                st.rerun()
-                    
-                    st.markdown("---")
-                    
-                    # V2.24: Editable instructions
-                    st.markdown("#### 📋 Build Instructions")
-                    edited_instructions = st.text_area("Instructions:", value=recipe['instructions'], height=100, key=f"edit_instructions_{idx}")
-                    
-                    st.markdown("---")
-                    
-                    # Pricing section
-                    col_pricing, col_metrics = st.columns([1, 1])
+                    with col_info:
+                        st.markdown(f"**Glass:** {recipe['glass']}")
+                        st.markdown("**Ingredients:**")
+                        
+                        ing_data = []
+                        for ing in recipe['ingredients']:
+                            unit_cost = get_ingredient_cost_per_unit(ing['product'])
+                            ing_cost = unit_cost * ing['amount']
+                            ing_data.append({"Ingredient": ing['product'], "Amount": ing['amount'], "Unit": ing['unit'], "Unit Cost": unit_cost, "Cost": ing_cost})
+                        
+                        st.dataframe(pd.DataFrame(ing_data), use_container_width=True, hide_index=True,
+                            column_config={"Unit Cost": st.column_config.NumberColumn(format="$%.4f"),
+                                          "Cost": st.column_config.NumberColumn(format="$%.4f")})
+                        
+                        st.markdown("**Build Instructions:**")
+                        st.write(recipe['instructions'])
                     
                     with col_pricing:
                         st.markdown("#### 💰 Pricing")
-                        new_price = st.number_input("Sale Price:", min_value=0.0, value=recipe['sale_price'], step=0.50, key=f"edit_price_{idx}")
-                    
-                    with col_metrics:
-                        # Calculate updated cost based on edited amounts
-                        updated_cost = 0
-                        for i, row in edited_ingredients.iterrows():
-                            if not row['Remove']:
-                                unit_cost = get_ingredient_cost_per_unit(row['Product'])
-                                updated_cost += unit_cost * row['Amount']
-                        
-                        updated_margin = calculate_margin(updated_cost, new_price) if new_price > 0 else 0
-                        suggested_price = suggest_price_from_cost(updated_cost, 0.20)
-                        
-                        st.markdown("#### 📊 Metrics")
-                        st.metric("Updated Cost", format_currency(updated_cost))
-                        st.metric("Margin", f"{updated_margin:.1%}")
+                        st.metric("Total Cost", format_currency(total_cost))
+                        st.metric("Current Price", format_currency(recipe['sale_price']))
+                        st.metric("Cost Margin", f"{margin:.1%}")
                         st.caption(f"Suggested Price (20% cost): {format_currency(suggested_price)}")
+                        
+                        st.markdown("---")
+                        new_price = st.number_input("Adjust Sale Price:", min_value=0.0, value=recipe['sale_price'], step=0.50, key=f"price_{idx}")
+                        
+                        if new_price != recipe['sale_price']:
+                            new_margin = calculate_margin(total_cost, new_price)
+                            st.caption(f"New Margin: {new_margin:.1%}")
+                            
+                            if st.button("💾 Update Price", key=f"update_price_{idx}"):
+                                for r in st.session_state.cocktail_recipes:
+                                    if r['name'] == recipe['name']:
+                                        r['sale_price'] = new_price
+                                        break
+                                save_cocktail_recipes()
+                                st.success("✅ Price updated!")
+                                st.rerun()
                     
                     st.markdown("---")
-                    
-                    # V2.24: Save and Delete buttons
-                    col_save, col_delete, col_spacer = st.columns([1, 1, 2])
-                    
-                    with col_save:
-                        if st.button("💾 Save Changes", key=f"save_recipe_{idx}", type="primary"):
-                            # Validate name change doesn't conflict
-                            if edited_name != recipe['name']:
-                                existing_names = [r['name'].lower() for r in st.session_state.cocktail_recipes if r['name'] != recipe['name']]
-                                if edited_name.lower() in existing_names:
-                                    st.error(f"A recipe named '{edited_name}' already exists.")
-                                    st.stop()
-                            
-                            # Build updated ingredients list (excluding removed ones)
-                            updated_ingredients = []
-                            for i, row in edited_ingredients.iterrows():
-                                if not row['Remove']:
-                                    updated_ingredients.append({
-                                        "product": row['Product'],
-                                        "amount": row['Amount'],
-                                        "unit": row['Unit']
-                                    })
-                            
-                            if not updated_ingredients:
-                                st.error("Recipe must have at least one ingredient.")
-                                st.stop()
-                            
-                            # Update the recipe in session state
-                            for r in st.session_state.cocktail_recipes:
-                                if r['name'] == recipe['name']:
-                                    r['name'] = edited_name
-                                    r['glass'] = edited_glass
-                                    r['instructions'] = edited_instructions
-                                    r['sale_price'] = new_price
-                                    r['ingredients'] = updated_ingredients
-                                    break
-                            
-                            save_cocktail_recipes()
-                            st.success(f"✅ {edited_name} updated successfully!")
-                            st.rerun()
-                    
-                    with col_delete:
-                        if st.button("🗑️ Delete Recipe", key=f"delete_{idx}"):
-                            st.session_state.cocktail_recipes = [r for r in st.session_state.cocktail_recipes if r['name'] != recipe['name']]
-                            save_cocktail_recipes()
-                            st.success(f"✅ {recipe['name']} deleted!")
-                            st.rerun()
+                    if st.button("🗑️ Delete Recipe", key=f"delete_{idx}"):
+                        st.session_state.cocktail_recipes = [r for r in st.session_state.cocktail_recipes if r['name'] != recipe['name']]
+                        save_cocktail_recipes()
+                        st.success(f"✅ {recipe['name']} deleted!")
+                        st.rerun()
         else:
             st.info("No recipes found matching your search.")
     
