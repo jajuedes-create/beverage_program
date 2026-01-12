@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.25
+# BEVERAGE MANAGEMENT APP V2.26
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -53,6 +53,10 @@
 #   V2.25 - Added sidebar navigation for direct module-to-module navigation
 #           Restored complete Weekly Order Builder from V2.22 including all
 #           Order Analytics, Step 3 verification, and Order History features
+#   V2.26 - COGS Module: Enhanced COGS % of Sales section
+#           - Granular breakdown by Wine, Beer, and Bar (Spirits + Ingredients)
+#           - Separate sales input fields for each category
+#           - Table display with COGS, Sales, and COGS % by category
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -523,9 +527,12 @@ def load_cogs_history() -> pd.DataFrame:
     history = load_dataframe_from_sheets('cogs_history')
     
     if history is not None and len(history) > 0:
-        # Ensure numeric columns are numeric
+        # Ensure numeric columns are numeric (including V2.26 new columns)
         numeric_cols = ['Spirits COGS', 'Wine COGS', 'Beer COGS', 'Ingredients COGS', 
-                       'Total COGS', 'Total Sales', 'COGS Percentage']
+                       'Bar COGS', 'Total COGS', 'Total Purchases',
+                       'Wine Sales', 'Beer Sales', 'Bar Sales', 'Total Sales',
+                       'Wine COGS %', 'Beer COGS %', 'Bar COGS %', 'Total COGS %',
+                       'COGS Percentage']  # Keep old column name for backward compatibility
         for col in numeric_cols:
             if col in history.columns:
                 history[col] = pd.to_numeric(history[col], errors='coerce').fillna(0)
@@ -604,7 +611,7 @@ def get_purchases_by_category_and_date(start_date: str, end_date: str) -> dict:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.25",
+    page_title="Beverage Management App V2.26",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1712,7 +1719,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.25</h1>
+        <h1>🍸 Beverage Management App V2.26</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -3805,53 +3812,125 @@ def show_cogs():
         
         st.markdown("---")
         
-        # COGS as Percentage of Sales
+        # V2.26: COGS as Percentage of Sales - Granular by Category
         st.markdown("### 💵 COGS as Percentage of Sales")
-        st.markdown("Enter your total sales for this period to calculate COGS percentage.")
+        st.markdown("Enter sales by category to calculate COGS percentage for Wine, Beer, and Bar (Spirits + Ingredients).")
         
-        col_sales, col_pct = st.columns(2)
+        # Calculate Bar COGS (Spirits + Ingredients combined)
+        cogs_bar = cogs_spirits + cogs_ingredients
         
-        with col_sales:
-            total_sales = st.number_input(
-                "Total Sales for Period:",
+        # Sales input fields
+        col_wine_sales, col_beer_sales, col_bar_sales = st.columns(3)
+        
+        with col_wine_sales:
+            wine_sales = st.number_input(
+                "🍷 Wine Sales:",
                 min_value=0.0,
                 value=0.0,
                 step=100.0,
                 format="%.2f",
-                key="cogs_total_sales",
-                help="Enter total beverage sales revenue for the selected period"
+                key="cogs_wine_sales",
+                help="Total wine sales for the period"
             )
         
-        with col_pct:
-            if total_sales > 0:
-                cogs_percentage = (cogs_total / total_sales) * 100
-                st.metric("COGS Percentage", f"{cogs_percentage:.1f}%")
-                
-                # Color indicator
-                if cogs_percentage <= 20:
-                    st.success("✅ Excellent! COGS is within target range (≤20%)")
-                elif cogs_percentage <= 25:
-                    st.info("👍 Good. COGS is acceptable (20-25%)")
-                elif cogs_percentage <= 30:
-                    st.warning("⚠️ Caution. COGS is slightly high (25-30%)")
-                else:
-                    st.error("🚨 Alert! COGS is above target (>30%)")
+        with col_beer_sales:
+            beer_sales = st.number_input(
+                "🍺 Beer Sales:",
+                min_value=0.0,
+                value=0.0,
+                step=100.0,
+                format="%.2f",
+                key="cogs_beer_sales",
+                help="Total beer sales for the period"
+            )
+        
+        with col_bar_sales:
+            bar_sales = st.number_input(
+                "🍸 Bar Sales:",
+                min_value=0.0,
+                value=0.0,
+                step=100.0,
+                format="%.2f",
+                key="cogs_bar_sales",
+                help="Total bar sales (cocktails, spirits, etc.) for the period"
+            )
+        
+        # Calculate totals
+        total_sales = wine_sales + beer_sales + bar_sales
+        
+        # Calculate percentages
+        wine_pct = (cogs_wine / wine_sales * 100) if wine_sales > 0 else 0
+        beer_pct = (cogs_beer / beer_sales * 100) if beer_sales > 0 else 0
+        bar_pct = (cogs_bar / bar_sales * 100) if bar_sales > 0 else 0
+        total_pct = (cogs_total / total_sales * 100) if total_sales > 0 else 0
+        
+        st.markdown("")
+        
+        # Display table
+        cogs_pct_data = pd.DataFrame({
+            'Category': ['🍷 Wine', '🍺 Beer', '🍸 Bar', '💰 TOTAL'],
+            'COGS': [cogs_wine, cogs_beer, cogs_bar, cogs_total],
+            'Sales': [wine_sales, beer_sales, bar_sales, total_sales],
+            'COGS %': [wine_pct, beer_pct, bar_pct, total_pct]
+        })
+        
+        st.dataframe(
+            cogs_pct_data,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "COGS": st.column_config.NumberColumn(format="$%.2f"),
+                "Sales": st.column_config.NumberColumn(format="$%.2f"),
+                "COGS %": st.column_config.NumberColumn(format="%.1f%%")
+            }
+        )
+        
+        # Status indicators for each category
+        def get_status_indicator(pct, sales):
+            if sales == 0:
+                return ""
+            elif pct <= 20:
+                return "✅"
+            elif pct <= 25:
+                return "👍"
+            elif pct <= 30:
+                return "⚠️"
             else:
-                st.metric("COGS Percentage", "N/A")
-                st.caption("Enter sales to calculate percentage")
+                return "🚨"
+        
+        # Show overall status
+        if total_sales > 0:
+            col_status1, col_status2, col_status3 = st.columns(3)
+            
+            with col_status1:
+                if wine_sales > 0:
+                    status = get_status_indicator(wine_pct, wine_sales)
+                    st.caption(f"Wine: {status} {wine_pct:.1f}%")
+            
+            with col_status2:
+                if beer_sales > 0:
+                    status = get_status_indicator(beer_pct, beer_sales)
+                    st.caption(f"Beer: {status} {beer_pct:.1f}%")
+            
+            with col_status3:
+                if bar_sales > 0:
+                    status = get_status_indicator(bar_pct, bar_sales)
+                    st.caption(f"Bar: {status} {bar_pct:.1f}%")
+            
+            st.caption("Target: ≤20% ✅ | Acceptable: 20-25% 👍 | Caution: 25-30% ⚠️ | High: >30% 🚨")
         
         st.markdown("---")
         
-        # Category Breakdown Visualization
+        # Category Breakdown Visualization - Updated for Wine, Beer, Bar
         st.markdown("### 📈 COGS Breakdown by Category")
         
-        col_pie, col_bar = st.columns(2)
+        col_pie, col_bar_chart = st.columns(2)
         
         with col_pie:
-            # Pie chart
+            # Pie chart - Wine, Beer, Bar
             pie_data = pd.DataFrame({
-                'Category': ['Spirits', 'Wine', 'Beer', 'Ingredients'],
-                'COGS': [max(0, cogs_spirits), max(0, cogs_wine), max(0, cogs_beer), max(0, cogs_ingredients)]
+                'Category': ['Wine', 'Beer', 'Bar'],
+                'COGS': [max(0, cogs_wine), max(0, cogs_beer), max(0, cogs_bar)]
             })
             
             # Only show pie if there's positive COGS
@@ -3863,10 +3942,9 @@ def show_cogs():
                     title='COGS Distribution',
                     color='Category',
                     color_discrete_map={
-                        'Spirits': '#8B5CF6',
                         'Wine': '#EC4899',
                         'Beer': '#F59E0B',
-                        'Ingredients': '#10B981'
+                        'Bar': '#8B5CF6'
                     }
                 )
                 fig_pie.update_traces(textposition='inside', textinfo='percent+label')
@@ -3874,25 +3952,24 @@ def show_cogs():
             else:
                 st.info("No positive COGS to display in chart.")
         
-        with col_bar:
-            # Horizontal bar chart
-            bar_data = pd.DataFrame({
-                'Category': ['Spirits', 'Wine', 'Beer', 'Ingredients'],
-                'COGS': [cogs_spirits, cogs_wine, cogs_beer, cogs_ingredients]
+        with col_bar_chart:
+            # Horizontal bar chart - Wine, Beer, Bar
+            bar_chart_data = pd.DataFrame({
+                'Category': ['Wine', 'Beer', 'Bar'],
+                'COGS': [cogs_wine, cogs_beer, cogs_bar]
             })
             
             fig_bar = px.bar(
-                bar_data,
+                bar_chart_data,
                 x='COGS',
                 y='Category',
                 orientation='h',
                 title='COGS by Category',
                 color='Category',
                 color_discrete_map={
-                    'Spirits': '#8B5CF6',
                     'Wine': '#EC4899',
                     'Beer': '#F59E0B',
-                    'Ingredients': '#10B981'
+                    'Bar': '#8B5CF6'
                 }
             )
             fig_bar.update_layout(
@@ -3919,10 +3996,17 @@ def show_cogs():
                     'Wine COGS': cogs_wine,
                     'Beer COGS': cogs_beer,
                     'Ingredients COGS': cogs_ingredients,
+                    'Bar COGS': cogs_bar,
                     'Total COGS': cogs_total,
                     'Total Purchases': total_purchases,
+                    'Wine Sales': wine_sales,
+                    'Beer Sales': beer_sales,
+                    'Bar Sales': bar_sales,
                     'Total Sales': total_sales,
-                    'COGS Percentage': (cogs_total / total_sales * 100) if total_sales > 0 else 0
+                    'Wine COGS %': wine_pct,
+                    'Beer COGS %': beer_pct,
+                    'Bar COGS %': bar_pct,
+                    'Total COGS %': total_pct
                 }
                 
                 if save_cogs_calculation(cogs_record):
@@ -3964,12 +4048,15 @@ Beer:           {format_currency(cogs_beer)}
 Ingredients:    {format_currency(cogs_ingredients)}
 TOTAL COGS:     {format_currency(cogs_total)}
 
-"""
-            if total_sales > 0:
-                report += f"""SALES & PERCENTAGE
-------------------
-Total Sales:    {format_currency(total_sales)}
-COGS %:         {cogs_total / total_sales * 100:.1f}%
+COGS BY SALES CATEGORY
+----------------------
+Category        COGS            Sales           COGS %
+Wine:           {format_currency(cogs_wine):>12}  {format_currency(wine_sales):>12}  {wine_pct:>10.1f}%
+Beer:           {format_currency(cogs_beer):>12}  {format_currency(beer_sales):>12}  {beer_pct:>10.1f}%
+Bar:            {format_currency(cogs_bar):>12}  {format_currency(bar_sales):>12}  {bar_pct:>10.1f}%
+TOTAL:          {format_currency(cogs_total):>12}  {format_currency(total_sales):>12}  {total_pct:>10.1f}%
+
+Note: Bar = Spirits + Ingredients combined
 """
             
             st.download_button(
