@@ -51,8 +51,8 @@
 #           - Export COGS report
 #           - Save COGS calculations to history
 #   V2.25 - Added sidebar navigation for direct module-to-module navigation
-#           Restored Step 3 verification features: Invoice Date (calendar picker),
-#           Invoice #, and value change columns (Unit Cost Δ, Qty Δ)
+#           Restored complete Weekly Order Builder from V2.22 including all
+#           Order Analytics, Step 3 verification, and Order History features
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -1982,7 +1982,9 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
 # =============================================================================
 
 def show_ordering():
-    """Renders the Weekly Order Builder module."""
+    """
+    Renders the Weekly Order Builder module.
+    """
     
     # V2.25: Sidebar navigation
     show_sidebar_navigation()
@@ -1995,48 +1997,80 @@ def show_ordering():
     with col_title:
         st.title("📋 Weekly Order Builder")
     
+    # Dashboard
     st.markdown("### 📊 Order Dashboard")
+    
     order_history = st.session_state.order_history
     
-    prev_week_total = 0
     if len(order_history) > 0:
         weeks = sorted(order_history['Week'].unique())
         if len(weeks) >= 1:
             prev_week = weeks[-1]
             prev_week_total = order_history[order_history['Week'] == prev_week]['Total Cost'].sum()
+        else:
+            prev_week_total = 0
+    else:
+        prev_week_total = 0
     
-    current_order_total = 0
     if 'current_order' in st.session_state and len(st.session_state.current_order) > 0:
         current_order_total = st.session_state.current_order['Order Value'].sum()
+    else:
+        current_order_total = 0
     
+    # V2.10: Check for pending verification
     pending_verification_total = 0
     if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
         pending_verification_total = st.session_state.pending_order['Order Value'].sum() if 'Order Value' in st.session_state.pending_order.columns else 0
     
     col1, col2, col3, col4 = st.columns(4)
+    
     with col1:
-        st.metric(label="📅 Previous Week", value=format_currency(prev_week_total))
+        st.metric(label="📅 Previous Week's Order", value=format_currency(prev_week_total))
     with col2:
-        st.metric(label="🛒 Current Order", value=format_currency(current_order_total))
+        st.metric(label="🛒 Current Order (Building)", value=format_currency(current_order_total))
     with col3:
-        st.metric(label="⏳ Pending Verification", value=format_currency(pending_verification_total) if pending_verification_total > 0 else "None")
+        if pending_verification_total > 0:
+            st.metric(label="⏳ Pending Verification", value=format_currency(pending_verification_total))
+        else:
+            st.metric(label="⏳ Pending Verification", value="None")
     with col4:
-        st.metric(label="📈 6-Week Avg", value=format_currency(order_history.groupby('Week')['Total Cost'].sum().mean() if len(order_history) > 0 else 0))
+        st.metric(label="📈 6-Week Avg Order", 
+                  value=format_currency(order_history.groupby('Week')['Total Cost'].sum().mean() if len(order_history) > 0 else 0))
     
     st.markdown("---")
     
-    tab_build, tab_history, tab_analytics = st.tabs(["🛒 Weekly Order Builder", "📜 Order History", "📈 Order Analytics"])
+    # Tabs
+    tab_build, tab_history, tab_analytics = st.tabs([
+        "🛒 Weekly Order Builder", "📜 Order History", "📈 Order Analytics"
+    ])
     
     with tab_build:
         st.markdown("### Step 1: Update Weekly Inventory")
+        st.markdown("Enter your current inventory counts below. Products below par will be added to the order.")
         
-        # Add Products Expander
-        with st.expander("➕ Add Products to Weekly Inventory", expanded=False):
+        # =====================================================================
+        # V2.3: ADD/REMOVE PRODUCTS FROM WEEKLY INVENTORY
+        # =====================================================================
+        
+        with st.expander("➕ Add Products to your Weekly Order Inventory", expanded=False):
+            st.markdown("**Add a product from Master Inventory:**")
+            
+            # Get products not already in weekly inventory
             available_products = get_products_not_in_weekly_inventory()
+            
             if len(available_products) > 0:
+                # V2.9: Category filter for Add Product dropdown
                 add_categories = sorted(available_products['Category'].unique().tolist())
-                add_category_filter = st.selectbox("🔍 Filter by Category:", options=["All Categories"] + add_categories, key="add_product_category_filter")
                 
+                col_cat_filter, col_spacer = st.columns([2, 4])
+                with col_cat_filter:
+                    add_category_filter = st.selectbox(
+                        "🔍 Filter by Category:",
+                        options=["All Categories"] + add_categories,
+                        key="add_product_category_filter"
+                    )
+                
+                # Filter available products by selected category
                 if add_category_filter != "All Categories":
                     filtered_available = available_products[available_products['Category'] == add_category_filter].copy()
                 else:
@@ -2044,255 +2078,667 @@ def show_ordering():
                 
                 if len(filtered_available) > 0:
                     col_select, col_par, col_unit, col_add = st.columns([3, 1, 1, 1])
+                    
                     with col_select:
+                        # Create display options with category
                         filtered_available['Display'] = filtered_available['Product'] + " (" + filtered_available['Category'] + ")"
-                        selected_display = st.selectbox("Select Product:", options=[""] + filtered_available['Display'].tolist(), key="add_weekly_product")
+                        product_options = filtered_available['Display'].tolist()
+                        
+                        selected_display = st.selectbox(
+                            "Select Product:",
+                            options=[""] + product_options,
+                            key="add_weekly_product"
+                        )
+                    
                     with col_par:
-                        new_par = st.number_input("Par Level:", min_value=1, value=2, step=1, key="add_weekly_par")
+                        new_par = st.number_input(
+                            "Par Level:",
+                            min_value=1,
+                            value=2,
+                            step=1,
+                            key="add_weekly_par"
+                        )
+                    
                     with col_unit:
-                        new_unit = st.selectbox("Unit:", options=["Bottle", "Case", "Sixtel", "Keg", "Each", "Quart", "Gallon"], key="add_weekly_unit")
+                        unit_options = ["Bottle", "Case", "Sixtel", "Keg", "Each", "Quart", "Gallon"]
+                        new_unit = st.selectbox(
+                            "Unit:",
+                            options=unit_options,
+                            key="add_weekly_unit"
+                        )
+                    
                     with col_add:
-                        st.write("")
-                        st.write("")
+                        st.write("")  # Spacer
+                        st.write("")  # Spacer
                         if st.button("➕ Add", key="btn_add_weekly_product"):
                             if selected_display:
+                                # Get the product details from filtered_available
                                 selected_row = filtered_available[filtered_available['Display'] == selected_display].iloc[0]
+                                
+                                # Create new row for weekly inventory
+                                # V2.11: Include Bar/Storage Inventory columns
                                 new_row = pd.DataFrame([{
-                                    'Product': selected_row['Product'], 'Category': selected_row['Category'],
-                                    'Par': new_par, 'Bar Inventory': 0, 'Storage Inventory': 0,
-                                    'Total Current Inventory': 0, 'Unit': new_unit,
-                                    'Unit Cost': selected_row['Unit Cost'], 'Distributor': selected_row['Distributor'],
+                                    'Product': selected_row['Product'],
+                                    'Category': selected_row['Category'],
+                                    'Par': new_par,
+                                    'Bar Inventory': 0,
+                                    'Storage Inventory': 0,
+                                    'Total Current Inventory': 0,
+                                    'Unit': new_unit,
+                                    'Unit Cost': selected_row['Unit Cost'],
+                                    'Distributor': selected_row['Distributor'],
                                     'Order Notes': selected_row['Order Notes']
                                 }])
-                                st.session_state.weekly_inventory = pd.concat([st.session_state.weekly_inventory, new_row], ignore_index=True)
+                                
+                                # Add to weekly inventory
+                                st.session_state.weekly_inventory = pd.concat(
+                                    [st.session_state.weekly_inventory, new_row],
+                                    ignore_index=True
+                                )
+                                
+                                # Save changes
                                 save_all_inventory_data()
-                                st.success(f"✅ Added {selected_row['Product']}!")
+                                
+                                st.success(f"✅ Added {selected_row['Product']} to Weekly Inventory!")
                                 st.rerun()
+                            else:
+                                st.warning("Please select a product to add.")
+                else:
+                    st.info(f"No products available in {add_category_filter} category.")
             else:
                 st.info("All Master Inventory products are already in Weekly Inventory.")
+            
+            # =================================================================
+            # V2.12: CSV UPLOAD FOR WEEKLY INVENTORY
+            # =================================================================
+            st.markdown("---")
+            st.markdown("**📤 Upload CSV to populate Weekly Inventory:**")
+            
+            with st.expander("ℹ️ CSV Format Requirements", expanded=False):
+                st.markdown("""
+                Your CSV file should include the following columns:
+                
+                | Column | Required | Description |
+                |--------|----------|-------------|
+                | Product | ✅ Yes | Product name |
+                | Category | ✅ Yes | Spirits, Wine, Beer, or Ingredients |
+                | Par | ✅ Yes | Par level (number) |
+                | Bar Inventory | Optional | Inventory at bar (default: 0) |
+                | Storage Inventory | Optional | Inventory in storage (default: 0) |
+                | Unit | Optional | Bottle, Case, Sixtel, Keg, Each, Quart, Gallon (default: Bottle) |
+                | Unit Cost | Optional | Cost per unit (default: 0) |
+                | Distributor | Optional | Distributor name (default: blank) |
+                | Order Notes | Optional | Notes for ordering (default: blank) |
+                
+                **Note:** Products already in Weekly Inventory will be skipped.
+                """)
+                
+                # Download template button
+                template_df = pd.DataFrame({
+                    'Product': ['Example Product 1', 'Example Product 2'],
+                    'Category': ['Spirits', 'Beer'],
+                    'Par': [3, 2],
+                    'Bar Inventory': [1, 0.5],
+                    'Storage Inventory': [1, 0.5],
+                    'Unit': ['Bottle', 'Case'],
+                    'Unit Cost': [25.00, 24.00],
+                    'Distributor': ['Breakthru', 'Frank Beer'],
+                    'Order Notes': ['', '']
+                })
+                
+                csv_template = template_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download CSV Template",
+                    data=csv_template,
+                    file_name="weekly_inventory_template.csv",
+                    mime="text/csv",
+                    key="download_weekly_template"
+                )
+            
+            uploaded_csv = st.file_uploader(
+                "Choose a CSV file:",
+                type=['csv'],
+                key="weekly_inventory_csv_upload"
+            )
+            
+            if uploaded_csv is not None:
+                try:
+                    # Read CSV
+                    upload_df = pd.read_csv(uploaded_csv)
+                    
+                    # Validate required columns
+                    required_cols = ['Product', 'Category', 'Par']
+                    missing_cols = [col for col in required_cols if col not in upload_df.columns]
+                    
+                    if missing_cols:
+                        st.error(f"❌ Missing required columns: {', '.join(missing_cols)}")
+                    else:
+                        # Preview the data
+                        st.markdown(f"**Preview ({len(upload_df)} products):**")
+                        st.dataframe(upload_df.head(10), use_container_width=True, hide_index=True)
+                        
+                        # Check for duplicates with existing inventory
+                        existing_products = st.session_state.weekly_inventory['Product'].tolist()
+                        new_products = upload_df[~upload_df['Product'].isin(existing_products)]
+                        duplicate_products = upload_df[upload_df['Product'].isin(existing_products)]
+                        
+                        if len(duplicate_products) > 0:
+                            st.warning(f"⚠️ {len(duplicate_products)} product(s) already exist and will be skipped: {', '.join(duplicate_products['Product'].tolist()[:5])}{'...' if len(duplicate_products) > 5 else ''}")
+                        
+                        if len(new_products) > 0:
+                            col_upload_btn, col_upload_info = st.columns([1, 2])
+                            
+                            with col_upload_btn:
+                                if st.button(f"✅ Import {len(new_products)} Product(s)", key="btn_import_csv", type="primary"):
+                                    # Prepare the data with all required columns
+                                    import_df = new_products.copy()
+                                    
+                                    # Add default values for optional columns
+                                    if 'Bar Inventory' not in import_df.columns:
+                                        import_df['Bar Inventory'] = 0
+                                    if 'Storage Inventory' not in import_df.columns:
+                                        import_df['Storage Inventory'] = 0
+                                    if 'Unit' not in import_df.columns:
+                                        import_df['Unit'] = 'Bottle'
+                                    if 'Unit Cost' not in import_df.columns:
+                                        import_df['Unit Cost'] = 0
+                                    else:
+                                        # Clean currency values
+                                        import_df['Unit Cost'] = import_df['Unit Cost'].apply(clean_currency_value)
+                                    if 'Distributor' not in import_df.columns:
+                                        import_df['Distributor'] = ''
+                                    if 'Order Notes' not in import_df.columns:
+                                        import_df['Order Notes'] = ''
+                                    
+                                    # Calculate Total Current Inventory
+                                    import_df['Total Current Inventory'] = import_df['Bar Inventory'] + import_df['Storage Inventory']
+                                    
+                                    # Ensure numeric columns are proper types
+                                    import_df['Par'] = pd.to_numeric(import_df['Par'], errors='coerce').fillna(0)
+                                    import_df['Bar Inventory'] = pd.to_numeric(import_df['Bar Inventory'], errors='coerce').fillna(0)
+                                    import_df['Storage Inventory'] = pd.to_numeric(import_df['Storage Inventory'], errors='coerce').fillna(0)
+                                    import_df['Unit Cost'] = pd.to_numeric(import_df['Unit Cost'], errors='coerce').fillna(0)
+                                    
+                                    # Select and order columns to match existing structure
+                                    cols_to_keep = ['Product', 'Category', 'Par', 'Bar Inventory', 'Storage Inventory', 
+                                                   'Total Current Inventory', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
+                                    import_df = import_df[cols_to_keep]
+                                    
+                                    # Append to weekly inventory
+                                    st.session_state.weekly_inventory = pd.concat(
+                                        [st.session_state.weekly_inventory, import_df],
+                                        ignore_index=True
+                                    )
+                                    
+                                    # Save changes
+                                    save_all_inventory_data()
+                                    
+                                    st.success(f"✅ Successfully imported {len(new_products)} product(s)!")
+                                    st.rerun()
+                            
+                            with col_upload_info:
+                                st.caption(f"Ready to import {len(new_products)} new product(s)")
+                        else:
+                            st.info("All products in the CSV already exist in Weekly Inventory.")
+                
+                except Exception as e:
+                    st.error(f"❌ Error reading CSV: {str(e)}")
         
-        # Weekly Inventory Table
+        # =====================================================================
+        # END V2.3 ADD/REMOVE SECTION
+        # =====================================================================
+        
+        # =====================================================================
+        # V2.6: CATEGORY AND DISTRIBUTOR FILTERS FOR WEEKLY INVENTORY
+        # V2.11: Added Bar/Storage Inventory columns with auto-calculated total
+        # =====================================================================
+        
         weekly_inv = st.session_state.weekly_inventory.copy()
+        
+        # V2.11: Ensure Bar/Storage Inventory columns exist (backwards compatibility)
         if 'Bar Inventory' not in weekly_inv.columns:
-            weekly_inv['Bar Inventory'] = 0
+            # Migrate from old Current Inventory column
+            if 'Current Inventory' in weekly_inv.columns:
+                weekly_inv['Bar Inventory'] = weekly_inv['Current Inventory'] / 2
+                weekly_inv['Storage Inventory'] = weekly_inv['Current Inventory'] / 2
+            else:
+                weekly_inv['Bar Inventory'] = 0
+                weekly_inv['Storage Inventory'] = 0
+        
         if 'Storage Inventory' not in weekly_inv.columns:
             weekly_inv['Storage Inventory'] = 0
-        weekly_inv['Total Current Inventory'] = weekly_inv['Bar Inventory'] + weekly_inv['Storage Inventory']
-        weekly_inv['Status'] = weekly_inv.apply(lambda row: "🔴 Order" if row['Total Current Inventory'] < row['Par'] else "✅ OK", axis=1)
         
+        # V2.11: Calculate Total Current Inventory
+        weekly_inv['Total Current Inventory'] = weekly_inv['Bar Inventory'] + weekly_inv['Storage Inventory']
+        
+        # Status based on Total Current Inventory vs Par
+        weekly_inv['Status'] = weekly_inv.apply(
+            lambda row: "🔴 Order" if row['Total Current Inventory'] < row['Par'] else "✅ OK", axis=1
+        )
+        
+        # Get unique categories and distributors for filters
         all_categories = weekly_inv['Category'].unique().tolist()
         all_distributors = weekly_inv['Distributor'].unique().tolist()
         
-        col_cat, col_dist, col_count = st.columns([2, 2, 2])
-        with col_cat:
-            selected_category = st.selectbox("🔍 Filter by Category:", options=["All Categories"] + sorted(all_categories), key="weekly_category_filter")
-        with col_dist:
-            selected_distributor = st.selectbox("🚚 Filter by Distributor:", options=["All Distributors"] + sorted(all_distributors), key="weekly_distributor_filter")
+        # Filter row
+        col_cat_filter, col_dist_filter, col_count = st.columns([2, 2, 2])
         
+        with col_cat_filter:
+            selected_category = st.selectbox(
+                "🔍 Filter by Category:",
+                options=["All Categories"] + sorted(all_categories),
+                key="weekly_category_filter"
+            )
+        
+        with col_dist_filter:
+            selected_distributor = st.selectbox(
+                "🚚 Filter by Distributor:",
+                options=["All Distributors"] + sorted(all_distributors),
+                key="weekly_distributor_filter"
+            )
+        
+        # Apply filters
         filtered_weekly_inv = weekly_inv.copy()
+        
         if selected_category != "All Categories":
             filtered_weekly_inv = filtered_weekly_inv[filtered_weekly_inv['Category'] == selected_category]
+        
         if selected_distributor != "All Distributors":
             filtered_weekly_inv = filtered_weekly_inv[filtered_weekly_inv['Distributor'] == selected_distributor]
         
         with col_count:
-            st.write("")
+            st.write("")  # Spacer to align with dropdowns
             st.caption(f"Showing {len(filtered_weekly_inv)} of {len(weekly_inv)} products")
         
-        display_df = filtered_weekly_inv.copy()
-        display_df.insert(0, 'Select', False)
-        display_cols = ['Select', 'Product', 'Category', 'Par', 'Bar Inventory', 'Storage Inventory', 'Total Current Inventory', 'Status', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
+        # =====================================================================
+        # END V2.6 FILTERS
+        # =====================================================================
         
-        edited_weekly = st.data_editor(display_df[display_cols], use_container_width=True, hide_index=True, key="weekly_inv_editor",
+        # V2.11: Updated display columns with Bar/Storage/Total
+        # V2.12: Added Select column for row deletion
+        display_df = filtered_weekly_inv.copy()
+        display_df.insert(0, 'Select', False)  # Add checkbox column at the beginning
+        
+        display_cols = ['Select', 'Product', 'Category', 'Par', 'Bar Inventory', 'Storage Inventory', 
+                       'Total Current Inventory', 'Status', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
+        
+        edited_weekly = st.data_editor(
+            display_df[display_cols],
+            use_container_width=True,
+            hide_index=True,
+            key="weekly_inv_editor",
             column_config={
-                "Select": st.column_config.CheckboxColumn("🗑️", width="small"),
+                "Select": st.column_config.CheckboxColumn("🗑️", help="Select rows to delete", width="small"),
                 "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
                 "Bar Inventory": st.column_config.NumberColumn("🍸 Bar", min_value=0, step=0.5),
                 "Storage Inventory": st.column_config.NumberColumn("📦 Storage", min_value=0, step=0.5),
                 "Total Current Inventory": st.column_config.NumberColumn("Total", disabled=True),
+                "Par": st.column_config.NumberColumn(min_value=0, step=1),
                 "Status": st.column_config.TextColumn(disabled=True),
                 "Order Notes": st.column_config.TextColumn("Order Deals", disabled=True),
             },
-            disabled=["Product", "Category", "Status", "Total Current Inventory", "Unit", "Unit Cost", "Distributor", "Order Notes"])
+            disabled=["Product", "Category", "Status", "Total Current Inventory", "Unit", "Unit Cost", "Distributor", "Order Notes"]
+        )
         
+        # V2.11: Recalculate Total Current Inventory in real-time from edited values
         edited_weekly['Total Current Inventory'] = edited_weekly['Bar Inventory'] + edited_weekly['Storage Inventory']
+        edited_weekly['Status'] = edited_weekly.apply(
+            lambda row: "🔴 Order" if row['Total Current Inventory'] < row['Par'] else "✅ OK", axis=1
+        )
+        
+        # V2.12: Check for selected rows to delete
         selected_for_deletion = edited_weekly[edited_weekly['Select'] == True]['Product'].tolist()
         
-        col_save, col_update, col_delete = st.columns([1, 1, 1])
+        # V2.6: Action buttons - Save, Generate Order, and Delete
+        col_save, col_update, col_delete, col_spacer = st.columns([1, 1, 1, 3])
+        
         with col_save:
-            if st.button("💾 Update Table", key="save_weekly_only"):
+            if st.button("💾 Update Table", key="save_weekly_only", help="Save inventory changes without generating an order"):
+                # Update values only for products that were displayed (filtered view)
                 for idx, row in edited_weekly.iterrows():
                     mask = st.session_state.weekly_inventory['Product'] == row['Product']
                     st.session_state.weekly_inventory.loc[mask, 'Bar Inventory'] = row['Bar Inventory']
                     st.session_state.weekly_inventory.loc[mask, 'Storage Inventory'] = row['Storage Inventory']
                     st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = row['Bar Inventory'] + row['Storage Inventory']
                     st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
+                
+                # Save weekly inventory to Google Sheets for persistence
                 save_all_inventory_data()
+                
                 st.success("✅ Table updated!")
                 st.rerun()
         
         with col_update:
             if st.button("🔄 Generate Orders", key="update_weekly"):
+                # Update values only for products that were displayed (filtered view)
                 for idx, row in edited_weekly.iterrows():
                     mask = st.session_state.weekly_inventory['Product'] == row['Product']
                     st.session_state.weekly_inventory.loc[mask, 'Bar Inventory'] = row['Bar Inventory']
                     st.session_state.weekly_inventory.loc[mask, 'Storage Inventory'] = row['Storage Inventory']
                     st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = row['Bar Inventory'] + row['Storage Inventory']
                     st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
+                
                 order = generate_order_from_inventory(st.session_state.weekly_inventory)
                 st.session_state.current_order = order
+                
+                # Save weekly inventory to files for persistence
                 save_all_inventory_data()
+                
                 st.success("✅ Orders generated!")
                 st.rerun()
         
         with col_delete:
-            if st.button("🗑️ Delete Selected", key="delete_selected_rows", disabled=len(selected_for_deletion) == 0):
-                st.session_state.weekly_inventory = st.session_state.weekly_inventory[~st.session_state.weekly_inventory['Product'].isin(selected_for_deletion)].reset_index(drop=True)
-                save_all_inventory_data()
-                st.success(f"✅ Deleted {len(selected_for_deletion)} product(s)!")
-                st.rerun()
+            delete_disabled = len(selected_for_deletion) == 0
+            if st.button("🗑️ Delete Selected", key="delete_selected_rows", disabled=delete_disabled, 
+                        help="Select rows using checkboxes, then click to delete"):
+                if selected_for_deletion:
+                    st.session_state.weekly_inventory = st.session_state.weekly_inventory[
+                        ~st.session_state.weekly_inventory['Product'].isin(selected_for_deletion)
+                    ].reset_index(drop=True)
+                    
+                    save_all_inventory_data()
+                    st.success(f"✅ Deleted {len(selected_for_deletion)} product(s)!")
+                    st.rerun()
+        
+        # Show count of selected items
+        if len(selected_for_deletion) > 0:
+            st.caption(f"🗑️ {len(selected_for_deletion)} row(s) selected for deletion")
         
         st.markdown("---")
-        st.markdown("### Step 2: Review & Adjust Order")
+        st.markdown("### Step 2: Review & Adjust This Week's Order")
         
         if 'current_order' in st.session_state and len(st.session_state.current_order) > 0:
             order_df = st.session_state.current_order.copy()
             st.markdown(f"**{len(order_df)} items need ordering:**")
-            edited_order = st.data_editor(order_df, use_container_width=True, hide_index=True, key="order_editor",
+            
+            edited_order = st.data_editor(
+                order_df,
+                use_container_width=True,
+                hide_index=True,
+                key="order_editor",
                 column_config={
                     "Unit Cost": st.column_config.NumberColumn(format="$%.2f", disabled=True),
                     "Order Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
                     "Suggested Order": st.column_config.NumberColumn(disabled=True),
+                    "Current Inventory": st.column_config.NumberColumn(disabled=True),
+                    "Par": st.column_config.NumberColumn(disabled=True),
                     "Order Quantity": st.column_config.NumberColumn(min_value=0, step=0.5),
                 },
-                disabled=["Product", "Category", "Current Inventory", "Par", "Suggested Order", "Unit", "Unit Cost", "Distributor", "Order Notes"])
+                disabled=["Product", "Category", "Current Inventory", "Par", "Suggested Order",
+                         "Unit", "Unit Cost", "Distributor", "Order Notes"]
+            )
             
-            if st.button("💰 Recalculate Total", key="recalc_order"):
-                edited_order['Order Value'] = edited_order['Order Quantity'] * edited_order['Unit Cost']
-                st.session_state.current_order = edited_order
-                st.rerun()
+            # V2.12: Action buttons row with Recalculate and Copy options
+            col_recalc, col_copy_order, col_spacer = st.columns([1, 1, 3])
+            
+            with col_recalc:
+                if st.button("💰 Recalculate Total", key="recalc_order"):
+                    edited_order['Order Value'] = edited_order['Order Quantity'] * edited_order['Unit Cost']
+                    st.session_state.current_order = edited_order
+                    st.rerun()
+            
+            with col_copy_order:
+                # Create a simple text format for clipboard
+                copy_cols = ['Product', 'Order Quantity', 'Unit', 'Distributor']
+                copy_df = edited_order[copy_cols].copy()
+                
+                # Group by distributor for organized copying
+                copy_text = "ORDER LIST\n" + "=" * 40 + "\n\n"
+                for dist in copy_df['Distributor'].unique():
+                    dist_items = copy_df[copy_df['Distributor'] == dist]
+                    copy_text += f"📦 {dist}\n" + "-" * 30 + "\n"
+                    for _, row in dist_items.iterrows():
+                        copy_text += f"  • {row['Product']}: {row['Order Quantity']} {row['Unit']}\n"
+                    copy_text += "\n"
+                
+                st.download_button(
+                    label="📋 Copy Order",
+                    data=copy_text,
+                    file_name=f"order_{datetime.now().strftime('%Y%m%d')}.txt",
+                    mime="text/plain",
+                    key="download_order_text"
+                )
             
             st.markdown("---")
+            # V2.10: Send to Verification instead of Save to History
             if st.button("📋 Send to Verification", key="send_to_verification", type="primary"):
+                # Create pending order with original values for comparison
                 pending_df = edited_order.copy()
                 pending_df['Original Unit Cost'] = pending_df['Unit Cost']
                 pending_df['Original Order Quantity'] = pending_df['Order Quantity']
-                pending_df['Verification Notes'] = ''
+                pending_df['Verification Notes'] = ''  # Initialize as empty string
+                pending_df['Verification Notes'] = pending_df['Verification Notes'].astype(str)  # Ensure string type
                 pending_df['Modified'] = False
                 pending_df['Order Date'] = datetime.now().strftime("%Y-%m-%d")
+                
                 st.session_state.pending_order = pending_df
-                st.session_state.current_order = pd.DataFrame()
+                st.session_state.current_order = pd.DataFrame()  # Clear current order
+                
+                # Save pending order for persistence
                 save_pending_order()
                 save_all_inventory_data()
-                st.success("✅ Order sent to verification!")
+                
+                st.success("✅ Order sent to verification! Complete Step 3 to finalize.")
                 st.rerun()
         else:
+            # Check if there's a pending order waiting for verification
             if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
-                st.info("📋 An order is pending verification. Complete Step 3 below.")
+                st.info("📋 An order is pending verification. Complete Step 3 below to finalize.")
             else:
-                st.info("👆 Update inventory and click 'Generate Orders' to see what needs ordering.")
+                st.info("👆 Update inventory counts above and click 'Generate Orders' to see what needs ordering.")
         
-        # Step 3: Verification (with Invoice Date, Invoice #, and change tracking)
+        # =====================================================================
+        # V2.10: STEP 3 - ORDER VERIFICATION
+        # =====================================================================
+        
         st.markdown("---")
         st.markdown("### Step 3: Order Verification")
+        st.markdown("Verify received products against the order. Update quantities and costs as needed, then finalize.")
         
         if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
             pending_df = st.session_state.pending_order.copy()
             
-            # Ensure required columns exist
-            if 'Verification Notes' not in pending_df.columns:
-                pending_df['Verification Notes'] = ''
+            # Ensure all required columns exist
             if 'Original Unit Cost' not in pending_df.columns:
                 pending_df['Original Unit Cost'] = pending_df['Unit Cost']
             if 'Original Order Quantity' not in pending_df.columns:
                 pending_df['Original Order Quantity'] = pending_df['Order Quantity']
+            if 'Verification Notes' not in pending_df.columns:
+                pending_df['Verification Notes'] = ''
+            if 'Modified' not in pending_df.columns:
+                pending_df['Modified'] = False
+            if 'Order Date' not in pending_df.columns:
+                pending_df['Order Date'] = datetime.now().strftime("%Y-%m-%d")
+            
+            # V2.12 Fix: Ensure Verification Notes is string type (fixes StreamlitAPIException)
+            pending_df['Verification Notes'] = pending_df['Verification Notes'].fillna('').astype(str)
+            
+            # V2.15: Add Invoice # column if not present
             if 'Invoice #' not in pending_df.columns:
                 pending_df['Invoice #'] = ''
-            if 'Invoice Date' not in pending_df.columns:
-                pending_df['Invoice Date'] = None
-            
-            pending_df['Verification Notes'] = pending_df['Verification Notes'].fillna('').astype(str)
             pending_df['Invoice #'] = pending_df['Invoice #'].fillna('').astype(str)
             
-            # Calculate changes from original values
-            pending_df['Cost Changed'] = pending_df['Unit Cost'] != pending_df['Original Unit Cost']
-            pending_df['Qty Changed'] = pending_df['Order Quantity'] != pending_df['Original Order Quantity']
+            # V2.21: Add Invoice Date column if not present and convert to datetime type
+            if 'Invoice Date' not in pending_df.columns:
+                pending_df['Invoice Date'] = pd.NaT
+            else:
+                # Convert existing Invoice Date to datetime (handles strings from Google Sheets)
+                pending_df['Invoice Date'] = pd.to_datetime(pending_df['Invoice Date'], errors='coerce')
             
-            # Format change indicators
-            pending_df['Unit Cost Δ'] = pending_df.apply(
-                lambda row: f"${row['Original Unit Cost']:.2f} → ${row['Unit Cost']:.2f}" if row['Cost Changed'] else "", axis=1
+            order_date = pending_df['Order Date'].iloc[0] if 'Order Date' in pending_df.columns else 'Unknown'
+            st.markdown(f"**📅 Order Date:** {order_date}")
+            st.markdown(f"**📦 {len(pending_df)} items pending verification:**")
+            
+            # Display columns for verification (editable: Unit Cost, Order Quantity, Verification Notes, Invoice #, Invoice Date)
+            verify_display_cols = ['Product', 'Category', 'Distributor', 'Unit Cost', 'Order Quantity', 
+                                   'Order Value', 'Verification Notes', 'Modified']
+            
+            # Calculate Modified flag based on changes
+            pending_df['Modified'] = (
+                (pending_df['Unit Cost'] != pending_df['Original Unit Cost']) | 
+                (pending_df['Order Quantity'] != pending_df['Original Order Quantity'])
             )
-            pending_df['Qty Δ'] = pending_df.apply(
-                lambda row: f"{row['Original Order Quantity']:.1f} → {row['Order Quantity']:.1f}" if row['Qty Changed'] else "", axis=1
-            )
             
-            st.markdown(f"**{len(pending_df)} items pending verification:**")
+            # V2.12 Update: Red flag for modified rows with change details
+            def get_status_with_changes(row):
+                if not row['Modified']:
+                    return '✅'
+                
+                changes = []
+                if row['Unit Cost'] != row['Original Unit Cost']:
+                    changes.append(f"Cost: ${row['Original Unit Cost']:.2f}→${row['Unit Cost']:.2f}")
+                if row['Order Quantity'] != row['Original Order Quantity']:
+                    changes.append(f"Qty: {row['Original Order Quantity']}→{row['Order Quantity']}")
+                
+                return '🚩 ' + ', '.join(changes)
             
-            # Invoice Date and Invoice # inputs (per-order, not per-item)
-            st.markdown("##### 📋 Invoice Details")
-            col_inv_date, col_inv_num = st.columns(2)
-            with col_inv_date:
-                invoice_date = st.date_input(
-                    "Invoice Date:",
-                    value=None,
-                    key="verification_invoice_date",
-                    help="Date on the invoice from distributor"
-                )
-            with col_inv_num:
-                invoice_number = st.text_input(
-                    "Invoice #:",
-                    value="",
-                    key="verification_invoice_number",
-                    help="Invoice number from distributor"
-                )
+            pending_df['Status'] = pending_df.apply(get_status_with_changes, axis=1)
             
-            st.markdown("##### 📦 Order Items")
-            
-            # Build verification table with change columns
-            verify_cols = ['Product', 'Category', 'Distributor', 'Unit', 'Unit Cost', 'Unit Cost Δ', 
-                          'Order Quantity', 'Qty Δ', 'Order Value', 'Verification Notes']
-            
-            display_pending = pending_df[verify_cols].copy()
+            # V2.21: Updated display columns with Invoice Date
+            verify_display_cols = ['Status', 'Product', 'Category', 'Distributor', 'Unit', 'Unit Cost', 
+                                   'Order Quantity', 'Order Value', 'Invoice #', 'Invoice Date', 'Verification Notes']
             
             edited_verification = st.data_editor(
-                display_pending, 
-                use_container_width=True, 
-                hide_index=True, 
+                pending_df[verify_display_cols],
+                use_container_width=True,
+                hide_index=True,
                 key="verification_editor",
                 column_config={
+                    "Status": st.column_config.TextColumn("Status", disabled=True, width="small"),
+                    "Unit": st.column_config.TextColumn("Unit", disabled=True),
                     "Unit Cost": st.column_config.NumberColumn(format="$%.2f", min_value=0, step=0.01),
-                    "Unit Cost Δ": st.column_config.TextColumn("Cost Change", disabled=True, help="Original → New"),
                     "Order Quantity": st.column_config.NumberColumn(min_value=0, step=0.5),
-                    "Qty Δ": st.column_config.TextColumn("Qty Change", disabled=True, help="Original → New"),
                     "Order Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
-                    "Unit": st.column_config.TextColumn(disabled=True),
+                    "Invoice #": st.column_config.TextColumn("Invoice #", width="small"),
+                    "Invoice Date": st.column_config.DateColumn("Invoice Date", width="small", format="MM/DD/YYYY"),
+                    "Verification Notes": st.column_config.TextColumn("Order Notes", width="medium"),
                 },
-                disabled=["Product", "Category", "Distributor", "Unit", "Order Value", "Unit Cost Δ", "Qty Δ"]
+                disabled=["Status", "Product", "Category", "Distributor", "Unit", "Order Value"]
             )
             
-            col_init, col_final = st.columns([1, 1])
-            with col_init:
-                verifier_initials = st.text_input("Verifier Initials:", max_chars=5, key="verifier_initials")
-            with col_final:
-                st.write("")
-                if st.button("✅ Finalize Order", key="finalize_order", type="primary", disabled=len(verifier_initials.strip()) == 0):
+            col_recalc, col_save_progress = st.columns([1, 1])
+            
+            with col_recalc:
+                if st.button("💰 Recalculate Total", key="recalc_verification", help="Update totals in display (does not save)"):
+                    # Update pending order with edited values (session state only, no save)
+                    for idx, row in edited_verification.iterrows():
+                        mask = st.session_state.pending_order['Product'] == row['Product']
+                        st.session_state.pending_order.loc[mask, 'Unit Cost'] = row['Unit Cost']
+                        st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
+                        st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
+                        st.session_state.pending_order.loc[mask, 'Invoice #'] = row['Invoice #']
+                        st.session_state.pending_order.loc[mask, 'Invoice Date'] = row['Invoice Date']
+                    
+                    # Recalculate Order Value
+                    st.session_state.pending_order['Order Value'] = (
+                        st.session_state.pending_order['Order Quantity'] * 
+                        st.session_state.pending_order['Unit Cost']
+                    )
+                    
+                    # Update Modified flag
+                    st.session_state.pending_order['Modified'] = (
+                        (st.session_state.pending_order['Unit Cost'] != st.session_state.pending_order['Original Unit Cost']) | 
+                        (st.session_state.pending_order['Order Quantity'] != st.session_state.pending_order['Original Order Quantity'])
+                    )
+                    
+                    # No save - just refresh display
+                    st.success("✅ Totals recalculated!")
+                    st.rerun()
+            
+            with col_save_progress:
+                if st.button("💾 Save Progress", key="save_verification_progress", help="Save verification progress to Google Sheets"):
                     # Update pending order with edited values
                     for idx, row in edited_verification.iterrows():
                         mask = st.session_state.pending_order['Product'] == row['Product']
                         st.session_state.pending_order.loc[mask, 'Unit Cost'] = row['Unit Cost']
                         st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
                         st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
+                        st.session_state.pending_order.loc[mask, 'Invoice #'] = row['Invoice #']
+                        st.session_state.pending_order.loc[mask, 'Invoice Date'] = row['Invoice Date']
                     
-                    st.session_state.pending_order['Order Value'] = st.session_state.pending_order['Order Quantity'] * st.session_state.pending_order['Unit Cost']
+                    # Recalculate
+                    st.session_state.pending_order['Order Value'] = (
+                        st.session_state.pending_order['Order Quantity'] * 
+                        st.session_state.pending_order['Unit Cost']
+                    )
+                    st.session_state.pending_order['Modified'] = (
+                        (st.session_state.pending_order['Unit Cost'] != st.session_state.pending_order['Original Unit Cost']) | 
+                        (st.session_state.pending_order['Order Quantity'] != st.session_state.pending_order['Original Order Quantity'])
+                    )
                     
-                    order_date = st.session_state.pending_order['Order Date'].iloc[0] if 'Order Date' in st.session_state.pending_order.columns else datetime.now().strftime("%Y-%m-%d")
+                    # Save to Google Sheets for persistence
+                    save_pending_order()
+                    st.success("✅ Progress saved to Google Sheets!")
+                    st.rerun()
+            
+            # Verification Summary
+            st.markdown("---")
+            st.markdown("### Verification Summary")
+            
+            # Recalculate for display
+            display_pending = pending_df.copy()
+            display_pending['Order Value'] = display_pending['Order Quantity'] * display_pending['Unit Cost']
+            
+            modified_count = display_pending['Modified'].sum()
+            
+            col_v1, col_v2, col_v3, col_v4 = st.columns(4)
+            with col_v1:
+                st.metric("Total Items", len(display_pending))
+            with col_v2:
+                st.metric("Modified Items", int(modified_count))
+            with col_v3:
+                st.metric("Total Units", f"{display_pending['Order Quantity'].sum():.1f}")
+            with col_v4:
+                st.metric("Final Order Value", format_currency(display_pending['Order Value'].sum()))
+            
+            # Finalize section
+            st.markdown("---")
+            st.markdown("### Finalize Order")
+            st.markdown("Enter your initials to sign off and save the verified order to history.")
+            
+            col_initials, col_finalize, col_cancel = st.columns([1, 1, 1])
+            
+            with col_initials:
+                verifier_initials = st.text_input(
+                    "Verifier Initials:",
+                    max_chars=5,
+                    key="verifier_initials",
+                    placeholder="e.g., JD"
+                )
+            
+            with col_finalize:
+                st.write("")  # Spacer
+                finalize_disabled = len(verifier_initials.strip()) == 0
+                if st.button("✅ Finalize & Save Order", key="finalize_order", type="primary", disabled=finalize_disabled):
+                    # Update with final edited values
+                    for idx, row in edited_verification.iterrows():
+                        mask = st.session_state.pending_order['Product'] == row['Product']
+                        st.session_state.pending_order.loc[mask, 'Unit Cost'] = row['Unit Cost']
+                        st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
+                        st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
+                        st.session_state.pending_order.loc[mask, 'Invoice #'] = row['Invoice #']
+                        st.session_state.pending_order.loc[mask, 'Invoice Date'] = row['Invoice Date']
                     
-                    # Format invoice date for storage
-                    inv_date_str = invoice_date.strftime("%Y-%m-%d") if invoice_date else ""
+                    st.session_state.pending_order['Order Value'] = (
+                        st.session_state.pending_order['Order Quantity'] * 
+                        st.session_state.pending_order['Unit Cost']
+                    )
                     
+                    # Save to order history
+                    order_date = st.session_state.pending_order['Order Date'].iloc[0]
                     new_orders = []
                     for _, row in st.session_state.pending_order.iterrows():
                         if row['Order Quantity'] > 0:
+                            # V2.21: Format Invoice Date for storage
+                            invoice_date_val = row.get('Invoice Date', None)
+                            if pd.notna(invoice_date_val):
+                                if hasattr(invoice_date_val, 'strftime'):
+                                    invoice_date_str = invoice_date_val.strftime('%Y-%m-%d')
+                                else:
+                                    invoice_date_str = str(invoice_date_val)
+                            else:
+                                invoice_date_str = ''
+                            
                             new_orders.append({
                                 'Week': order_date,
                                 'Product': row['Product'],
@@ -2304,59 +2750,593 @@ def show_ordering():
                                 'Distributor': row['Distributor'],
                                 'Status': 'Verified',
                                 'Verified By': verifier_initials.strip().upper(),
-                                'Invoice #': invoice_number,
-                                'Invoice Date': inv_date_str
+                                'Invoice #': row.get('Invoice #', ''),
+                                'Invoice Date': invoice_date_str,
+                                'Verification Notes': row.get('Verification Notes', '')
                             })
                     
                     if new_orders:
-                        st.session_state.order_history = pd.concat([st.session_state.order_history, pd.DataFrame(new_orders)], ignore_index=True)
+                        st.session_state.order_history = pd.concat([
+                            st.session_state.order_history, pd.DataFrame(new_orders)
+                        ], ignore_index=True)
+                        
+                        # Clear pending order
                         clear_pending_order()
+                        
+                        # Save to files for persistence
                         save_all_inventory_data()
-                        st.success(f"✅ Order verified by {verifier_initials.strip().upper()}!")
+                        
+                        st.success(f"✅ Order verified by {verifier_initials.strip().upper()} and saved to history!")
                         st.balloons()
                         st.rerun()
+                    else:
+                        st.warning("No items with quantity > 0 to save.")
+            
+            with col_cancel:
+                st.write("")  # Spacer
+                if st.button("❌ Cancel Verification", key="cancel_verification"):
+                    clear_pending_order()
+                    st.warning("Verification cancelled. Order has been discarded.")
+                    st.rerun()
+            
+            if finalize_disabled:
+                st.caption("⚠️ Enter your initials above to enable the Finalize button.")
+        
         else:
-            st.info("📋 No orders pending verification.")
+            st.info("📋 No orders pending verification. Complete Steps 1 and 2 to create an order.")
     
     with tab_history:
         st.markdown("### 📜 Previous Orders")
+        
+        # V2.10: Show pending verification notice
+        if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
+            pending_date = st.session_state.pending_order['Order Date'].iloc[0] if 'Order Date' in st.session_state.pending_order.columns else 'Unknown'
+            pending_value = st.session_state.pending_order['Order Value'].sum() if 'Order Value' in st.session_state.pending_order.columns else 0
+            st.warning(f"⏳ **Pending Verification:** Order from {pending_date} ({format_currency(pending_value)}) - Complete Step 3 to finalize.")
+        
         if len(order_history) > 0:
+            # V2.10: Ensure Status column exists for display
             display_history = order_history.copy()
             if 'Status' not in display_history.columns:
-                display_history['Status'] = 'Verified'
+                display_history['Status'] = 'Verified'  # Default for legacy orders
+            if 'Verified By' not in display_history.columns:
+                display_history['Verified By'] = ''
+            # V2.18: Ensure Unit column exists for display
             if 'Unit' not in display_history.columns:
-                display_history['Unit'] = ''
+                display_history['Unit'] = ''  # Default for legacy orders without Unit
+            # V2.21: Ensure Invoice # and Invoice Date columns exist for display
             if 'Invoice #' not in display_history.columns:
-                display_history['Invoice #'] = ''
+                display_history['Invoice #'] = ''  # Default for legacy orders without Invoice #
             if 'Invoice Date' not in display_history.columns:
-                display_history['Invoice Date'] = ''
+                display_history['Invoice Date'] = ''  # Default for legacy orders without Invoice Date
             
-            st.dataframe(
-                display_history.sort_values('Week', ascending=False), 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
-                    "Total Cost": st.column_config.NumberColumn(format="$%.2f"),
-                    "Invoice Date": st.column_config.TextColumn("Invoice Date"),
-                    "Invoice #": st.column_config.TextColumn("Invoice #")
-                }
-            )
+            # V2.17: Add Month column for filtering
+            display_history['Week'] = pd.to_datetime(display_history['Week'])
+            display_history['Month'] = display_history['Week'].dt.to_period('M').astype(str)
+            display_history['Week'] = display_history['Week'].dt.strftime('%Y-%m-%d')
+            
+            # V2.17: Updated filter row with Month filter
+            col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+            
+            with col_f1:
+                # Month filter
+                months = sorted(display_history['Month'].unique(), reverse=True)
+                selected_months = st.multiselect("Filter by Month:", options=months,
+                    default=months[:2] if len(months) >= 2 else months, key="history_month_filter")
+            
+            with col_f2:
+                # Week filter - dynamically update based on selected months
+                if selected_months:
+                    available_weeks = display_history[display_history['Month'].isin(selected_months)]['Week'].unique()
+                else:
+                    available_weeks = display_history['Week'].unique()
+                weeks = sorted(available_weeks, reverse=True)
+                selected_weeks = st.multiselect("Filter by Week:", options=weeks,
+                    default=weeks, key="history_week_filter")
+            
+            with col_f3:
+                categories = display_history['Category'].unique().tolist()
+                selected_categories = st.multiselect("Filter by Category:", options=categories,
+                    default=categories, key="history_category_filter")
+            
+            with col_f4:
+                status_options = display_history['Status'].unique().tolist()
+                selected_statuses = st.multiselect("Filter by Status:", options=status_options,
+                    default=status_options, key="history_status_filter")
+            
+            filtered_history = display_history.copy()
+            if selected_months:
+                filtered_history = filtered_history[filtered_history['Month'].isin(selected_months)]
+            if selected_weeks:
+                filtered_history = filtered_history[filtered_history['Week'].isin(selected_weeks)]
+            if selected_categories:
+                filtered_history = filtered_history[filtered_history['Category'].isin(selected_categories)]
+            if selected_statuses:
+                filtered_history = filtered_history[filtered_history['Status'].isin(selected_statuses)]
+            
+            st.markdown("#### Weekly Order Totals")
+            weekly_totals = filtered_history.groupby('Week').agg({
+                'Total Cost': 'sum',
+                'Verified By': 'first'
+            }).reset_index()
+            weekly_totals = weekly_totals.sort_values('Week', ascending=False)
+            weekly_totals['Status'] = '✅ Verified'
+            
+            # V2.17: Add total row at the bottom
+            if len(weekly_totals) > 0:
+                total_cost = weekly_totals['Total Cost'].sum()
+                total_row = pd.DataFrame([{
+                    'Week': '📊 TOTAL',
+                    'Total Cost': total_cost,
+                    'Status': '',
+                    'Verified By': f'{len(weekly_totals)} orders'
+                }])
+                weekly_totals_with_total = pd.concat([weekly_totals, total_row], ignore_index=True)
+            else:
+                weekly_totals_with_total = weekly_totals
+            
+            st.dataframe(weekly_totals_with_total[['Week', 'Total Cost', 'Status', 'Verified By']], 
+                        use_container_width=True, hide_index=True,
+                        column_config={"Total Cost": st.column_config.NumberColumn(format="$%.2f")})
+            
+            st.markdown("#### Order Details")
+            # Select columns to display - V2.21: Added Invoice Date column
+            detail_cols = ['Week', 'Product', 'Category', 'Quantity Ordered', 'Unit', 'Unit Cost', 
+                          'Total Cost', 'Distributor', 'Invoice #', 'Invoice Date', 'Status', 'Verified By']
+            # Only include columns that exist
+            detail_cols = [c for c in detail_cols if c in filtered_history.columns]
+            
+            st.dataframe(filtered_history[detail_cols].sort_values(['Week', 'Product'], ascending=[False, True]),
+                        use_container_width=True, hide_index=True,
+                        column_config={
+                            "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
+                            "Total Cost": st.column_config.NumberColumn(format="$%.2f")
+                        })
         else:
-            st.info("No order history yet.")
+            st.info("No order history yet. Complete all 3 steps to save an order.")
     
     with tab_analytics:
         st.markdown("### 📈 Order Analytics")
         if len(order_history) > 0:
-            analytics_data = order_history.copy()
-            total_spend = analytics_data['Total Cost'].sum()
-            st.metric("💰 Total Spend (All Time)", format_currency(total_spend))
+            # =================================================================
+            # V2.20: CONSISTENT CATEGORY COLORS
+            # =================================================================
+            category_colors = {
+                'Spirits': '#8B5CF6',    # Purple
+                'Wine': '#EC4899',       # Pink
+                'Beer': '#F59E0B',       # Amber
+                'Ingredients': '#10B981' # Emerald
+            }
             
-            cat_spend = analytics_data.groupby('Category')['Total Cost'].sum().reset_index()
-            fig_pie = px.pie(cat_spend, values='Total Cost', names='Category', title='Spending by Category')
-            st.plotly_chart(fig_pie, use_container_width=True)
+            # =================================================================
+            # V2.20: DATE RANGE FILTER
+            # =================================================================
+            st.markdown("#### 📅 Date Range Filter")
+            
+            # Convert Week to datetime for filtering
+            analytics_data = order_history.copy()
+            analytics_data['Week'] = pd.to_datetime(analytics_data['Week'])
+            
+            min_date = analytics_data['Week'].min().date()
+            max_date = analytics_data['Week'].max().date()
+            
+            col_date1, col_date2, col_date3 = st.columns([1, 1, 2])
+            
+            with col_date1:
+                start_date = st.date_input(
+                    "Start Date:",
+                    value=min_date,
+                    min_value=min_date,
+                    max_value=max_date,
+                    key="analytics_start_date"
+                )
+            
+            with col_date2:
+                end_date = st.date_input(
+                    "End Date:",
+                    value=max_date,
+                    min_value=min_date,
+                    max_value=max_date,
+                    key="analytics_end_date"
+                )
+            
+            with col_date3:
+                # Quick date range buttons
+                st.write("")  # Spacer
+                col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+                # Note: These are display-only labels since date_input handles the actual filtering
+            
+            # Filter data by date range
+            filtered_analytics = analytics_data[
+                (analytics_data['Week'].dt.date >= start_date) & 
+                (analytics_data['Week'].dt.date <= end_date)
+            ].copy()
+            
+            # Calculate comparison period (same length, immediately prior)
+            date_range_days = (end_date - start_date).days
+            prior_start = start_date - timedelta(days=date_range_days + 1)
+            prior_end = start_date - timedelta(days=1)
+            
+            prior_period_data = analytics_data[
+                (analytics_data['Week'].dt.date >= prior_start) & 
+                (analytics_data['Week'].dt.date <= prior_end)
+            ]
+            
+            st.caption(f"Showing data from {start_date.strftime('%b %d, %Y')} to {end_date.strftime('%b %d, %Y')} ({len(filtered_analytics)} orders)")
+            
+            st.markdown("---")
+            
+            # =================================================================
+            # V2.22: KEY METRICS DASHBOARD - Simplified to 4 key metrics
+            # =================================================================
+            st.markdown("#### 📊 Key Metrics")
+            
+            # Calculate current period metrics
+            total_spend = filtered_analytics['Total Cost'].sum()
+            num_orders = len(filtered_analytics['Week'].unique())
+            avg_weekly_spend = total_spend / max(num_orders, 1)
+            total_items_ordered = len(filtered_analytics)
+            
+            # Calculate top category and product (used in export report)
+            top_category = filtered_analytics.groupby('Category')['Total Cost'].sum().idxmax() if len(filtered_analytics) > 0 else "N/A"
+            top_product = filtered_analytics.groupby('Product')['Total Cost'].sum().idxmax() if len(filtered_analytics) > 0 else "N/A"
+            
+            # Calculate prior period metrics for trend indicators
+            prior_total_spend = prior_period_data['Total Cost'].sum() if len(prior_period_data) > 0 else 0
+            prior_num_orders = len(prior_period_data['Week'].unique()) if len(prior_period_data) > 0 else 0
+            prior_avg_weekly = prior_total_spend / max(prior_num_orders, 1) if prior_num_orders > 0 else 0
+            
+            # Calculate deltas
+            spend_delta = total_spend - prior_total_spend
+            spend_delta_pct = (spend_delta / prior_total_spend * 100) if prior_total_spend > 0 else 0
+            avg_delta = avg_weekly_spend - prior_avg_weekly
+            avg_delta_pct = (avg_delta / prior_avg_weekly * 100) if prior_avg_weekly > 0 else 0
+            
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            
+            with col_m1:
+                delta_str = f"{'↑' if spend_delta >= 0 else '↓'} ${abs(spend_delta):,.0f}" if prior_total_spend > 0 else None
+                st.metric(
+                    "💰 Total Spend",
+                    f"${total_spend:,.2f}",
+                    delta=delta_str,
+                    delta_color="inverse"  # Red for increase (spending), green for decrease
+                )
+            
+            with col_m2:
+                delta_avg_str = f"{'↑' if avg_delta >= 0 else '↓'} ${abs(avg_delta):,.0f}" if prior_avg_weekly > 0 else None
+                st.metric(
+                    "📅 Avg Weekly Spend",
+                    f"${avg_weekly_spend:,.2f}",
+                    delta=delta_avg_str,
+                    delta_color="inverse"
+                )
+            
+            with col_m3:
+                st.metric("📦 Total Orders", f"{total_items_ordered:,}")
+            
+            with col_m4:
+                # Spend Comparison to previous period
+                if prior_total_spend > 0:
+                    comparison_pct = spend_delta_pct
+                    comparison_str = f"{'↑' if comparison_pct >= 0 else '↓'} {abs(comparison_pct):.1f}%"
+                    comparison_color = "🔴" if comparison_pct > 0 else "🟢"
+                    st.metric(
+                        "📈 vs Prior Period",
+                        f"{comparison_color} {abs(comparison_pct):.1f}%",
+                        delta=f"${abs(spend_delta):,.0f} {'more' if spend_delta >= 0 else 'less'}",
+                        delta_color="inverse"
+                    )
+                else:
+                    st.metric("📈 vs Prior Period", "N/A", delta="No prior data")
+            
+            st.markdown("---")
+            
+            # =================================================================
+            # V2.22: SPENDING BY CATEGORY - Pie chart with Top Products dropdowns
+            # =================================================================
+            st.markdown("#### 📊 Spending by Category")
+            
+            cat_spend = filtered_analytics.groupby('Category')['Total Cost'].sum().reset_index()
+            cat_spend = cat_spend.sort_values('Total Cost', ascending=False)
+            
+            col_cat_pie, col_cat_dropdowns = st.columns([1, 1])
+            
+            with col_cat_pie:
+                fig_pie = px.pie(
+                    cat_spend, 
+                    values='Total Cost', 
+                    names='Category', 
+                    title='Category Distribution',
+                    color='Category',
+                    color_discrete_map=category_colors
+                )
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig_pie, use_container_width=True)
+            
+            with col_cat_dropdowns:
+                st.markdown("**🏆 Top Products by Category**")
+                st.markdown("Expand each category to see top 10 products by spend.")
+                
+                categories = sorted(filtered_analytics['Category'].unique())
+                
+                for category in categories:
+                    category_data = filtered_analytics[filtered_analytics['Category'] == category]
+                    category_total = category_data['Total Cost'].sum()
+                    
+                    with st.expander(f"**{category}** - ${category_total:,.2f}", expanded=False):
+                        top_in_category = category_data.groupby('Product').agg({
+                            'Quantity Ordered': 'sum',
+                            'Total Cost': 'sum'
+                        }).sort_values('Total Cost', ascending=False).head(10)
+                        
+                        if len(top_in_category) > 0:
+                            st.dataframe(
+                                top_in_category.reset_index().rename(columns={
+                                    'Product': 'Product', 
+                                    'Quantity Ordered': 'Units', 
+                                    'Total Cost': 'Spend'
+                                }),
+                                use_container_width=True, 
+                                hide_index=True,
+                                column_config={
+                                    "Spend": st.column_config.NumberColumn(format="$%.2f")
+                                }
+                            )
+                        else:
+                            st.info(f"No orders found for {category}.")
+            
+            st.markdown("---")
+            
+            # =================================================================
+            # V2.22: PRICE CHANGE TRACKER - Enhanced with date and acknowledgment
+            # =================================================================
+            st.markdown("#### 💲 Price Change Tracker")
+            st.markdown("Products with unit cost changes from their first recorded order. Check the box when you've reviewed and updated Master Inventory if needed.")
+            
+            # Find price changes
+            price_changes = []
+            for product in analytics_data['Product'].unique():
+                product_data = analytics_data[analytics_data['Product'] == product].sort_values('Week')
+                if len(product_data) >= 2:
+                    first_price = product_data.iloc[0]['Unit Cost']
+                    latest_price = product_data.iloc[-1]['Unit Cost']
+                    
+                    if first_price != latest_price:
+                        change = latest_price - first_price
+                        change_pct = (change / first_price * 100) if first_price > 0 else 0
+                        # Get the date when the price change was recorded (latest order date)
+                        change_date = product_data.iloc[-1]['Week']
+                        if hasattr(change_date, 'strftime'):
+                            change_date_str = change_date.strftime('%Y-%m-%d')
+                        else:
+                            change_date_str = str(change_date)[:10]
+                        
+                        # Check if this price change has been acknowledged
+                        ack_key = f"{product}_{change_date_str}"
+                        acknowledged = st.session_state.price_change_acks.get(ack_key, False)
+                        
+                        price_changes.append({
+                            'Product': product,
+                            'Category': product_data.iloc[0]['Category'],
+                            'First Price': first_price,
+                            'Current Price': latest_price,
+                            'Change ($)': change,
+                            'Change (%)': change_pct,
+                            'Direction': '🔺 Increase' if change > 0 else '🔻 Decrease',
+                            'Date Recorded': change_date_str,
+                            'Reviewed': acknowledged,
+                            '_ack_key': ack_key
+                        })
+            
+            if price_changes:
+                price_df = pd.DataFrame(price_changes)
+                price_df = price_df.sort_values('Change (%)', ascending=False, key=abs)
+                
+                # Display columns without the internal ack_key
+                display_cols = ['Reviewed', 'Product', 'Category', 'First Price', 'Current Price', 
+                               'Change ($)', 'Change (%)', 'Direction', 'Date Recorded']
+                
+                edited_price_df = st.data_editor(
+                    price_df[display_cols],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Reviewed": st.column_config.CheckboxColumn("✅ Reviewed", help="Check when you've reviewed and updated Master Inventory", width="small"),
+                        "First Price": st.column_config.NumberColumn(format="$%.2f"),
+                        "Current Price": st.column_config.NumberColumn(format="$%.2f"),
+                        "Change ($)": st.column_config.NumberColumn(format="$%.2f"),
+                        "Change (%)": st.column_config.NumberColumn(format="%.1f%%"),
+                        "Date Recorded": st.column_config.TextColumn("Date Recorded", width="small")
+                    },
+                    disabled=['Product', 'Category', 'First Price', 'Current Price', 'Change ($)', 'Change (%)', 'Direction', 'Date Recorded'],
+                    key="price_change_editor"
+                )
+                
+                # Save acknowledgments back to session state and Google Sheets
+                for idx, row in edited_price_df.iterrows():
+                    original_row = price_df.loc[idx]  # Use .loc (by label) not .iloc (by position)
+                    ack_key = original_row['_ack_key']
+                    st.session_state.price_change_acks[ack_key] = row['Reviewed']
+                
+                # V2.22: Persist to Google Sheets
+                save_price_change_acks()
+                
+                # Show summary and download button
+                col_summary, col_download = st.columns([2, 1])
+                
+                with col_summary:
+                    reviewed_count = edited_price_df['Reviewed'].sum()
+                    total_count = len(edited_price_df)
+                    if reviewed_count == total_count:
+                        st.success(f"✅ All {total_count} price changes have been reviewed!")
+                    else:
+                        st.info(f"📋 {reviewed_count} of {total_count} price changes reviewed.")
+                
+                with col_download:
+                    price_csv = pd.DataFrame(price_changes).to_csv(index=False)
+                    st.download_button(
+                        label="💲 Download Price Changes",
+                        data=price_csv,
+                        file_name=f"price_changes_{start_date}_{end_date}.csv",
+                        mime="text/csv",
+                        key="download_price_changes"
+                    )
+            else:
+                st.info("✅ No price changes detected in your order history.")
+            
+            st.markdown("---")
+            
+            # =================================================================
+            # PRODUCT ANALYSIS
+            # =================================================================
+            st.markdown("#### 📈 Product Analysis")
+            st.markdown("Select products below to view order trends, spending patterns, and summary statistics over time.")
+            
+            products = sorted(filtered_analytics['Product'].unique())
+            selected_products = st.multiselect("Select products:", options=products,
+                default=products[:3] if len(products) >= 3 else products, key="analytics_products")
+            
+            if selected_products:
+                plot_data = filtered_analytics[filtered_analytics['Product'].isin(selected_products)]
+                
+                col_qty_chart, col_cost_chart = st.columns(2)
+                
+                with col_qty_chart:
+                    st.markdown("**Quantity Ordered Over Time**")
+                    fig_qty = px.line(plot_data, x='Week', y='Quantity Ordered', color='Product',
+                                     markers=True)
+                    fig_qty.update_layout(height=350)
+                    st.plotly_chart(fig_qty, use_container_width=True)
+                
+                with col_cost_chart:
+                    st.markdown("**Spending Over Time**")
+                    fig_cost = px.line(plot_data, x='Week', y='Total Cost', color='Product',
+                                      markers=True)
+                    fig_cost.update_layout(
+                        yaxis_tickprefix='$', 
+                        yaxis_tickformat=',.2f',
+                        height=350
+                    )
+                    st.plotly_chart(fig_cost, use_container_width=True)
+                
+                st.markdown("**Product Summary Statistics**")
+                summary = plot_data.groupby('Product').agg({
+                    'Quantity Ordered': ['sum', 'mean', 'std'],
+                    'Total Cost': ['sum', 'mean']
+                }).round(2)
+                summary.columns = ['Total Qty', 'Avg Qty/Week', 'Std Dev', 'Total Spend', 'Avg Spend/Week']
+                st.dataframe(summary.reset_index(), use_container_width=True, hide_index=True,
+                            column_config={
+                                "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
+                                "Avg Spend/Week": st.column_config.NumberColumn(format="$%.2f")
+                            })
+            
+            st.markdown("---")
+            
+            # =================================================================
+            # DISTRIBUTOR ANALYTICS
+            # =================================================================
+            st.markdown("#### 🚚 Distributor Analytics")
+            
+            dist_spend = filtered_analytics.groupby('Distributor').agg({
+                'Total Cost': 'sum',
+                'Quantity Ordered': 'sum',
+                'Product': 'nunique'
+            }).reset_index()
+            dist_spend.columns = ['Distributor', 'Total Spend', 'Total Units', '# Products']
+            dist_spend = dist_spend.sort_values('Total Spend', ascending=False)
+            
+            col_dist_chart, col_dist_table = st.columns([1, 1])
+            
+            with col_dist_chart:
+                fig_dist = px.pie(
+                    dist_spend, 
+                    values='Total Spend', 
+                    names='Distributor', 
+                    title='Spend by Distributor',
+                    hole=0.4  # Donut chart
+                )
+                fig_dist.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig_dist, use_container_width=True)
+            
+            with col_dist_table:
+                st.dataframe(
+                    dist_spend,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
+                        "Total Units": st.column_config.NumberColumn(format="%.1f")
+                    }
+                )
+            
+            st.markdown("---")
+            
+            # =================================================================
+            # V2.20: DOWNLOAD ANALYTICS REPORT
+            # =================================================================
+            st.markdown("#### 📥 Export Analytics")
+            
+            col_export1, col_export2 = st.columns(2)
+            
+            with col_export1:
+                # Export filtered order data
+                csv_orders = filtered_analytics.to_csv(index=False)
+                st.download_button(
+                    label="📊 Download Order Data (CSV)",
+                    data=csv_orders,
+                    file_name=f"order_analytics_{start_date}_{end_date}.csv",
+                    mime="text/csv",
+                    key="download_analytics_csv"
+                )
+            
+            with col_export2:
+                # Export summary report
+                summary_report = f"""BEVERAGE ORDER ANALYTICS REPORT
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+Period: {start_date} to {end_date}
+{'='*50}
+
+KEY METRICS
+-----------
+Total Spend: ${total_spend:,.2f}
+Average Weekly Spend: ${avg_weekly_spend:,.2f}
+Number of Order Weeks: {num_orders}
+Top Category: {top_category}
+Top Product: {top_product}
+
+SPENDING BY CATEGORY
+--------------------
+"""
+                for _, row in cat_spend.iterrows():
+                    summary_report += f"{row['Category']}: ${row['Total Cost']:,.2f}\n"
+                
+                summary_report += f"""
+SPENDING BY DISTRIBUTOR
+-----------------------
+"""
+                for _, row in dist_spend.iterrows():
+                    summary_report += f"{row['Distributor']}: ${row['Total Spend']:,.2f} ({row['# Products']} products)\n"
+                
+                if price_changes:
+                    summary_report += f"""
+PRICE CHANGES DETECTED
+----------------------
+"""
+                    for pc in price_changes:
+                        summary_report += f"{pc['Product']}: ${pc['First Price']:.2f} → ${pc['Current Price']:.2f} ({pc['Change (%)']:.1f}%)\n"
+                
+                st.download_button(
+                    label="📝 Download Summary Report",
+                    data=summary_report,
+                    file_name=f"analytics_summary_{start_date}_{end_date}.txt",
+                    mime="text/plain",
+                    key="download_analytics_summary"
+                )
+            
         else:
-            st.info("No order history yet.")
+            st.info("No order history yet. Save some orders to see analytics.")
 
 
 # =============================================================================
