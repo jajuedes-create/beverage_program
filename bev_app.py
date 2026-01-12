@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.24
+# BEVERAGE MANAGEMENT APP V2.25
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -50,6 +50,7 @@
 #           - Sales input for COGS % calculation
 #           - Export COGS report
 #           - Save COGS calculations to history
+#   V2.25 - Added sidebar navigation for direct module-to-module navigation
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -601,7 +602,7 @@ def get_purchases_by_category_and_date(start_date: str, end_date: str) -> dict:
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.24",
+    page_title="Beverage Management App V2.25",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1309,6 +1310,53 @@ def navigate_to(page: str):
     st.session_state.current_page = page
 
 
+def show_sidebar_navigation():
+    """
+    Displays sidebar navigation for direct module-to-module navigation.
+    V2.25: Allows users to navigate between modules without returning to home.
+    """
+    with st.sidebar:
+        st.markdown("### 🍸 Navigation")
+        st.markdown("---")
+        
+        # Home button
+        if st.button("🏠 Home", key="nav_home", use_container_width=True):
+            navigate_to('home')
+            st.rerun()
+        
+        st.markdown("")
+        
+        # Module buttons with visual indicator for current page
+        current = st.session_state.current_page
+        
+        # Inventory
+        inv_label = "📦 Master Inventory" + (" ●" if current == 'inventory' else "")
+        if st.button(inv_label, key="nav_inventory", use_container_width=True, disabled=(current == 'inventory')):
+            navigate_to('inventory')
+            st.rerun()
+        
+        # Ordering
+        ord_label = "📋 Weekly Orders" + (" ●" if current == 'ordering' else "")
+        if st.button(ord_label, key="nav_ordering", use_container_width=True, disabled=(current == 'ordering')):
+            navigate_to('ordering')
+            st.rerun()
+        
+        # Cocktails
+        cock_label = "🍹 Cocktail Builds" + (" ●" if current == 'cocktails' else "")
+        if st.button(cock_label, key="nav_cocktails", use_container_width=True, disabled=(current == 'cocktails')):
+            navigate_to('cocktails')
+            st.rerun()
+        
+        # COGS
+        cogs_label = "📊 COGS Calculator" + (" ●" if current == 'cogs' else "")
+        if st.button(cogs_label, key="nav_cogs", use_container_width=True, disabled=(current == 'cogs')):
+            navigate_to('cogs')
+            st.rerun()
+        
+        st.markdown("---")
+        st.caption("Canter Inn • Madison, WI")
+
+
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
@@ -1662,7 +1710,7 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.24</h1>
+        <h1>🍸 Beverage Management App V2.25</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -1756,6 +1804,9 @@ def show_home():
 
 def show_inventory():
     """Renders the Master Inventory module."""
+    
+    # V2.25: Sidebar navigation
+    show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
     with col_back:
@@ -1930,6 +1981,9 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
 
 def show_ordering():
     """Renders the Weekly Order Builder module."""
+    
+    # V2.25: Sidebar navigation
+    show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
     with col_back:
@@ -2227,6 +2281,9 @@ def show_ordering():
 def show_cocktails():
     """Renders the Cocktail Builds Book module."""
     
+    # V2.25: Sidebar navigation
+    show_sidebar_navigation()
+    
     col_back, col_title = st.columns([1, 11])
     with col_back:
         if st.button("← Home"):
@@ -2505,6 +2562,9 @@ def show_cocktails():
 
 def show_cogs():
     """Renders the Cost of Goods Sold module."""
+    
+    # V2.25: Sidebar navigation
+    show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
     with col_back:
