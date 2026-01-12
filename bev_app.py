@@ -51,6 +51,8 @@
 #           - Export COGS report
 #           - Save COGS calculations to history
 #   V2.25 - Added sidebar navigation for direct module-to-module navigation
+#           Restored Step 3 verification features: Invoice Date (calendar picker),
+#           Invoice #, and value change columns (Unit Cost Δ, Qty Δ)
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -2190,26 +2192,83 @@ def show_ordering():
             else:
                 st.info("👆 Update inventory and click 'Generate Orders' to see what needs ordering.")
         
-        # Step 3: Verification (simplified)
+        # Step 3: Verification (with Invoice Date, Invoice #, and change tracking)
         st.markdown("---")
         st.markdown("### Step 3: Order Verification")
         
         if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
             pending_df = st.session_state.pending_order.copy()
+            
+            # Ensure required columns exist
             if 'Verification Notes' not in pending_df.columns:
                 pending_df['Verification Notes'] = ''
+            if 'Original Unit Cost' not in pending_df.columns:
+                pending_df['Original Unit Cost'] = pending_df['Unit Cost']
+            if 'Original Order Quantity' not in pending_df.columns:
+                pending_df['Original Order Quantity'] = pending_df['Order Quantity']
+            if 'Invoice #' not in pending_df.columns:
+                pending_df['Invoice #'] = ''
+            if 'Invoice Date' not in pending_df.columns:
+                pending_df['Invoice Date'] = None
+            
             pending_df['Verification Notes'] = pending_df['Verification Notes'].fillna('').astype(str)
+            pending_df['Invoice #'] = pending_df['Invoice #'].fillna('').astype(str)
+            
+            # Calculate changes from original values
+            pending_df['Cost Changed'] = pending_df['Unit Cost'] != pending_df['Original Unit Cost']
+            pending_df['Qty Changed'] = pending_df['Order Quantity'] != pending_df['Original Order Quantity']
+            
+            # Format change indicators
+            pending_df['Unit Cost Δ'] = pending_df.apply(
+                lambda row: f"${row['Original Unit Cost']:.2f} → ${row['Unit Cost']:.2f}" if row['Cost Changed'] else "", axis=1
+            )
+            pending_df['Qty Δ'] = pending_df.apply(
+                lambda row: f"{row['Original Order Quantity']:.1f} → {row['Order Quantity']:.1f}" if row['Qty Changed'] else "", axis=1
+            )
             
             st.markdown(f"**{len(pending_df)} items pending verification:**")
             
-            verify_cols = ['Product', 'Category', 'Distributor', 'Unit Cost', 'Order Quantity', 'Order Value', 'Verification Notes']
-            edited_verification = st.data_editor(pending_df[verify_cols], use_container_width=True, hide_index=True, key="verification_editor",
+            # Invoice Date and Invoice # inputs (per-order, not per-item)
+            st.markdown("##### 📋 Invoice Details")
+            col_inv_date, col_inv_num = st.columns(2)
+            with col_inv_date:
+                invoice_date = st.date_input(
+                    "Invoice Date:",
+                    value=None,
+                    key="verification_invoice_date",
+                    help="Date on the invoice from distributor"
+                )
+            with col_inv_num:
+                invoice_number = st.text_input(
+                    "Invoice #:",
+                    value="",
+                    key="verification_invoice_number",
+                    help="Invoice number from distributor"
+                )
+            
+            st.markdown("##### 📦 Order Items")
+            
+            # Build verification table with change columns
+            verify_cols = ['Product', 'Category', 'Distributor', 'Unit', 'Unit Cost', 'Unit Cost Δ', 
+                          'Order Quantity', 'Qty Δ', 'Order Value', 'Verification Notes']
+            
+            display_pending = pending_df[verify_cols].copy()
+            
+            edited_verification = st.data_editor(
+                display_pending, 
+                use_container_width=True, 
+                hide_index=True, 
+                key="verification_editor",
                 column_config={
                     "Unit Cost": st.column_config.NumberColumn(format="$%.2f", min_value=0, step=0.01),
+                    "Unit Cost Δ": st.column_config.TextColumn("Cost Change", disabled=True, help="Original → New"),
                     "Order Quantity": st.column_config.NumberColumn(min_value=0, step=0.5),
+                    "Qty Δ": st.column_config.TextColumn("Qty Change", disabled=True, help="Original → New"),
                     "Order Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
+                    "Unit": st.column_config.TextColumn(disabled=True),
                 },
-                disabled=["Product", "Category", "Distributor", "Order Value"])
+                disabled=["Product", "Category", "Distributor", "Unit", "Order Value", "Unit Cost Δ", "Qty Δ"]
+            )
             
             col_init, col_final = st.columns([1, 1])
             with col_init:
@@ -2217,24 +2276,38 @@ def show_ordering():
             with col_final:
                 st.write("")
                 if st.button("✅ Finalize Order", key="finalize_order", type="primary", disabled=len(verifier_initials.strip()) == 0):
+                    # Update pending order with edited values
                     for idx, row in edited_verification.iterrows():
                         mask = st.session_state.pending_order['Product'] == row['Product']
                         st.session_state.pending_order.loc[mask, 'Unit Cost'] = row['Unit Cost']
                         st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
                         st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
+                    
                     st.session_state.pending_order['Order Value'] = st.session_state.pending_order['Order Quantity'] * st.session_state.pending_order['Unit Cost']
                     
                     order_date = st.session_state.pending_order['Order Date'].iloc[0] if 'Order Date' in st.session_state.pending_order.columns else datetime.now().strftime("%Y-%m-%d")
+                    
+                    # Format invoice date for storage
+                    inv_date_str = invoice_date.strftime("%Y-%m-%d") if invoice_date else ""
+                    
                     new_orders = []
                     for _, row in st.session_state.pending_order.iterrows():
                         if row['Order Quantity'] > 0:
                             new_orders.append({
-                                'Week': order_date, 'Product': row['Product'], 'Category': row['Category'],
-                                'Quantity Ordered': row['Order Quantity'], 'Unit': row.get('Unit', ''),
-                                'Unit Cost': row['Unit Cost'], 'Total Cost': row['Order Value'],
-                                'Distributor': row['Distributor'], 'Status': 'Verified',
-                                'Verified By': verifier_initials.strip().upper()
+                                'Week': order_date,
+                                'Product': row['Product'],
+                                'Category': row['Category'],
+                                'Quantity Ordered': row['Order Quantity'],
+                                'Unit': row.get('Unit', ''),
+                                'Unit Cost': row['Unit Cost'],
+                                'Total Cost': row['Order Value'],
+                                'Distributor': row['Distributor'],
+                                'Status': 'Verified',
+                                'Verified By': verifier_initials.strip().upper(),
+                                'Invoice #': invoice_number,
+                                'Invoice Date': inv_date_str
                             })
+                    
                     if new_orders:
                         st.session_state.order_history = pd.concat([st.session_state.order_history, pd.DataFrame(new_orders)], ignore_index=True)
                         clear_pending_order()
@@ -2253,10 +2326,22 @@ def show_ordering():
                 display_history['Status'] = 'Verified'
             if 'Unit' not in display_history.columns:
                 display_history['Unit'] = ''
+            if 'Invoice #' not in display_history.columns:
+                display_history['Invoice #'] = ''
+            if 'Invoice Date' not in display_history.columns:
+                display_history['Invoice Date'] = ''
             
-            st.dataframe(display_history.sort_values('Week', ascending=False), use_container_width=True, hide_index=True,
-                column_config={"Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
-                              "Total Cost": st.column_config.NumberColumn(format="$%.2f")})
+            st.dataframe(
+                display_history.sort_values('Week', ascending=False), 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
+                    "Total Cost": st.column_config.NumberColumn(format="$%.2f"),
+                    "Invoice Date": st.column_config.TextColumn("Invoice Date"),
+                    "Invoice #": st.column_config.TextColumn("Invoice #")
+                }
+            )
         else:
             st.info("No order history yet.")
     
