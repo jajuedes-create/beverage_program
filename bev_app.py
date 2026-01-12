@@ -36,7 +36,8 @@
 #   V2.21 - Weekly Order Builder: Added Invoice Date column with calendar date picker in Step 3
 #   V2.22 - Order Analytics: Streamlined Key Metrics (4 cards), removed Budget section,
 #           combined Spending by Category pie chart with Top Products dropdowns,
-#           enhanced Price Change Tracker with date and acknowledgment checkbox
+#           enhanced Price Change Tracker with date, acknowledgment checkbox, and
+#           Google Sheets persistence for reviewed status
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -347,6 +348,42 @@ def clear_pending_order():
                 worksheet.clear()
             except:
                 pass  # Worksheet doesn't exist, that's fine
+
+
+def save_price_change_acks():
+    """Saves price change acknowledgments to Google Sheets."""
+    if not is_google_sheets_configured():
+        return
+    
+    if 'price_change_acks' in st.session_state and len(st.session_state.price_change_acks) > 0:
+        # Convert dictionary to dataframe
+        acks_data = [{'ack_key': k, 'reviewed': v} for k, v in st.session_state.price_change_acks.items()]
+        acks_df = pd.DataFrame(acks_data)
+        save_dataframe_to_sheets(acks_df, 'price_change_acks')
+
+
+def load_price_change_acks() -> dict:
+    """Loads price change acknowledgments from Google Sheets."""
+    if not is_google_sheets_configured():
+        return {}
+    
+    try:
+        acks_df = load_dataframe_from_sheets('price_change_acks')
+        if acks_df is not None and len(acks_df) > 0:
+            # Convert dataframe back to dictionary
+            acks_dict = {}
+            for _, row in acks_df.iterrows():
+                # Handle boolean conversion (may come back as string from sheets)
+                reviewed = row['reviewed']
+                if isinstance(reviewed, str):
+                    reviewed = reviewed.lower() == 'true'
+                acks_dict[row['ack_key']] = reviewed
+            return acks_dict
+    except Exception as e:
+        pass  # Worksheet doesn't exist yet, that's fine
+    
+    return {}
+
 
 def save_cocktail_recipes():
     """Saves cocktail recipes to Google Sheets."""
@@ -1117,6 +1154,11 @@ def init_session_state():
             st.session_state.pending_order = saved_pending
         else:
             st.session_state.pending_order = pd.DataFrame()
+    
+    # V2.22: Load price change acknowledgments
+    if 'price_change_acks' not in st.session_state:
+        saved_acks = load_price_change_acks() if sheets_configured else {}
+        st.session_state.price_change_acks = saved_acks
     
     # ----- Load Cocktail Recipes -----
     
@@ -3382,10 +3424,6 @@ def show_ordering():
             st.markdown("#### 💲 Price Change Tracker")
             st.markdown("Products with unit cost changes from their first recorded order. Check the box when you've reviewed and updated Master Inventory if needed.")
             
-            # Initialize price change acknowledgments in session state
-            if 'price_change_acks' not in st.session_state:
-                st.session_state.price_change_acks = {}
-            
             # Find price changes
             price_changes = []
             for product in analytics_data['Product'].unique():
@@ -3445,11 +3483,14 @@ def show_ordering():
                     key="price_change_editor"
                 )
                 
-                # Save acknowledgments back to session state
+                # Save acknowledgments back to session state and Google Sheets
                 for idx, row in edited_price_df.iterrows():
-                    original_row = price_df.iloc[idx]
+                    original_row = price_df.loc[idx]  # Use .loc (by label) not .iloc (by position)
                     ack_key = original_row['_ack_key']
                     st.session_state.price_change_acks[ack_key] = row['Reviewed']
+                
+                # V2.22: Persist to Google Sheets
+                save_price_change_acks()
                 
                 # Show summary
                 reviewed_count = edited_price_df['Reviewed'].sum()
