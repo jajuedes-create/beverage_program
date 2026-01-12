@@ -36,8 +36,7 @@
 #   V2.21 - Weekly Order Builder: Added Invoice Date column with calendar date picker in Step 3
 #   V2.22 - Order Analytics: Streamlined Key Metrics (4 cards), removed Budget section,
 #           combined Spending by Category pie chart with Top Products dropdowns,
-#           added Unit to Product Analysis, enhanced Price Change Tracker with date and
-#           acknowledgment checkbox
+#           enhanced Price Change Tracker with date and acknowledgment checkbox
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -3266,6 +3265,10 @@ def show_ordering():
             avg_weekly_spend = total_spend / max(num_orders, 1)
             total_items_ordered = len(filtered_analytics)
             
+            # Calculate top category and product (used in export report)
+            top_category = filtered_analytics.groupby('Category')['Total Cost'].sum().idxmax() if len(filtered_analytics) > 0 else "N/A"
+            top_product = filtered_analytics.groupby('Product')['Total Cost'].sum().idxmax() if len(filtered_analytics) > 0 else "N/A"
+            
             # Calculate prior period metrics for trend indicators
             prior_total_spend = prior_period_data['Total Cost'].sum() if len(prior_period_data) > 0 else 0
             prior_num_orders = len(prior_period_data['Week'].unique()) if len(prior_period_data) > 0 else 0
@@ -3533,31 +3536,16 @@ def show_ordering():
                     st.plotly_chart(fig_cost, use_container_width=True)
                 
                 st.markdown("**Product Summary Statistics**")
-                # V2.22: Added Unit column to summary
-                # Check if Unit column exists in the data
-                if 'Unit' in plot_data.columns:
-                    summary = plot_data.groupby('Product').agg({
-                        'Unit': 'first',
-                        'Quantity Ordered': ['sum', 'mean', 'std'],
-                        'Total Cost': ['sum', 'mean']
-                    }).round(2)
-                    summary.columns = ['Unit', 'Total Qty', 'Avg Qty/Week', 'Std Dev', 'Total Spend', 'Avg Spend/Week']
-                    st.dataframe(summary.reset_index(), use_container_width=True, hide_index=True,
-                                column_config={
-                                    "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
-                                    "Avg Spend/Week": st.column_config.NumberColumn(format="$%.2f")
-                                })
-                else:
-                    summary = plot_data.groupby('Product').agg({
-                        'Quantity Ordered': ['sum', 'mean', 'std'],
-                        'Total Cost': ['sum', 'mean']
-                    }).round(2)
-                    summary.columns = ['Total Qty', 'Avg Qty/Week', 'Std Dev', 'Total Spend', 'Avg Spend/Week']
-                    st.dataframe(summary.reset_index(), use_container_width=True, hide_index=True,
-                                column_config={
-                                    "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
-                                    "Avg Spend/Week": st.column_config.NumberColumn(format="$%.2f")
-                                })
+                summary = plot_data.groupby('Product').agg({
+                    'Quantity Ordered': ['sum', 'mean', 'std'],
+                    'Total Cost': ['sum', 'mean']
+                }).round(2)
+                summary.columns = ['Total Qty', 'Avg Qty/Week', 'Std Dev', 'Total Spend', 'Avg Spend/Week']
+                st.dataframe(summary.reset_index(), use_container_width=True, hide_index=True,
+                            column_config={
+                                "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
+                                "Avg Spend/Week": st.column_config.NumberColumn(format="$%.2f")
+                            })
             
             st.markdown("---")
             
