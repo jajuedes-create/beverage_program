@@ -582,18 +582,19 @@ def get_master_inventory_products() -> pd.DataFrame:
     return pd.DataFrame(all_products) if all_products else pd.DataFrame()
 
 
-def get_products_not_in_weekly_inventory() -> list:
-    """Gets master products not yet in weekly inventory."""
-    master = get_master_inventory_products()
-    if len(master) == 0:
-        return []
+def get_products_not_in_weekly_inventory() -> pd.DataFrame:
+    """Returns products from Master Inventory not already in Weekly Inventory."""
+    master_products = get_master_inventory_products()
+    if master_products.empty:
+        return pd.DataFrame()
     
     weekly = st.session_state.get('weekly_inventory', pd.DataFrame())
     if len(weekly) == 0 or 'Product' not in weekly.columns:
-        return master['Product'].tolist()
+        return master_products
     
-    existing = set(weekly['Product'].str.lower())
-    return [p for p in master['Product'] if p.lower() not in existing]
+    weekly_products = weekly['Product'].tolist()
+    available = master_products[~master_products['Product'].isin(weekly_products)]
+    return available
 
 
 def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
