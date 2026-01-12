@@ -1,10 +1,11 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V2.23
+# BEVERAGE MANAGEMENT APP V2.24
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
 #   - Weekly Order Builder
 #   - Cocktail Builds Book
+#   - Cost of Goods Sold (COGS) Calculator
 #
 # Version History:
 #   V1.0 - Initial release with all core modules
@@ -40,6 +41,15 @@
 #           Google Sheets persistence for reviewed status
 #   V2.23 - Cocktail Builds Book: Editable Amount and Unit columns in Add New Recipe
 #           ingredient table
+#   V2.24 - NEW MODULE: Cost of Goods Sold (COGS) Calculator
+#           - Dedicated COGS page replacing Master Inventory expander
+#           - Auto-populate purchases from Order History by Invoice Date
+#           - Manual override option for purchases
+#           - COGS trends over time chart
+#           - Category breakdown visualization
+#           - Sales input for COGS % calculation
+#           - Export COGS report
+#           - Save COGS calculations to history
 #
 # Author: Canter Inn
 # Deployment: Streamlit Community Cloud via GitHub
@@ -470,12 +480,128 @@ def load_inventory_history() -> pd.DataFrame:
     
     return history
 
+
+def save_cogs_calculation(cogs_data: dict):
+    """
+    Saves a COGS calculation to history for tracking over time.
+    
+    Args:
+        cogs_data: Dictionary containing COGS calculation details
+    """
+    if not is_google_sheets_configured():
+        return False
+    
+    # Load existing COGS history
+    existing_history = load_dataframe_from_sheets('cogs_history')
+    
+    # Create new record
+    new_record = pd.DataFrame([cogs_data])
+    
+    if existing_history is not None and len(existing_history) > 0:
+        # Append new record
+        history_df = pd.concat([existing_history, new_record], ignore_index=True)
+    else:
+        history_df = new_record
+    
+    # Save to Google Sheets
+    return save_dataframe_to_sheets(history_df, 'cogs_history')
+
+
+def load_cogs_history() -> pd.DataFrame:
+    """
+    Loads COGS calculation history.
+    
+    Returns:
+        pd.DataFrame with COGS history records
+    """
+    if not is_google_sheets_configured():
+        return None
+    
+    history = load_dataframe_from_sheets('cogs_history')
+    
+    if history is not None and len(history) > 0:
+        # Ensure numeric columns are numeric
+        numeric_cols = ['Spirits COGS', 'Wine COGS', 'Beer COGS', 'Ingredients COGS', 
+                       'Total COGS', 'Total Sales', 'COGS Percentage']
+        for col in numeric_cols:
+            if col in history.columns:
+                history[col] = pd.to_numeric(history[col], errors='coerce').fillna(0)
+        
+        # Sort by calculation date descending
+        if 'Calculation Date' in history.columns:
+            history = history.sort_values('Calculation Date', ascending=False)
+    
+    return history
+
+
+def get_purchases_by_category_and_date(start_date: str, end_date: str) -> dict:
+    """
+    Calculates total purchases by category from Order History,
+    filtered by Invoice Date within the specified date range.
+    
+    Args:
+        start_date: Start date string (YYYY-MM-DD)
+        end_date: End date string (YYYY-MM-DD)
+    
+    Returns:
+        Dictionary with category totals: {'Spirits': x, 'Wine': y, 'Beer': z, 'Ingredients': w}
+    """
+    purchases = {
+        'Spirits': 0.0,
+        'Wine': 0.0,
+        'Beer': 0.0,
+        'Ingredients': 0.0
+    }
+    
+    if 'order_history' not in st.session_state:
+        return purchases
+    
+    order_history = st.session_state.order_history.copy()
+    
+    if len(order_history) == 0:
+        return purchases
+    
+    # Check if Invoice Date column exists
+    if 'Invoice Date' in order_history.columns:
+        # Filter by Invoice Date
+        order_history['Invoice Date'] = pd.to_datetime(order_history['Invoice Date'], errors='coerce')
+        
+        # Filter to date range
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
+        
+        filtered = order_history[
+            (order_history['Invoice Date'] >= start_dt) & 
+            (order_history['Invoice Date'] <= end_dt)
+        ]
+    else:
+        # Fall back to Week column if Invoice Date doesn't exist
+        order_history['Week'] = pd.to_datetime(order_history['Week'], errors='coerce')
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
+        
+        filtered = order_history[
+            (order_history['Week'] >= start_dt) & 
+            (order_history['Week'] <= end_dt)
+        ]
+    
+    if len(filtered) == 0:
+        return purchases
+    
+    # Sum by category
+    for category in purchases.keys():
+        category_data = filtered[filtered['Category'] == category]
+        if len(category_data) > 0 and 'Total Cost' in category_data.columns:
+            purchases[category] = float(category_data['Total Cost'].sum())
+    
+    return purchases
+
 # =============================================================================
 # PAGE CONFIGURATION
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V2.23",
+    page_title="Beverage Management App V2.24",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1536,12 +1662,13 @@ def show_home():
     
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V2.23</h1>
+        <h1>🍸 Beverage Management App V2.24</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns(3)
+    # V2.24: Updated to 2x2 grid for 4 modules
+    col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("""
@@ -1575,6 +1702,8 @@ def show_home():
             navigate_to('ordering')
             st.rerun()
     
+    col3, col4 = st.columns(2)
+    
     with col3:
         st.markdown("""
         <div class="module-card card-cocktails">
@@ -1589,6 +1718,23 @@ def show_home():
         
         if st.button("Open Cocktails", key="btn_cocktails", use_container_width=True):
             navigate_to('cocktails')
+            st.rerun()
+    
+    with col4:
+        # V2.24: New COGS Module
+        st.markdown("""
+        <div class="module-card" style="background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);">
+            <div class="card-icon">📊</div>
+            <div class="card-title">Cost of Goods Sold</div>
+            <div class="card-description">
+                Calculate COGS by category.<br>
+                Track trends and export reports.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("Open COGS", key="btn_cogs", use_container_width=True):
+            navigate_to('cogs')
             st.rerun()
     
     st.markdown("---")
@@ -1671,50 +1817,6 @@ def show_inventory():
     with tab_ingredients:
         show_inventory_tab(st.session_state.ingredients_inventory, "ingredients",
                           ["Distributor"], "Ingredients")
-    
-    st.markdown("---")
-    
-    # Historical Comparison Section
-    with st.expander("📈 Historical Value Comparison & COGS", expanded=False):
-        history = load_inventory_history()
-        if history is not None and len(history) > 0:
-            available_dates = history['Date'].unique().tolist()
-            if len(available_dates) >= 1:
-                st.markdown("**Select inventory periods to compare:**")
-                date_col1, date_col2 = st.columns(2)
-                with date_col1:
-                    start_date = st.selectbox("Starting Inventory Date:", options=available_dates,
-                        index=len(available_dates) - 1 if len(available_dates) > 1 else 0, key="history_start_date")
-                with date_col2:
-                    end_date = st.selectbox("Ending Inventory Date:", options=available_dates,
-                        index=0, key="history_end_date")
-                
-                start_row = history[history['Date'] == start_date].iloc[0]
-                end_row = history[history['Date'] == end_date].iloc[0]
-                
-                start_total = float(start_row.get('Total Value', 0))
-                end_total = float(end_row.get('Total Value', 0))
-                
-                st.markdown("---")
-                st.markdown("**Enter purchases for the period:**")
-                purch_col1, purch_col2, purch_col3, purch_col4 = st.columns(4)
-                with purch_col1:
-                    purchase_spirits = st.number_input("🥃 Spirits Purchases", min_value=0.0, value=0.0, step=100.0, key="purchase_spirits")
-                with purch_col2:
-                    purchase_wine = st.number_input("🍷 Wine Purchases", min_value=0.0, value=0.0, step=100.0, key="purchase_wine")
-                with purch_col3:
-                    purchase_beer = st.number_input("🍺 Beer Purchases", min_value=0.0, value=0.0, step=100.0, key="purchase_beer")
-                with purch_col4:
-                    purchase_ingredients = st.number_input("🧴 Ingredients Purchases", min_value=0.0, value=0.0, step=100.0, key="purchase_ingredients")
-                
-                total_purchases = purchase_spirits + purchase_wine + purchase_beer + purchase_ingredients
-                cogs_total = (start_total + total_purchases) - end_total
-                
-                st.markdown("---")
-                st.metric("Total COGS", format_currency(cogs_total))
-                st.caption("**COGS Formula:** (Starting Inventory + Purchases) − Ending Inventory")
-        else:
-            st.info("📊 No historical data available yet.")
     
     st.markdown("---")
     
@@ -2398,6 +2500,481 @@ def show_cocktails():
 
 
 # =============================================================================
+# PAGE: COST OF GOODS SOLD (V2.24)
+# =============================================================================
+
+def show_cogs():
+    """Renders the Cost of Goods Sold module."""
+    
+    col_back, col_title = st.columns([1, 11])
+    with col_back:
+        if st.button("← Home"):
+            navigate_to('home')
+            st.rerun()
+    with col_title:
+        st.title("📊 Cost of Goods Sold")
+    
+    # Load inventory history for date selection
+    history = load_inventory_history()
+    
+    if history is None or len(history) == 0:
+        st.warning("⚠️ No inventory snapshots available. Please save inventory data in Master Inventory first to create snapshots for COGS calculation.")
+        st.info("💡 Tip: Go to Master Inventory, make any change, and click 'Save Changes' to create your first inventory snapshot.")
+        return
+    
+    # Tabs for COGS Calculator and History
+    tab_calculator, tab_trends, tab_history = st.tabs(["🧮 COGS Calculator", "📈 Trends & Analytics", "📜 Saved Calculations"])
+    
+    with tab_calculator:
+        st.markdown("### 📅 Select Inventory Period")
+        st.markdown("Choose starting and ending inventory snapshot dates to calculate COGS for the period.")
+        
+        available_dates = sorted(history['Date'].unique().tolist(), reverse=True)
+        
+        col_start, col_end = st.columns(2)
+        
+        with col_start:
+            # Default to oldest date for starting inventory
+            start_date = st.selectbox(
+                "📦 Starting Inventory Date:",
+                options=available_dates,
+                index=len(available_dates) - 1 if len(available_dates) > 1 else 0,
+                key="cogs_start_date",
+                help="Beginning inventory period"
+            )
+        
+        with col_end:
+            # Default to most recent date for ending inventory
+            end_date = st.selectbox(
+                "📦 Ending Inventory Date:",
+                options=available_dates,
+                index=0,
+                key="cogs_end_date",
+                help="Ending inventory period"
+            )
+        
+        # Get inventory values for selected dates
+        start_row = history[history['Date'] == start_date].iloc[0]
+        end_row = history[history['Date'] == end_date].iloc[0]
+        
+        start_spirits = float(start_row.get('Spirits Value', 0))
+        start_wine = float(start_row.get('Wine Value', 0))
+        start_beer = float(start_row.get('Beer Value', 0))
+        start_ingredients = float(start_row.get('Ingredients Value', 0))
+        start_total = float(start_row.get('Total Value', 0))
+        
+        end_spirits = float(end_row.get('Spirits Value', 0))
+        end_wine = float(end_row.get('Wine Value', 0))
+        end_beer = float(end_row.get('Beer Value', 0))
+        end_ingredients = float(end_row.get('Ingredients Value', 0))
+        end_total = float(end_row.get('Total Value', 0))
+        
+        st.markdown("---")
+        
+        # Auto-populate purchases from Order History
+        st.markdown("### 🛒 Purchases")
+        st.markdown("Purchases are auto-populated from Order History based on Invoice Date. You can override if needed.")
+        
+        # Get auto-calculated purchases
+        auto_purchases = get_purchases_by_category_and_date(start_date, end_date)
+        
+        # Toggle for manual override
+        use_manual_override = st.checkbox("✏️ Enable manual override for purchases", key="cogs_manual_override")
+        
+        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+        
+        with col_p1:
+            if use_manual_override:
+                purchase_spirits = st.number_input(
+                    "🥃 Spirits Purchases",
+                    min_value=0.0,
+                    value=auto_purchases['Spirits'],
+                    step=50.0,
+                    format="%.2f",
+                    key="cogs_purchase_spirits"
+                )
+            else:
+                purchase_spirits = auto_purchases['Spirits']
+                st.metric("🥃 Spirits Purchases", format_currency(purchase_spirits))
+        
+        with col_p2:
+            if use_manual_override:
+                purchase_wine = st.number_input(
+                    "🍷 Wine Purchases",
+                    min_value=0.0,
+                    value=auto_purchases['Wine'],
+                    step=50.0,
+                    format="%.2f",
+                    key="cogs_purchase_wine"
+                )
+            else:
+                purchase_wine = auto_purchases['Wine']
+                st.metric("🍷 Wine Purchases", format_currency(purchase_wine))
+        
+        with col_p3:
+            if use_manual_override:
+                purchase_beer = st.number_input(
+                    "🍺 Beer Purchases",
+                    min_value=0.0,
+                    value=auto_purchases['Beer'],
+                    step=50.0,
+                    format="%.2f",
+                    key="cogs_purchase_beer"
+                )
+            else:
+                purchase_beer = auto_purchases['Beer']
+                st.metric("🍺 Beer Purchases", format_currency(purchase_beer))
+        
+        with col_p4:
+            if use_manual_override:
+                purchase_ingredients = st.number_input(
+                    "🧴 Ingredients Purchases",
+                    min_value=0.0,
+                    value=auto_purchases['Ingredients'],
+                    step=50.0,
+                    format="%.2f",
+                    key="cogs_purchase_ingredients"
+                )
+            else:
+                purchase_ingredients = auto_purchases['Ingredients']
+                st.metric("🧴 Ingredients Purchases", format_currency(purchase_ingredients))
+        
+        total_purchases = purchase_spirits + purchase_wine + purchase_beer + purchase_ingredients
+        
+        st.markdown("---")
+        
+        # Calculate COGS by category
+        cogs_spirits = (start_spirits + purchase_spirits) - end_spirits
+        cogs_wine = (start_wine + purchase_wine) - end_wine
+        cogs_beer = (start_beer + purchase_beer) - end_beer
+        cogs_ingredients = (start_ingredients + purchase_ingredients) - end_ingredients
+        cogs_total = cogs_spirits + cogs_wine + cogs_beer + cogs_ingredients
+        
+        # COGS Results
+        st.markdown("### 📊 COGS Calculation Results")
+        
+        # Create detailed breakdown table
+        cogs_table_data = {
+            'Category': ['🥃 Spirits', '🍷 Wine', '🍺 Beer', '🧴 Ingredients', '**💰 TOTAL**'],
+            'Starting Inventory': [start_spirits, start_wine, start_beer, start_ingredients, start_total],
+            'Purchases': [purchase_spirits, purchase_wine, purchase_beer, purchase_ingredients, total_purchases],
+            'Ending Inventory': [end_spirits, end_wine, end_beer, end_ingredients, end_total],
+            'COGS': [cogs_spirits, cogs_wine, cogs_beer, cogs_ingredients, cogs_total]
+        }
+        
+        cogs_df = pd.DataFrame(cogs_table_data)
+        
+        st.dataframe(
+            cogs_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Starting Inventory": st.column_config.NumberColumn(format="$%.2f"),
+                "Purchases": st.column_config.NumberColumn(format="$%.2f"),
+                "Ending Inventory": st.column_config.NumberColumn(format="$%.2f"),
+                "COGS": st.column_config.NumberColumn(format="$%.2f")
+            }
+        )
+        
+        st.caption("**COGS Formula:** (Starting Inventory + Purchases) − Ending Inventory")
+        
+        st.markdown("---")
+        
+        # COGS as Percentage of Sales
+        st.markdown("### 💵 COGS as Percentage of Sales")
+        st.markdown("Enter your total sales for this period to calculate COGS percentage.")
+        
+        col_sales, col_pct = st.columns(2)
+        
+        with col_sales:
+            total_sales = st.number_input(
+                "Total Sales for Period:",
+                min_value=0.0,
+                value=0.0,
+                step=100.0,
+                format="%.2f",
+                key="cogs_total_sales",
+                help="Enter total beverage sales revenue for the selected period"
+            )
+        
+        with col_pct:
+            if total_sales > 0:
+                cogs_percentage = (cogs_total / total_sales) * 100
+                st.metric("COGS Percentage", f"{cogs_percentage:.1f}%")
+                
+                # Color indicator
+                if cogs_percentage <= 20:
+                    st.success("✅ Excellent! COGS is within target range (≤20%)")
+                elif cogs_percentage <= 25:
+                    st.info("👍 Good. COGS is acceptable (20-25%)")
+                elif cogs_percentage <= 30:
+                    st.warning("⚠️ Caution. COGS is slightly high (25-30%)")
+                else:
+                    st.error("🚨 Alert! COGS is above target (>30%)")
+            else:
+                st.metric("COGS Percentage", "N/A")
+                st.caption("Enter sales to calculate percentage")
+        
+        st.markdown("---")
+        
+        # Category Breakdown Visualization
+        st.markdown("### 📈 COGS Breakdown by Category")
+        
+        col_pie, col_bar = st.columns(2)
+        
+        with col_pie:
+            # Pie chart
+            pie_data = pd.DataFrame({
+                'Category': ['Spirits', 'Wine', 'Beer', 'Ingredients'],
+                'COGS': [max(0, cogs_spirits), max(0, cogs_wine), max(0, cogs_beer), max(0, cogs_ingredients)]
+            })
+            
+            # Only show pie if there's positive COGS
+            if pie_data['COGS'].sum() > 0:
+                fig_pie = px.pie(
+                    pie_data,
+                    values='COGS',
+                    names='Category',
+                    title='COGS Distribution',
+                    color='Category',
+                    color_discrete_map={
+                        'Spirits': '#8B5CF6',
+                        'Wine': '#EC4899',
+                        'Beer': '#F59E0B',
+                        'Ingredients': '#10B981'
+                    }
+                )
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("No positive COGS to display in chart.")
+        
+        with col_bar:
+            # Horizontal bar chart
+            bar_data = pd.DataFrame({
+                'Category': ['Spirits', 'Wine', 'Beer', 'Ingredients'],
+                'COGS': [cogs_spirits, cogs_wine, cogs_beer, cogs_ingredients]
+            })
+            
+            fig_bar = px.bar(
+                bar_data,
+                x='COGS',
+                y='Category',
+                orientation='h',
+                title='COGS by Category',
+                color='Category',
+                color_discrete_map={
+                    'Spirits': '#8B5CF6',
+                    'Wine': '#EC4899',
+                    'Beer': '#F59E0B',
+                    'Ingredients': '#10B981'
+                }
+            )
+            fig_bar.update_layout(
+                xaxis_tickprefix='$',
+                xaxis_tickformat=',.0f',
+                showlegend=False
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # Save and Export Options
+        st.markdown("### 💾 Save & Export")
+        
+        col_save, col_export = st.columns(2)
+        
+        with col_save:
+            if st.button("💾 Save Calculation to History", key="save_cogs", type="primary"):
+                cogs_record = {
+                    'Calculation Date': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    'Period Start': start_date,
+                    'Period End': end_date,
+                    'Spirits COGS': cogs_spirits,
+                    'Wine COGS': cogs_wine,
+                    'Beer COGS': cogs_beer,
+                    'Ingredients COGS': cogs_ingredients,
+                    'Total COGS': cogs_total,
+                    'Total Purchases': total_purchases,
+                    'Total Sales': total_sales,
+                    'COGS Percentage': (cogs_total / total_sales * 100) if total_sales > 0 else 0
+                }
+                
+                if save_cogs_calculation(cogs_record):
+                    st.success("✅ COGS calculation saved to history!")
+                else:
+                    st.error("Failed to save. Check Google Sheets connection.")
+        
+        with col_export:
+            # Create export report
+            report = f"""COST OF GOODS SOLD REPORT
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+Period: {start_date} to {end_date}
+{'='*50}
+
+INVENTORY VALUES
+----------------
+                Starting        Ending          Change
+Spirits:        {format_currency(start_spirits):>12}  {format_currency(end_spirits):>12}  {format_currency(end_spirits - start_spirits):>12}
+Wine:           {format_currency(start_wine):>12}  {format_currency(end_wine):>12}  {format_currency(end_wine - start_wine):>12}
+Beer:           {format_currency(start_beer):>12}  {format_currency(end_beer):>12}  {format_currency(end_beer - start_beer):>12}
+Ingredients:    {format_currency(start_ingredients):>12}  {format_currency(end_ingredients):>12}  {format_currency(end_ingredients - start_ingredients):>12}
+TOTAL:          {format_currency(start_total):>12}  {format_currency(end_total):>12}  {format_currency(end_total - start_total):>12}
+
+PURCHASES
+---------
+Spirits:        {format_currency(purchase_spirits)}
+Wine:           {format_currency(purchase_wine)}
+Beer:           {format_currency(purchase_beer)}
+Ingredients:    {format_currency(purchase_ingredients)}
+TOTAL:          {format_currency(total_purchases)}
+
+COGS CALCULATION
+----------------
+Formula: (Starting Inventory + Purchases) - Ending Inventory
+
+Spirits:        {format_currency(cogs_spirits)}
+Wine:           {format_currency(cogs_wine)}
+Beer:           {format_currency(cogs_beer)}
+Ingredients:    {format_currency(cogs_ingredients)}
+TOTAL COGS:     {format_currency(cogs_total)}
+
+"""
+            if total_sales > 0:
+                report += f"""SALES & PERCENTAGE
+------------------
+Total Sales:    {format_currency(total_sales)}
+COGS %:         {cogs_total / total_sales * 100:.1f}%
+"""
+            
+            st.download_button(
+                label="📥 Export COGS Report",
+                data=report,
+                file_name=f"cogs_report_{start_date}_to_{end_date}.txt",
+                mime="text/plain",
+                key="export_cogs"
+            )
+    
+    with tab_trends:
+        st.markdown("### 📈 COGS Trends Over Time")
+        
+        # Load COGS history for trends
+        cogs_history = load_cogs_history()
+        
+        if cogs_history is not None and len(cogs_history) > 0:
+            # COGS over time chart
+            st.markdown("#### Total COGS by Period")
+            
+            trend_df = cogs_history.copy()
+            trend_df['Period'] = trend_df['Period Start'] + ' to ' + trend_df['Period End']
+            
+            fig_trend = px.line(
+                trend_df,
+                x='Calculation Date',
+                y='Total COGS',
+                markers=True,
+                title='Total COGS Trend'
+            )
+            fig_trend.update_layout(
+                yaxis_tickprefix='$',
+                yaxis_tickformat=',.0f'
+            )
+            st.plotly_chart(fig_trend, use_container_width=True)
+            
+            # COGS by category over time
+            st.markdown("#### COGS by Category Over Time")
+            
+            category_trend = trend_df.melt(
+                id_vars=['Calculation Date'],
+                value_vars=['Spirits COGS', 'Wine COGS', 'Beer COGS', 'Ingredients COGS'],
+                var_name='Category',
+                value_name='COGS'
+            )
+            category_trend['Category'] = category_trend['Category'].str.replace(' COGS', '')
+            
+            fig_cat_trend = px.line(
+                category_trend,
+                x='Calculation Date',
+                y='COGS',
+                color='Category',
+                markers=True,
+                title='COGS by Category',
+                color_discrete_map={
+                    'Spirits': '#8B5CF6',
+                    'Wine': '#EC4899',
+                    'Beer': '#F59E0B',
+                    'Ingredients': '#10B981'
+                }
+            )
+            fig_cat_trend.update_layout(
+                yaxis_tickprefix='$',
+                yaxis_tickformat=',.0f'
+            )
+            st.plotly_chart(fig_cat_trend, use_container_width=True)
+            
+            # COGS Percentage trend (if sales data exists)
+            if 'COGS Percentage' in cogs_history.columns and cogs_history['COGS Percentage'].sum() > 0:
+                st.markdown("#### COGS Percentage Trend")
+                
+                pct_df = cogs_history[cogs_history['COGS Percentage'] > 0]
+                
+                if len(pct_df) > 0:
+                    fig_pct = px.line(
+                        pct_df,
+                        x='Calculation Date',
+                        y='COGS Percentage',
+                        markers=True,
+                        title='COGS % of Sales'
+                    )
+                    fig_pct.update_layout(yaxis_ticksuffix='%')
+                    
+                    # Add target line at 20%
+                    fig_pct.add_hline(y=20, line_dash="dash", line_color="green", 
+                                      annotation_text="Target (20%)")
+                    fig_pct.add_hline(y=25, line_dash="dash", line_color="orange",
+                                      annotation_text="Caution (25%)")
+                    
+                    st.plotly_chart(fig_pct, use_container_width=True)
+        else:
+            st.info("📊 No COGS history available yet. Save calculations from the Calculator tab to see trends over time.")
+    
+    with tab_history:
+        st.markdown("### 📜 Saved COGS Calculations")
+        
+        cogs_history = load_cogs_history()
+        
+        if cogs_history is not None and len(cogs_history) > 0:
+            st.dataframe(
+                cogs_history,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Spirits COGS": st.column_config.NumberColumn(format="$%.2f"),
+                    "Wine COGS": st.column_config.NumberColumn(format="$%.2f"),
+                    "Beer COGS": st.column_config.NumberColumn(format="$%.2f"),
+                    "Ingredients COGS": st.column_config.NumberColumn(format="$%.2f"),
+                    "Total COGS": st.column_config.NumberColumn(format="$%.2f"),
+                    "Total Purchases": st.column_config.NumberColumn(format="$%.2f"),
+                    "Total Sales": st.column_config.NumberColumn(format="$%.2f"),
+                    "COGS Percentage": st.column_config.NumberColumn(format="%.1f%%")
+                }
+            )
+            
+            # Export all history
+            st.markdown("---")
+            csv_export = cogs_history.to_csv(index=False)
+            st.download_button(
+                label="📥 Export All COGS History (CSV)",
+                data=csv_export,
+                file_name=f"cogs_history_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                key="export_cogs_history"
+            )
+        else:
+            st.info("📊 No saved COGS calculations yet. Use the Calculator tab to create and save calculations.")
+
+
+# =============================================================================
 # MAIN ROUTING LOGIC
 # =============================================================================
 
@@ -2413,6 +2990,8 @@ def main():
         show_ordering()
     elif st.session_state.current_page == 'cocktails':
         show_cocktails()
+    elif st.session_state.current_page == 'cogs':
+        show_cogs()
     else:
         show_home()
 
