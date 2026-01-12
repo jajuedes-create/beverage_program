@@ -3492,13 +3492,26 @@ def show_ordering():
                 # V2.22: Persist to Google Sheets
                 save_price_change_acks()
                 
-                # Show summary
-                reviewed_count = edited_price_df['Reviewed'].sum()
-                total_count = len(edited_price_df)
-                if reviewed_count == total_count:
-                    st.success(f"✅ All {total_count} price changes have been reviewed!")
-                else:
-                    st.info(f"📋 {reviewed_count} of {total_count} price changes reviewed.")
+                # Show summary and download button
+                col_summary, col_download = st.columns([2, 1])
+                
+                with col_summary:
+                    reviewed_count = edited_price_df['Reviewed'].sum()
+                    total_count = len(edited_price_df)
+                    if reviewed_count == total_count:
+                        st.success(f"✅ All {total_count} price changes have been reviewed!")
+                    else:
+                        st.info(f"📋 {reviewed_count} of {total_count} price changes reviewed.")
+                
+                with col_download:
+                    price_csv = pd.DataFrame(price_changes).to_csv(index=False)
+                    st.download_button(
+                        label="💲 Download Price Changes",
+                        data=price_csv,
+                        file_name=f"price_changes_{start_date}_{end_date}.csv",
+                        mime="text/csv",
+                        key="download_price_changes"
+                    )
             else:
                 st.info("✅ No price changes detected in your order history.")
             
@@ -3595,7 +3608,7 @@ def show_ordering():
             # =================================================================
             st.markdown("#### 📥 Export Analytics")
             
-            col_export1, col_export2, col_export3 = st.columns(3)
+            col_export1, col_export2 = st.columns(2)
             
             with col_export1:
                 # Export filtered order data
@@ -3651,20 +3664,6 @@ PRICE CHANGES DETECTED
                     mime="text/plain",
                     key="download_analytics_summary"
                 )
-            
-            with col_export3:
-                # Export price changes if any
-                if price_changes:
-                    price_csv = pd.DataFrame(price_changes).to_csv(index=False)
-                    st.download_button(
-                        label="💲 Download Price Changes",
-                        data=price_csv,
-                        file_name=f"price_changes_{start_date}_{end_date}.csv",
-                        mime="text/csv",
-                        key="download_price_changes"
-                    )
-                else:
-                    st.button("💲 No Price Changes", disabled=True, key="no_price_changes")
             
         else:
             st.info("No order history yet. Save some orders to see analytics.")
