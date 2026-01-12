@@ -3321,6 +3321,62 @@ def show_ordering():
             st.markdown("---")
             
             # =================================================================
+            # V2.22: SPENDING BY CATEGORY - Pie chart with Top Products dropdowns
+            # =================================================================
+            st.markdown("#### 📊 Spending by Category")
+            
+            cat_spend = filtered_analytics.groupby('Category')['Total Cost'].sum().reset_index()
+            cat_spend = cat_spend.sort_values('Total Cost', ascending=False)
+            
+            col_cat_pie, col_cat_dropdowns = st.columns([1, 1])
+            
+            with col_cat_pie:
+                fig_pie = px.pie(
+                    cat_spend, 
+                    values='Total Cost', 
+                    names='Category', 
+                    title='Category Distribution',
+                    color='Category',
+                    color_discrete_map=category_colors
+                )
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig_pie, use_container_width=True)
+            
+            with col_cat_dropdowns:
+                st.markdown("**🏆 Top Products by Category**")
+                st.markdown("Expand each category to see top 10 products by spend.")
+                
+                categories = sorted(filtered_analytics['Category'].unique())
+                
+                for category in categories:
+                    category_data = filtered_analytics[filtered_analytics['Category'] == category]
+                    category_total = category_data['Total Cost'].sum()
+                    
+                    with st.expander(f"**{category}** - ${category_total:,.2f}", expanded=False):
+                        top_in_category = category_data.groupby('Product').agg({
+                            'Quantity Ordered': 'sum',
+                            'Total Cost': 'sum'
+                        }).sort_values('Total Cost', ascending=False).head(10)
+                        
+                        if len(top_in_category) > 0:
+                            st.dataframe(
+                                top_in_category.reset_index().rename(columns={
+                                    'Product': 'Product', 
+                                    'Quantity Ordered': 'Units', 
+                                    'Total Cost': 'Spend'
+                                }),
+                                use_container_width=True, 
+                                hide_index=True,
+                                column_config={
+                                    "Spend": st.column_config.NumberColumn(format="$%.2f")
+                                }
+                            )
+                        else:
+                            st.info(f"No orders found for {category}.")
+            
+            st.markdown("---")
+            
+            # =================================================================
             # V2.22: PRICE CHANGE TRACKER - Enhanced with date and acknowledgment
             # =================================================================
             st.markdown("#### 💲 Price Change Tracker")
@@ -3408,102 +3464,7 @@ def show_ordering():
             st.markdown("---")
             
             # =================================================================
-            # V2.20: DISTRIBUTOR ANALYTICS
-            # =================================================================
-            st.markdown("#### 🚚 Distributor Analytics")
-            
-            dist_spend = filtered_analytics.groupby('Distributor').agg({
-                'Total Cost': 'sum',
-                'Quantity Ordered': 'sum',
-                'Product': 'nunique'
-            }).reset_index()
-            dist_spend.columns = ['Distributor', 'Total Spend', 'Total Units', '# Products']
-            dist_spend = dist_spend.sort_values('Total Spend', ascending=False)
-            
-            col_dist_chart, col_dist_table = st.columns([1, 1])
-            
-            with col_dist_chart:
-                fig_dist = px.pie(
-                    dist_spend, 
-                    values='Total Spend', 
-                    names='Distributor', 
-                    title='Spend by Distributor',
-                    hole=0.4  # Donut chart
-                )
-                fig_dist.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig_dist, use_container_width=True)
-            
-            with col_dist_table:
-                st.dataframe(
-                    dist_spend,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
-                        "Total Units": st.column_config.NumberColumn(format="%.1f")
-                    }
-                )
-            
-            st.markdown("---")
-            
-            # =================================================================
-            # V2.22: SPENDING BY CATEGORY - Pie chart with Top Products dropdowns
-            # =================================================================
-            st.markdown("#### 📊 Spending by Category")
-            
-            cat_spend = filtered_analytics.groupby('Category')['Total Cost'].sum().reset_index()
-            cat_spend = cat_spend.sort_values('Total Cost', ascending=False)
-            
-            col_cat_pie, col_cat_dropdowns = st.columns([1, 1])
-            
-            with col_cat_pie:
-                fig_pie = px.pie(
-                    cat_spend, 
-                    values='Total Cost', 
-                    names='Category', 
-                    title='Category Distribution',
-                    color='Category',
-                    color_discrete_map=category_colors
-                )
-                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig_pie, use_container_width=True)
-            
-            with col_cat_dropdowns:
-                st.markdown("**🏆 Top Products by Category**")
-                st.markdown("Expand each category to see top 10 products by spend.")
-                
-                categories = sorted(filtered_analytics['Category'].unique())
-                
-                for category in categories:
-                    category_data = filtered_analytics[filtered_analytics['Category'] == category]
-                    category_total = category_data['Total Cost'].sum()
-                    
-                    with st.expander(f"**{category}** - ${category_total:,.2f}", expanded=False):
-                        top_in_category = category_data.groupby('Product').agg({
-                            'Quantity Ordered': 'sum',
-                            'Total Cost': 'sum'
-                        }).sort_values('Total Cost', ascending=False).head(10)
-                        
-                        if len(top_in_category) > 0:
-                            st.dataframe(
-                                top_in_category.reset_index().rename(columns={
-                                    'Product': 'Product', 
-                                    'Quantity Ordered': 'Units', 
-                                    'Total Cost': 'Spend'
-                                }),
-                                use_container_width=True, 
-                                hide_index=True,
-                                column_config={
-                                    "Spend": st.column_config.NumberColumn(format="$%.2f")
-                                }
-                            )
-                        else:
-                            st.info(f"No orders found for {category}.")
-            
-            st.markdown("---")
-            
-            # =================================================================
-            # PRODUCT ANALYSIS (existing, with enhancements)
+            # PRODUCT ANALYSIS
             # =================================================================
             st.markdown("#### 📈 Product Analysis")
             st.markdown("Select products below to view order trends, spending patterns, and summary statistics over time.")
@@ -3546,6 +3507,45 @@ def show_ordering():
                                 "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
                                 "Avg Spend/Week": st.column_config.NumberColumn(format="$%.2f")
                             })
+            
+            st.markdown("---")
+            
+            # =================================================================
+            # DISTRIBUTOR ANALYTICS
+            # =================================================================
+            st.markdown("#### 🚚 Distributor Analytics")
+            
+            dist_spend = filtered_analytics.groupby('Distributor').agg({
+                'Total Cost': 'sum',
+                'Quantity Ordered': 'sum',
+                'Product': 'nunique'
+            }).reset_index()
+            dist_spend.columns = ['Distributor', 'Total Spend', 'Total Units', '# Products']
+            dist_spend = dist_spend.sort_values('Total Spend', ascending=False)
+            
+            col_dist_chart, col_dist_table = st.columns([1, 1])
+            
+            with col_dist_chart:
+                fig_dist = px.pie(
+                    dist_spend, 
+                    values='Total Spend', 
+                    names='Distributor', 
+                    title='Spend by Distributor',
+                    hole=0.4  # Donut chart
+                )
+                fig_dist.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig_dist, use_container_width=True)
+            
+            with col_dist_table:
+                st.dataframe(
+                    dist_spend,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
+                        "Total Units": st.column_config.NumberColumn(format="%.1f")
+                    }
+                )
             
             st.markdown("---")
             
