@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V3.4
+# BEVERAGE MANAGEMENT APP V3.5
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -33,6 +33,12 @@
 #           - Removed non-functional CTA text from cards
 #           - Balanced grid layout (3 top, 2 centered bottom)
 #           - Added last activity indicator
+#   V3.5 - Master Inventory calculated fields
+#           - Spirits: Cost/Oz, Neat Price, Value, Suggested Retail now non-editable
+#           - Wine: Bottle Price, Value, BTG, Suggested Retail now non-editable
+#           - Corrected formulas: Neat Price=(Cost/Oz)/(Margin/100), rounded up
+#           - Corrected formulas: Bottle Price=Cost/(Margin/100), BTG=Cost/4, rounded up
+#           - Suggested Retail=Cost*1.44 for both, rounded up
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -44,6 +50,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import json
+import math
 from typing import Optional, Dict, List, Any, Tuple
 
 # =============================================================================
@@ -51,7 +58,7 @@ from typing import Optional, Dict, List, Any, Tuple
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V3.4",
+    page_title="Beverage Management App V3.5",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -665,51 +672,55 @@ def get_sample_spirits():
     """Returns sample spirit inventory data (cached)."""
     data = [
         {"Product": "Hendrick's", "Type": "Gin", "Cost": 30.80, "Size (oz.)": 33.8, 
-         "Margin": 20, "Neat Price": 9.0, "Inventory": 1.0, "Use": "Backbar", 
-         "Distributor": "Breakthru", "Order Notes": "6 pk deal", "Suggested Retail": 44},
+         "Margin": 20, "Inventory": 1.0, "Use": "Backbar", 
+         "Distributor": "Breakthru", "Order Notes": "6 pk deal"},
         {"Product": "Tito's", "Type": "Vodka", "Cost": 24.50, "Size (oz.)": 33.8, 
-         "Margin": 18, "Neat Price": 8.0, "Inventory": 3.0, "Use": "Rail", 
-         "Distributor": "Breakthru", "Order Notes": "3 bttl deal", "Suggested Retail": 35},
+         "Margin": 18, "Inventory": 3.0, "Use": "Rail", 
+         "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
         {"Product": "Ketel One", "Type": "Vodka", "Cost": 32.25, "Size (oz.)": 33.8, 
-         "Margin": 19, "Neat Price": 10.0, "Inventory": 3.0, "Use": "Backbar", 
-         "Distributor": "Breakthru", "Order Notes": "3 bttl deal", "Suggested Retail": 46},
+         "Margin": 19, "Inventory": 3.0, "Use": "Backbar", 
+         "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
         {"Product": "Tempus Fugit Crème de Cacao", "Type": "Cordial & Digestif", "Cost": 32.50, "Size (oz.)": 23.7, 
-         "Margin": 22, "Neat Price": 12.0, "Inventory": 6.0, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": "6 pk deal", "Suggested Retail": 47},
+         "Margin": 22, "Inventory": 6.0, "Use": "Menu", 
+         "Distributor": "Breakthru", "Order Notes": "6 pk deal"},
         {"Product": "St. George Absinthe", "Type": "Cordial & Digestif", "Cost": 54.00, "Size (oz.)": 25.3, 
-         "Margin": 23, "Neat Price": 19.0, "Inventory": 1.0, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 78},
+         "Margin": 23, "Inventory": 1.0, "Use": "Menu", 
+         "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Espolòn Blanco", "Type": "Tequila", "Cost": 25.00, "Size (oz.)": 33.8, 
-         "Margin": 20, "Neat Price": 8.0, "Inventory": 4.0, "Use": "Rail", 
-         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 36},
+         "Margin": 20, "Inventory": 4.0, "Use": "Rail", 
+         "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Lustau Vermut Rojo", "Type": "Vermouth & Aperitif", "Cost": 16.00, "Size (oz.)": 25.3, 
-         "Margin": 18, "Neat Price": 7.0, "Inventory": 2.0, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 23},
+         "Margin": 18, "Inventory": 2.0, "Use": "Menu", 
+         "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Buffalo Trace", "Type": "Whiskey", "Cost": 31.00, "Size (oz.)": 33.8, 
-         "Margin": 20, "Neat Price": 9.0, "Inventory": 2.0, "Use": "Rail", 
-         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 44},
+         "Margin": 20, "Inventory": 2.0, "Use": "Rail", 
+         "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Rittenhouse Rye", "Type": "Whiskey", "Cost": 28.00, "Size (oz.)": 25.3, 
-         "Margin": 19, "Neat Price": 9.0, "Inventory": 3.0, "Use": "Rail", 
-         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 40},
+         "Margin": 19, "Inventory": 3.0, "Use": "Rail", 
+         "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Botanist", "Type": "Gin", "Cost": 33.74, "Size (oz.)": 33.8, 
-         "Margin": 21, "Neat Price": 10.0, "Inventory": 4.0, "Use": "Menu", 
-         "Distributor": "General Beverage", "Order Notes": "", "Suggested Retail": 48},
+         "Margin": 21, "Inventory": 4.0, "Use": "Menu", 
+         "Distributor": "General Beverage", "Order Notes": ""},
         {"Product": "Bordiga Extra Dry Vermouth", "Type": "Vermouth & Aperitif", "Cost": 23.00, "Size (oz.)": 25.3, 
-         "Margin": 18, "Neat Price": 8.0, "Inventory": 2.0, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 33},
+         "Margin": 18, "Inventory": 2.0, "Use": "Menu", 
+         "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Campari", "Type": "Vermouth & Aperitif", "Cost": 28.00, "Size (oz.)": 33.8, 
-         "Margin": 20, "Neat Price": 8.0, "Inventory": 2.0, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 40},
+         "Margin": 20, "Inventory": 2.0, "Use": "Menu", 
+         "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Angostura Bitters", "Type": "Bitters", "Cost": 32.00, "Size (oz.)": 16.0, 
-         "Margin": 15, "Neat Price": 0.0, "Inventory": 2.0, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 0},
+         "Margin": 15, "Inventory": 2.0, "Use": "Menu", 
+         "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Angostura Orange Bitters", "Type": "Bitters", "Cost": 16.00, "Size (oz.)": 4.0, 
-         "Margin": 15, "Neat Price": 0.0, "Inventory": 2.0, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": "", "Suggested Retail": 0},
+         "Margin": 15, "Inventory": 2.0, "Use": "Menu", 
+         "Distributor": "Breakthru", "Order Notes": ""},
     ]
     df = pd.DataFrame(data)
+    # Calculated fields (non-editable)
     df["Cost/Oz"] = df["Cost"] / df["Size (oz.)"]
+    df["Neat Price"] = df.apply(
+        lambda row: math.ceil((row["Cost"] / row["Size (oz.)"]) / (row["Margin"] / 100)) if row["Margin"] > 0 else 0, axis=1)
     df["Value"] = df["Cost"] * df["Inventory"]
+    df["Suggested Retail"] = df["Cost"].apply(lambda x: math.ceil(x * 1.44))
     return df[["Product", "Type", "Cost", "Size (oz.)", "Cost/Oz", "Margin", 
                "Neat Price", "Inventory", "Value", "Use", "Distributor", 
                "Order Notes", "Suggested Retail"]]
@@ -721,31 +732,30 @@ def get_sample_wines():
     data = [
         {"Product": "Mauzac Nature, 2022, Domaine Plageoles, Gaillac, France", 
          "Type": "Bubbles", "Cost": 22.0, "Size (oz.)": 25.3, "Margin": 35, 
-         "Bottle Price": 63.0, "Inventory": 18.0, "Distributor": "Chromatic", 
-         "BTG": 14.0, "Suggested Retail": 32},
+         "Inventory": 18.0, "Distributor": "Chromatic"},
         {"Product": "Savagnin, 2022, Domaine de la Pinte, 'Sav'Or' Vin de France (Jura)", 
          "Type": "Rosé/Orange", "Cost": 29.0, "Size (oz.)": 25.3, "Margin": 37, 
-         "Bottle Price": 79.0, "Inventory": 5.0, "Distributor": "Chromatic", 
-         "BTG": 18.0, "Suggested Retail": 42},
+         "Inventory": 5.0, "Distributor": "Chromatic"},
         {"Product": "Sémillon, 2015, Forlorn Hope, 'Nacré', Napa Valley, CA", 
          "Type": "White", "Cost": 17.0, "Size (oz.)": 25.3, "Margin": 33, 
-         "Bottle Price": 51.0, "Inventory": 2.0, "Distributor": "Chromatic", 
-         "BTG": 11.0, "Suggested Retail": 24},
+         "Inventory": 2.0, "Distributor": "Chromatic"},
         {"Product": "Chardonnay, 2023, Jean Dauvissat, Chablis, France", 
          "Type": "White", "Cost": 31.5, "Size (oz.)": 25.3, "Margin": 35, 
-         "Bottle Price": 90.0, "Inventory": 6.0, "Distributor": "Vino Veritas", 
-         "BTG": 20.0, "Suggested Retail": 45},
+         "Inventory": 6.0, "Distributor": "Vino Veritas"},
         {"Product": "Pinot Noir, 2021, Domaine de la Côte, Sta. Rita Hills, CA", 
          "Type": "Red", "Cost": 55.0, "Size (oz.)": 25.3, "Margin": 34, 
-         "Bottle Price": 162.0, "Inventory": 3.0, "Distributor": "Vino Veritas", 
-         "BTG": 36.0, "Suggested Retail": 79},
+         "Inventory": 3.0, "Distributor": "Vino Veritas"},
         {"Product": "Nebbiolo, 2019, Cantina Massara, Barolo, Piedmont, Italy", 
          "Type": "Red", "Cost": 31.0, "Size (oz.)": 25.3, "Margin": 32, 
-         "Bottle Price": 97.0, "Inventory": 4.0, "Distributor": "Vino Veritas", 
-         "BTG": 22.0, "Suggested Retail": 45},
+         "Inventory": 4.0, "Distributor": "Vino Veritas"},
     ]
     df = pd.DataFrame(data)
+    # Calculated fields (non-editable)
+    df["Bottle Price"] = df.apply(
+        lambda row: math.ceil(row["Cost"] / (row["Margin"] / 100)) if row["Margin"] > 0 else 0, axis=1)
     df["Value"] = df["Cost"] * df["Inventory"]
+    df["BTG"] = df["Cost"].apply(lambda x: math.ceil(x / 4))
+    df["Suggested Retail"] = df["Cost"].apply(lambda x: math.ceil(x * 1.44))
     return df[["Product", "Type", "Cost", "Size (oz.)", "Margin", "Bottle Price", 
                "Inventory", "Value", "Distributor", "BTG", "Suggested Retail"]]
 
@@ -1221,11 +1231,17 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
         for col in ['Size (oz.)', 'Inventory']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        # V3.5: Recalculate all calculated fields with correct formulas
         if 'Cost' in df.columns and 'Size (oz.)' in df.columns:
             df['Cost/Oz'] = df.apply(
                 lambda row: round(row['Cost'] / row['Size (oz.)'], 2) if row['Size (oz.)'] > 0 else 0, axis=1)
+        if 'Cost/Oz' in df.columns and 'Margin' in df.columns:
+            df['Neat Price'] = df.apply(
+                lambda row: math.ceil(row['Cost/Oz'] / (row['Margin'] / 100)) if row['Margin'] > 0 else 0, axis=1)
         if 'Cost' in df.columns and 'Inventory' in df.columns:
             df['Value'] = round(df['Cost'] * df['Inventory'], 2)
+        if 'Cost' in df.columns:
+            df['Suggested Retail'] = df['Cost'].apply(lambda x: math.ceil(x * 1.44))
         return df
     except Exception as e:
         st.error(f"Error processing spirits data: {e}")
@@ -1243,8 +1259,15 @@ def process_uploaded_wine(df: pd.DataFrame) -> pd.DataFrame:
         for col in ['Size (oz.)', 'Inventory']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        # V3.5: Recalculate all calculated fields with correct formulas
+        if 'Cost' in df.columns and 'Margin' in df.columns:
+            df['Bottle Price'] = df.apply(
+                lambda row: math.ceil(row['Cost'] / (row['Margin'] / 100)) if row['Margin'] > 0 else 0, axis=1)
         if 'Cost' in df.columns and 'Inventory' in df.columns:
             df['Value'] = round(df['Cost'] * df['Inventory'], 2)
+        if 'Cost' in df.columns:
+            df['BTG'] = df['Cost'].apply(lambda x: math.ceil(x / 4))
+            df['Suggested Retail'] = df['Cost'].apply(lambda x: math.ceil(x * 1.44))
         return df
     except Exception as e:
         st.error(f"Error processing wine data: {e}")
@@ -1489,9 +1512,10 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
     
     st.markdown(f"#### {display_name} Inventory")
     
+    # V3.5: Updated disabled columns - all calculated fields are non-editable
     disabled_cols = {
-        'spirits': ["Cost/Oz", "Value"],
-        'wine': ["Value"],
+        'spirits': ["Cost/Oz", "Neat Price", "Value", "Suggested Retail"],
+        'wine': ["Bottle Price", "Value", "BTG", "Suggested Retail"],
         'beer': ["Cost/Unit", "Value"],
         'ingredients': ["Cost/Unit"],
     }.get(category, [])
@@ -1504,10 +1528,11 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
             "Cost/Oz": st.column_config.NumberColumn(format="$%.2f", disabled=True),
             "Cost/Unit": st.column_config.NumberColumn(format="$%.2f", disabled=True),
             "Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
-            "Neat Price": st.column_config.NumberColumn(format="$%.2f"),
-            "Bottle Price": st.column_config.NumberColumn(format="$%.2f"),
+            "Neat Price": st.column_config.NumberColumn(format="$%.0f", disabled=True),
+            "Bottle Price": st.column_config.NumberColumn(format="$%.0f", disabled=True),
             "Menu Price": st.column_config.NumberColumn(format="$%.2f"),
-            "BTG": st.column_config.NumberColumn(format="$%.2f"),
+            "BTG": st.column_config.NumberColumn(format="$%.0f", disabled=True),
+            "Suggested Retail": st.column_config.NumberColumn(format="$%.0f", disabled=True),
             "Margin": st.column_config.NumberColumn(format="%.0f%%"),
             "Cost per Keg/Case": st.column_config.NumberColumn(format="$%.2f"),
         })
@@ -1515,14 +1540,28 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
     if st.button(f"💾 Save Changes", key=f"save_{category}"):
         # Recalculate derived fields
         if category == "spirits":
+            # V3.5: Updated formulas for spirits
             if "Cost" in edited_df.columns and "Size (oz.)" in edited_df.columns:
-                edited_df["Cost/Oz"] = edited_df.apply(lambda r: round(r['Cost'] / r['Size (oz.)'], 2) if r['Size (oz.)'] > 0 else 0, axis=1)
+                edited_df["Cost/Oz"] = edited_df.apply(
+                    lambda r: round(r['Cost'] / r['Size (oz.)'], 2) if r['Size (oz.)'] > 0 else 0, axis=1)
+            if "Cost/Oz" in edited_df.columns and "Margin" in edited_df.columns:
+                edited_df["Neat Price"] = edited_df.apply(
+                    lambda r: math.ceil(r['Cost/Oz'] / (r['Margin'] / 100)) if r['Margin'] > 0 else 0, axis=1)
             if "Cost" in edited_df.columns and "Inventory" in edited_df.columns:
                 edited_df["Value"] = round(edited_df["Cost"] * edited_df["Inventory"], 2)
+            if "Cost" in edited_df.columns:
+                edited_df["Suggested Retail"] = edited_df["Cost"].apply(lambda x: math.ceil(x * 1.44))
             st.session_state.spirits_inventory = edited_df
         elif category == "wine":
+            # V3.5: Updated formulas for wine
+            if "Cost" in edited_df.columns and "Margin" in edited_df.columns:
+                edited_df["Bottle Price"] = edited_df.apply(
+                    lambda r: math.ceil(r['Cost'] / (r['Margin'] / 100)) if r['Margin'] > 0 else 0, axis=1)
             if "Cost" in edited_df.columns and "Inventory" in edited_df.columns:
                 edited_df["Value"] = round(edited_df["Cost"] * edited_df["Inventory"], 2)
+            if "Cost" in edited_df.columns:
+                edited_df["BTG"] = edited_df["Cost"].apply(lambda x: math.ceil(x / 4))
+                edited_df["Suggested Retail"] = edited_df["Cost"].apply(lambda x: math.ceil(x * 1.44))
             st.session_state.wine_inventory = edited_df
         elif category == "beer":
             if "Cost per Keg/Case" in edited_df.columns and "Size" in edited_df.columns:
