@@ -47,6 +47,8 @@
 #   V3.6 - Order flow bug fixes
 #           - Added migration to handle old session data with 'Order Qty' column name
 #           - Step 2 and Step 3 now auto-rename legacy column names to prevent KeyError
+#           - Added 'Unit' column to generated orders for Step 3 verification
+#           - Added migration for missing 'Unit' column in pending orders
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -663,6 +665,7 @@ def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
                 'Current Stock': total_inv,
                 'Par Level': par,
                 'Order Quantity': order_qty,  # V3.5: Standardized column name
+                'Unit': row.get('Unit', ''),  # V3.6: Added Unit column for Step 3 verification
                 'Unit Cost': unit_cost,
                 'Order Value': order_qty * unit_cost,
                 'Distributor': row.get('Distributor', 'N/A'),
@@ -2281,6 +2284,13 @@ def show_ordering():
                 pending_df = pending_df.rename(columns={'Order Qty': 'Order Quantity'})
             if 'Original Order Qty' in pending_df.columns and 'Original Order Quantity' not in pending_df.columns:
                 pending_df = pending_df.rename(columns={'Original Order Qty': 'Original Order Quantity'})
+            
+            # V3.6: Add Unit column if missing from old session data
+            if 'Unit' not in pending_df.columns:
+                pending_df['Unit'] = ''
+            
+            # V3.6: Update session state with migrated data
+            st.session_state.pending_order = pending_df.copy()
             
             # Ensure all required columns exist
             if 'Original Unit Cost' not in pending_df.columns:
