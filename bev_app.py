@@ -42,7 +42,8 @@
 #           - Beer Menu Price: Cans/Bottles=Cost/Unit/(Margin/100), Kegs=(Cost/Unit*16)/(Margin/100)
 #           - Suggested Retail=Cost*1.44 for Spirits/Wine, rounded up
 #           - Added CSV upload instructions showing required vs calculated fields
-#           - Fixed: Generate Orders button now correctly reads Par and Total Current Inventory columns
+#           - Fixed: Generate Orders now correctly reads Par and Total Current Inventory columns
+#           - Fixed: Standardized column names (Order Quantity, Current Stock, Par Level) across order flow
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -658,7 +659,7 @@ def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
                 'Category': row.get('Category', 'Unknown'),
                 'Current Stock': total_inv,
                 'Par Level': par,
-                'Order Qty': order_qty,
+                'Order Quantity': order_qty,  # V3.5: Standardized column name
                 'Unit Cost': unit_cost,
                 'Order Value': order_qty * unit_cost,
                 'Distributor': row.get('Distributor', 'N/A'),
@@ -2180,21 +2181,21 @@ def show_ordering():
             order_df = st.session_state.current_order.copy()
             st.markdown(f"**{len(order_df)} items need ordering:**")
             
+            # V3.5: Fixed column references to match generate_order_from_inventory output
             edited_order = st.data_editor(
                 order_df,
                 use_container_width=True,
                 hide_index=True,
                 key="order_editor",
                 column_config={
+                    "Current Stock": st.column_config.NumberColumn(format="%.1f", disabled=True),
+                    "Par Level": st.column_config.NumberColumn(format="%.1f", disabled=True),
+                    "Order Quantity": st.column_config.NumberColumn(min_value=0, step=0.5),
                     "Unit Cost": st.column_config.NumberColumn(format="$%.2f", disabled=True),
                     "Order Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
-                    "Suggested Order": st.column_config.NumberColumn(disabled=True),
-                    "Current Inventory": st.column_config.NumberColumn(disabled=True),
-                    "Par": st.column_config.NumberColumn(disabled=True),
-                    "Order Quantity": st.column_config.NumberColumn(min_value=0, step=0.5),
                 },
-                disabled=["Product", "Category", "Current Inventory", "Par", "Suggested Order",
-                         "Unit", "Unit Cost", "Distributor", "Order Notes"]
+                disabled=["Product", "Category", "Current Stock", "Par Level", 
+                         "Unit Cost", "Distributor"]
             )
             
             # V2.12: Action buttons row with Recalculate and Copy options
@@ -2202,22 +2203,20 @@ def show_ordering():
             
             with col_recalc:
                 if st.button("💰 Recalculate Total", key="recalc_order"):
+                    # V3.5: Fixed column name to Order Quantity
                     edited_order['Order Value'] = edited_order['Order Quantity'] * edited_order['Unit Cost']
                     st.session_state.current_order = edited_order
                     st.rerun()
             
             with col_copy_order:
-                # Create a simple text format for clipboard
-                copy_cols = ['Product', 'Order Quantity', 'Unit', 'Distributor']
-                copy_df = edited_order[copy_cols].copy()
-                
+                # V3.5: Fixed column references for copy functionality
                 # Group by distributor for organized copying
                 copy_text = "ORDER LIST\n" + "=" * 40 + "\n\n"
-                for dist in copy_df['Distributor'].unique():
-                    dist_items = copy_df[copy_df['Distributor'] == dist]
+                for dist in edited_order['Distributor'].unique():
+                    dist_items = edited_order[edited_order['Distributor'] == dist]
                     copy_text += f"📦 {dist}\n" + "-" * 30 + "\n"
                     for _, row in dist_items.iterrows():
-                        copy_text += f"  • {row['Product']}: {row['Order Quantity']} {row['Unit']}\n"
+                        copy_text += f"  • {row['Product']}: {row['Order Quantity']}\n"
                     copy_text += "\n"
                 
                 st.download_button(
@@ -2234,6 +2233,7 @@ def show_ordering():
                 # Create pending order with original values for comparison
                 pending_df = edited_order.copy()
                 pending_df['Original Unit Cost'] = pending_df['Unit Cost']
+                # V3.5: Fixed column name to Order Quantity
                 pending_df['Original Order Quantity'] = pending_df['Order Quantity']
                 pending_df['Verification Notes'] = ''  # Initialize as empty string
                 pending_df['Verification Notes'] = pending_df['Verification Notes'].astype(str)  # Ensure string type
