@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V3.3
+# BEVERAGE MANAGEMENT APP V3.4
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -26,9 +26,13 @@
 #   V3.3 - Home screen UI refinements
 #           - Clickable module cards (removed separate Open buttons)
 #           - Updated tagline
-#           - Added quick stats dashboard
 #           - Hover effects on cards
 #           - Removed Google Sheets success message (kept warning)
+#   V3.4 - Home screen cleanup
+#           - Removed quick stats dashboard for cleaner look
+#           - Removed non-functional CTA text from cards
+#           - Balanced grid layout (3 top, 2 centered bottom)
+#           - Added last activity indicator
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -47,7 +51,7 @@ from typing import Optional, Dict, List, Any, Tuple
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V3.3",
+    page_title="Beverage Management App V3.4",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -441,16 +445,8 @@ st.markdown("""
     .card-icon { font-size: 3rem; margin-bottom: 1rem; }
     .card-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; }
     .card-description { font-size: 0.95rem; opacity: 0.9; }
-    .card-cta { font-size: 0.85rem; opacity: 0.8; margin-top: 1rem; }
     
     .stMetric { background-color: #f8f9fa; padding: 1rem; border-radius: 10px; }
-    
-    .quick-stats {
-        background: #f8f9fa;
-        border-radius: 10px;
-        padding: 1rem;
-        margin-bottom: 1.5rem;
-    }
     
     /* Hide button borders for card buttons */
     .card-button > button {
@@ -1299,7 +1295,7 @@ def process_uploaded_ingredients(df: pd.DataFrame) -> pd.DataFrame:
 # =============================================================================
 
 def show_home():
-    """Renders the homescreen with navigation cards (V3.3 - clickable cards)."""
+    """Renders the homescreen with navigation cards (V3.4 - clean, balanced layout)."""
     st.markdown("""
     <div class="main-header">
         <h1>🍸 Beverage Management App</h1>
@@ -1307,30 +1303,7 @@ def show_home():
     </div>
     """, unsafe_allow_html=True)
     
-    # Quick Stats Dashboard
-    total_inv_value = (
-        calculate_total_value(st.session_state.get('spirits_inventory', pd.DataFrame())) +
-        calculate_total_value(st.session_state.get('wine_inventory', pd.DataFrame())) +
-        calculate_total_value(st.session_state.get('beer_inventory', pd.DataFrame())) +
-        calculate_total_value(st.session_state.get('ingredients_inventory', pd.DataFrame()))
-    )
-    cocktail_count = len(st.session_state.get('cocktail_recipes', []))
-    bar_prep_count = len(st.session_state.get('bar_prep_recipes', []))
-    
-    stat_cols = st.columns(4)
-    with stat_cols[0]:
-        st.metric("💰 Total Inventory Value", format_currency(total_inv_value))
-    with stat_cols[1]:
-        st.metric("🍹 Cocktail Recipes", cocktail_count)
-    with stat_cols[2]:
-        st.metric("🧪 Bar Prep Recipes", bar_prep_count)
-    with stat_cols[3]:
-        last_update = st.session_state.get('last_inventory_date', 'N/A')
-        st.metric("📅 Last Inventory", last_update)
-    
-    st.markdown("---")
-    
-    # Module Cards - Row 1
+    # Module Cards - Row 1 (3 cards)
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -1339,7 +1312,6 @@ def show_home():
             <div class="card-icon">📦</div>
             <div class="card-title">Master Inventory</div>
             <div class="card-description">Track spirits, wine, beer, and ingredients.<br>View values, costs, and stock levels.</div>
-            <div class="card-cta">Click to open →</div>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Master Inventory", key="btn_inventory", use_container_width=True, type="primary"):
@@ -1352,7 +1324,6 @@ def show_home():
             <div class="card-icon">📋</div>
             <div class="card-title">Weekly Order Builder</div>
             <div class="card-description">Build weekly orders based on par levels.<br>Track order history and spending.</div>
-            <div class="card-cta">Click to open →</div>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Weekly Orders", key="btn_ordering", use_container_width=True, type="primary"):
@@ -1365,15 +1336,14 @@ def show_home():
             <div class="card-icon">🍹</div>
             <div class="card-title">Cocktail Builds Book</div>
             <div class="card-description">Store and cost cocktail recipes.<br>Calculate margins and pricing.</div>
-            <div class="card-cta">Click to open →</div>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Cocktail Builds", key="btn_cocktails", use_container_width=True, type="primary"):
             navigate_to('cocktails')
             st.rerun()
     
-    # Module Cards - Row 2 (centered)
-    col4, col5, col6 = st.columns([1, 1, 1])
+    # Module Cards - Row 2 (2 cards centered with spacers)
+    spacer_left, col4, col5, spacer_right = st.columns([0.5, 1, 1, 0.5])
     
     with col4:
         st.markdown("""
@@ -1381,7 +1351,6 @@ def show_home():
             <div class="card-icon">🧪</div>
             <div class="card-title">Bar Prep Recipe Book</div>
             <div class="card-description">Syrups, infusions, and batched cocktails.<br>Calculate batch costs and cost/oz.</div>
-            <div class="card-cta">Click to open →</div>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Bar Prep", key="btn_bar_prep", use_container_width=True, type="primary"):
@@ -1394,18 +1363,18 @@ def show_home():
             <div class="card-icon">📊</div>
             <div class="card-title">Cost of Goods Sold</div>
             <div class="card-description">Calculate COGS by category.<br>Track trends and export reports.</div>
-            <div class="card-cta">Click to open →</div>
         </div>
         """, unsafe_allow_html=True)
         if st.button("COGS Calculator", key="btn_cogs", use_container_width=True, type="primary"):
             navigate_to('cogs')
             st.rerun()
     
-    with col6:
-        # Empty for balance, or could add future module
-        st.markdown("")
-    
     st.markdown("---")
+    
+    # Last activity indicator
+    last_update = st.session_state.get('last_inventory_date', None)
+    if last_update:
+        st.markdown(f"<p style='text-align: center; color: #888; font-size: 0.9rem;'>📅 Last inventory update: {last_update}</p>", unsafe_allow_html=True)
     
     # Only show warning if not configured (removed success message)
     if not is_google_sheets_configured():
