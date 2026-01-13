@@ -1077,6 +1077,9 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
     # Calculate costs
     total_cost = calculate_recipe_cost(recipe.get('ingredients', []))
     
+    # Create a safe key from recipe name (remove spaces and special chars)
+    safe_name = recipe['name'].replace(' ', '_').replace('/', '_').replace("'", "")
+    
     if recipe_type == 'bar_prep':
         yield_oz = recipe.get('yield_oz', 32)
         cost_per_oz = total_cost / yield_oz if yield_oz > 0 else 0
@@ -1135,10 +1138,10 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
                 st.metric("Sale Price", format_currency(recipe.get('sale_price', 0)))
                 st.metric("Margin", f"{margin:.1f}%")
         
-        # Delete button
+        # Delete button - use recipe name for unique key
         if on_delete:
             st.markdown("---")
-            if st.button("🗑️ Delete Recipe", key=f"delete_{recipe_type}_{idx}"):
+            if st.button("🗑️ Delete Recipe", key=f"delete_{recipe_type}_{safe_name}"):
                 on_delete(recipe['name'])
 
 
