@@ -49,6 +49,7 @@
 #           - Step 2 and Step 3 now auto-rename legacy column names to prevent KeyError
 #           - Added 'Unit' column to generated orders for Step 3 verification
 #           - Added migration for missing 'Unit' column in pending orders
+#           - Fixed: Verification workflow now properly resets after finalize/cancel
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -2514,8 +2515,9 @@ def show_ordering():
                             st.session_state.order_history, pd.DataFrame(new_orders)
                         ], ignore_index=True)
                         
-                        # Clear pending order
+                        # V3.6: Clear pending order from both Google Sheets and session state
                         clear_pending_order()
+                        st.session_state.pending_order = pd.DataFrame()  # Reset session state
                         
                         # Save to files for persistence
                         save_all_inventory_data()
@@ -2529,7 +2531,9 @@ def show_ordering():
             with col_cancel:
                 st.write("")  # Spacer
                 if st.button("❌ Cancel Verification", key="cancel_verification"):
+                    # V3.6: Clear pending order from both Google Sheets and session state
                     clear_pending_order()
+                    st.session_state.pending_order = pd.DataFrame()  # Reset session state
                     st.warning("Verification cancelled. Order has been discarded.")
                     st.rerun()
             
