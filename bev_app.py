@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V3.0
+# BEVERAGE MANAGEMENT APP V3.2
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -16,9 +16,16 @@
 #           - Consolidated recipe display with display_recipe_card() helper
 #           - Reduced code duplication in Bar Prep tabs
 #           - Optimized session state initialization
-#           - ~400 lines reduced while maintaining all functionality
+#           - ~24% code reduction while maintaining all functionality
+#   V3.1 - Bar Prep UI improvements
+#           - Changed Syrups/Infusions emoji from 🧴 to 🍯 (honey pot)
+#           - Clarified header to show "Cost/oz:" instead of "$/oz:"
+#   V3.2 - UI and attribution updates
+#           - Changed Syrups/Infusions emoji from 🍯 to 🫙 (jar)
+#           - Updated author attribution
 #
-# Author: Canter Inn
+# Author: James Juedes, developed in collaboration with Claude Opus 4.5 (Anthropic)
+# Location: Canter Inn, Madison, WI
 # Deployment: Streamlit Community Cloud via GitHub
 # =============================================================================
 
@@ -35,7 +42,7 @@ from typing import Optional, Dict, List, Any, Tuple
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V3.0",
+    page_title="Beverage Management App V3.2",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1057,7 +1064,7 @@ def show_sidebar_navigation():
                 st.rerun()
         
         st.markdown("---")
-        st.caption("Canter Inn • Madison, WI")
+        st.caption("Beverage Management App")
 
 
 # =============================================================================
@@ -1083,7 +1090,7 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
     if recipe_type == 'bar_prep':
         yield_oz = recipe.get('yield_oz', 32)
         cost_per_oz = total_cost / yield_oz if yield_oz > 0 else 0
-        header = f"**{recipe['name']}** | Yield: {recipe.get('yield_description', '')} | Batch: {format_currency(total_cost)} | $/oz: {format_currency(cost_per_oz)}"
+        header = f"**{recipe['name']}** | Yield: {recipe.get('yield_description', '')} | Batch: {format_currency(total_cost)} | Cost/oz: {format_currency(cost_per_oz)}"
     else:
         sale_price = recipe.get('sale_price', 0)
         margin = ((sale_price - total_cost) / sale_price * 100) if sale_price > 0 else 0
@@ -1266,7 +1273,7 @@ def show_home():
     """Renders the homescreen with navigation cards."""
     st.markdown("""
     <div class="main-header">
-        <h1>🍸 Beverage Management App V3.0</h1>
+        <h1>🍸 Beverage Management App V3.2</h1>
         <p>Manage your inventory, orders, and cocktail recipes in one place</p>
     </div>
     """, unsafe_allow_html=True)
@@ -1323,7 +1330,7 @@ def show_home():
         st.success("✅ Connected to Google Sheets - Data will persist permanently")
     else:
         st.warning("⚠️ Google Sheets not configured - Data will reset on app restart")
-    st.markdown("<p style='text-align: center; color: #888;'>Canter Inn • Madison, WI</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #888;'>Developed by James Juedes utilizing Claude Opus 4.5</p>", unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -2999,19 +3006,19 @@ def show_bar_prep():
     with col1:
         st.metric("Total Recipes", len(recipes))
     with col2:
-        st.metric("🧴 Syrups/Infusions", len(syrups))
+        st.metric("🫙 Syrups/Infusions", len(syrups))
     with col3:
         st.metric("🍸 Batched Cocktails", len(batches))
     
     st.markdown("---")
     
     tab_syrups, tab_batches, tab_add = st.tabs([
-        "🧴 Syrups/Infusions/Tinctures", "🍸 Batched Cocktails", "➕ Add New Recipe"
+        "🫙 Syrups/Infusions/Tinctures", "🍸 Batched Cocktails", "➕ Add New Recipe"
     ])
     
     # V3.0: Use reusable display_recipe_list for both tabs
     with tab_syrups:
-        st.markdown("### 🧴 Syrups, Infusions & Tinctures")
+        st.markdown("### 🫙 Syrups, Infusions & Tinctures")
         display_recipe_list(recipes, 'bar_prep', category_filter='Syrups/Infusions', session_key='bar_prep_recipes')
     
     with tab_batches:
