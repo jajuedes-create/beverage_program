@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V3.5
+# BEVERAGE MANAGEMENT APP V3.4
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -33,11 +33,6 @@
 #           - Removed non-functional CTA text from cards
 #           - Balanced grid layout (3 top, 2 centered bottom)
 #           - Added last activity indicator
-#   V3.5 - Branding overhaul (Harvey House inspired)
-#           - New color palette: burgundy, navy, gold, cream, forest green
-#           - Classic supper club aesthetic with modern refinement
-#           - Updated typography for elegant feel
-#           - Refined card gradients and hover effects
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -56,7 +51,7 @@ from typing import Optional, Dict, List, Any, Tuple
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V3.5",
+    page_title="Beverage Management App V3.4",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -418,170 +413,47 @@ def get_purchases_by_category_and_date(start_date: str, end_date: str) -> dict:
 
 
 # =============================================================================
-# CUSTOM CSS - Harvey House Inspired Branding
-# =============================================================================
-# Color Palette:
-#   Deep Burgundy: #722F37 (primary accent)
-#   Midnight Navy: #1E3A5F (titles, headers)
-#   Warm Gold: #C9A227 (highlights, CTAs)
-#   Cream: #F5F5DC (backgrounds)
-#   Forest Green: #1B4332 (success states)
-#   Warm Charcoal: #36454F (text)
+# CUSTOM CSS
 # =============================================================================
 
 st.markdown("""
 <style>
-    /* Import elegant fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Source+Sans+Pro:wght@300;400;600&display=swap');
+    .main-header { text-align: center; padding: 1rem 0 2rem 0; }
+    .main-header h1 { color: #1E3A5F; margin-bottom: 0.5rem; }
+    .main-header p { color: #666; font-size: 1.1rem; max-width: 600px; margin: 0 auto; }
     
-    /* Global Typography */
-    html, body, [class*="css"] {
-        font-family: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    
-    h1, h2, h3, .card-title {
-        font-family: 'Playfair Display', Georgia, serif;
-    }
-    
-    /* Main Header - Elegant Supper Club Style */
-    .main-header { 
-        text-align: center; 
-        padding: 2rem 0 2.5rem 0;
-    }
-    .main-header h1 { 
-        font-family: 'Playfair Display', Georgia, serif;
-        color: #1E3A5F; 
-        font-size: 2.75rem;
-        font-weight: 600;
-        margin-bottom: 0.75rem;
-        letter-spacing: 0.5px;
-    }
-    .main-header p { 
-        color: #36454F; 
-        font-size: 1.15rem; 
-        max-width: 650px; 
-        margin: 0 auto;
-        font-weight: 300;
-        line-height: 1.6;
-    }
-    
-    /* Module Cards - Supper Club Aesthetic */
     .module-card {
-        background: linear-gradient(135deg, #722F37 0%, #5C1F29 100%);
-        border-radius: 12px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 15px;
         padding: 2rem;
-        color: #F5F5DC;
+        color: white;
         margin-bottom: 0.5rem;
-        min-height: 190px;
+        min-height: 180px;
         cursor: pointer;
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
-        border: 1px solid rgba(201, 162, 39, 0.1);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
     .module-card:hover {
-        transform: translateY(-6px);
-        box-shadow: 0 15px 40px rgba(30, 58, 95, 0.25);
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
     }
+    .card-inventory { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+    .card-ordering { background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%); }
+    .card-cocktails { background: linear-gradient(135deg, #8E2DE2 0%, #4A00E0 100%); }
+    .card-barprep { background: linear-gradient(135deg, #10B981 0%, #059669 100%); }
+    .card-cogs { background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); }
     
-    /* Card Color Variations - Rich, Warm Tones */
-    .card-inventory { 
-        background: linear-gradient(135deg, #1B4332 0%, #2D5016 100%); 
-    }
-    .card-ordering { 
-        background: linear-gradient(135deg, #722F37 0%, #5C1F29 100%); 
-    }
-    .card-cocktails { 
-        background: linear-gradient(135deg, #B8860B 0%, #996515 100%); 
-    }
-    .card-barprep { 
-        background: linear-gradient(135deg, #1E3A5F 0%, #152A45 100%); 
-    }
-    .card-cogs { 
-        background: linear-gradient(135deg, #36454F 0%, #2C3A47 100%); 
-    }
+    .card-icon { font-size: 3rem; margin-bottom: 1rem; }
+    .card-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .card-description { font-size: 0.95rem; opacity: 0.9; }
     
-    /* Card Typography */
-    .card-icon { 
-        font-size: 2.75rem; 
-        margin-bottom: 1rem;
-        opacity: 0.95;
-    }
-    .card-title { 
-        font-family: 'Playfair Display', Georgia, serif;
-        font-size: 1.4rem; 
-        font-weight: 600; 
-        margin-bottom: 0.6rem;
-        letter-spacing: 0.3px;
-    }
-    .card-description { 
-        font-size: 0.95rem; 
-        opacity: 0.85;
-        line-height: 1.5;
-        font-weight: 300;
-    }
+    .stMetric { background-color: #f8f9fa; padding: 1rem; border-radius: 10px; }
     
-    /* Metrics Styling */
-    .stMetric { 
-        background-color: #FAFAF5; 
-        padding: 1rem; 
-        border-radius: 8px;
-        border-left: 3px solid #C9A227;
-    }
-    
-    /* Sidebar Styling */
-    [data-testid="stSidebar"] {
-        background-color: #1E3A5F;
-    }
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
-        color: #F5F5DC;
-    }
-    
-    /* Button Styling */
-    .stButton > button {
-        font-family: 'Source Sans Pro', sans-serif;
-        font-weight: 600;
-        border-radius: 6px;
-        transition: all 0.2s ease;
-    }
-    .stButton > button[kind="primary"] {
-        background-color: #722F37;
-        border-color: #722F37;
-    }
-    .stButton > button[kind="primary"]:hover {
-        background-color: #5C1F29;
-        border-color: #5C1F29;
-    }
-    
-    /* Tab Styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        font-family: 'Source Sans Pro', sans-serif;
-        font-weight: 600;
-    }
-    
-    /* Expander Styling */
-    .streamlit-expanderHeader {
-        font-family: 'Source Sans Pro', sans-serif;
-        font-weight: 600;
-        color: #1E3A5F;
-    }
-    
-    /* Data Editor / Tables */
-    [data-testid="stDataFrame"] {
-        border-radius: 8px;
-    }
-    
-    /* Footer Text */
-    .footer-text {
-        color: #36454F;
-        font-size: 0.9rem;
-        text-align: center;
-    }
-    
-    /* Divider */
-    hr {
-        border-color: rgba(201, 162, 39, 0.3);
+    /* Hide button borders for card buttons */
+    .card-button > button {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        width: 100%;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1502,13 +1374,13 @@ def show_home():
     # Last activity indicator
     last_update = st.session_state.get('last_inventory_date', None)
     if last_update:
-        st.markdown(f"<p style='text-align: center; color: #36454F; font-size: 0.9rem;'>📅 Last inventory update: {last_update}</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; color: #888; font-size: 0.9rem;'>📅 Last inventory update: {last_update}</p>", unsafe_allow_html=True)
     
     # Only show warning if not configured (removed success message)
     if not is_google_sheets_configured():
         st.warning("⚠️ Google Sheets not configured - Data will reset on app restart")
     
-    st.markdown("<p style='text-align: center; color: #36454F; font-size: 0.85rem; margin-top: 1rem;'>Developed by James Juedes utilizing Claude Opus 4.5</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #888;'>Developed by James Juedes utilizing Claude Opus 4.5</p>", unsafe_allow_html=True)
 
 
 # =============================================================================
