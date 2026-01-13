@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V3.5
+# BEVERAGE MANAGEMENT APP V3.6
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -44,6 +44,9 @@
 #           - Added CSV upload instructions showing required vs calculated fields
 #           - Fixed: Generate Orders now correctly reads Par and Total Current Inventory columns
 #           - Fixed: Standardized column names (Order Quantity, Current Stock, Par Level) across order flow
+#   V3.6 - Order flow bug fixes
+#           - Added migration to handle old session data with 'Order Qty' column name
+#           - Step 2 and Step 3 now auto-rename legacy column names to prevent KeyError
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -63,7 +66,7 @@ from typing import Optional, Dict, List, Any, Tuple
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V3.5",
+    page_title="Beverage Management App V3.6",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -2179,6 +2182,12 @@ def show_ordering():
         
         if 'current_order' in st.session_state and len(st.session_state.current_order) > 0:
             order_df = st.session_state.current_order.copy()
+            
+            # V3.6: Migration - rename old column names if present
+            if 'Order Qty' in order_df.columns and 'Order Quantity' not in order_df.columns:
+                order_df = order_df.rename(columns={'Order Qty': 'Order Quantity'})
+                st.session_state.current_order = order_df
+            
             st.markdown(f"**{len(order_df)} items need ordering:**")
             
             # V3.5: Fixed column references to match generate_order_from_inventory output
@@ -2266,6 +2275,12 @@ def show_ordering():
         
         if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
             pending_df = st.session_state.pending_order.copy()
+            
+            # V3.6: Migration - rename old column names if present
+            if 'Order Qty' in pending_df.columns and 'Order Quantity' not in pending_df.columns:
+                pending_df = pending_df.rename(columns={'Order Qty': 'Order Quantity'})
+            if 'Original Order Qty' in pending_df.columns and 'Original Order Quantity' not in pending_df.columns:
+                pending_df = pending_df.rename(columns={'Original Order Qty': 'Original Order Quantity'})
             
             # Ensure all required columns exist
             if 'Original Unit Cost' not in pending_df.columns:
