@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V3.6
+# BEVERAGE MANAGEMENT APP V3.6.test
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -50,6 +50,9 @@
 #           - Added 'Unit' column to generated orders for Step 3 verification
 #           - Added migration for missing 'Unit' column in pending orders
 #           - Fixed: Verification workflow now properly resets after finalize/cancel
+#   V3.6.test - Testing real-time calculated fields (Option 3: Split Display)
+#           - Spirits category uses split display: editable fields + live calculated preview
+#           - Calculated fields update on any interaction without clicking Save
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -69,7 +72,7 @@ from typing import Optional, Dict, List, Any, Tuple
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V3.6",
+    page_title="Beverage Management App V3.6.test",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1606,8 +1609,141 @@ def show_inventory():
                 st.error(f"Error: {e}")
 
 
+# =============================================================================
+# V3.6.test: SPLIT DISPLAY FOR SPIRITS (Real-time calculated fields)
+# =============================================================================
+
+def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
+    """
+    V3.6.test: Renders spirits inventory with split display approach.
+    - Editable fields in data_editor
+    - Calculated fields in separate read-only display that updates on any interaction
+    """
+    if df is None or len(df) == 0:
+        st.info("No spirits inventory data.")
+        return
+    
+    st.markdown("#### Search & Filter Spirits")
+    filter_cols = st.columns([2] + [1] * len(filter_columns))
+    
+    with filter_cols[0]:
+        search_term = st.text_input("🔍 Search", key="search_spirits", placeholder="Type to search...")
+    
+    column_filters = {}
+    for i, col_name in enumerate(filter_columns):
+        with filter_cols[i + 1]:
+            if col_name in df.columns:
+                unique_values = df[col_name].dropna().unique().tolist()
+                selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_spirits_{col_name}")
+                if selected:
+                    column_filters[col_name] = selected
+    
+    filtered_df = filter_dataframe(df, search_term, column_filters)
+    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # Define editable vs calculated columns
+    editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin", "Inventory", "Use", "Distributor", "Order Notes"]
+    calculated_cols = ["Cost/Oz", "Neat Price", "Value", "Suggested Retail"]
+    
+    # Filter to only columns that exist
+    editable_cols = [c for c in editable_cols if c in filtered_df.columns]
+    
+    st.markdown("#### ✏️ Editable Fields")
+    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    # Show only editable columns in the data editor
+    edited_df = st.data_editor(
+        filtered_df[editable_cols].copy(),
+        use_container_width=True,
+        num_rows="dynamic",
+        key="editor_spirits_split",
+        column_config={
+            "Cost": st.column_config.NumberColumn(format="$%.2f"),
+            "Size (oz.)": st.column_config.NumberColumn(format="%.1f"),
+            "Margin": st.column_config.NumberColumn(format="%.0f%%"),
+            "Inventory": st.column_config.NumberColumn(format="%.1f"),
+        }
+    )
+    
+    # Calculate computed columns from edited data (this runs on every rerender)
+    calc_df = edited_df.copy()
+    
+    if "Cost" in calc_df.columns and "Size (oz.)" in calc_df.columns:
+        calc_df["Cost/Oz"] = calc_df.apply(
+            lambda r: round(r['Cost'] / r['Size (oz.)'], 2) if r['Size (oz.)'] > 0 else 0, axis=1)
+    
+    if "Cost" in calc_df.columns and "Size (oz.)" in calc_df.columns and "Margin" in calc_df.columns:
+        calc_df["Neat Price"] = calc_df.apply(
+            lambda r: math.ceil(((r['Cost'] / r['Size (oz.)']) * 2) / (r['Margin'] / 100)) if r['Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
+    
+    if "Cost" in calc_df.columns and "Inventory" in calc_df.columns:
+        calc_df["Value"] = round(calc_df["Cost"] * calc_df["Inventory"], 2)
+    
+    if "Cost" in calc_df.columns:
+        calc_df["Suggested Retail"] = calc_df["Cost"].apply(lambda x: math.ceil(x * 1.44))
+    
+    # Display calculated columns in read-only table
+    st.markdown("#### 📊 Calculated Fields (Live Preview)")
+    st.caption("These values update automatically based on your edits above.")
+    
+    # Show Product + calculated columns for reference
+    display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
+    
+    st.dataframe(
+        calc_df[display_calc_cols],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Cost/Oz": st.column_config.NumberColumn(format="$%.2f"),
+            "Neat Price": st.column_config.NumberColumn(format="$%.0f"),
+            "Value": st.column_config.NumberColumn(format="$%.2f"),
+            "Suggested Retail": st.column_config.NumberColumn(format="$%.0f"),
+        }
+    )
+    
+    # Show totals
+    if "Value" in calc_df.columns:
+        total_value = calc_df["Value"].sum()
+        st.metric("💰 Total Inventory Value", format_currency(total_value))
+    
+    # Save button
+    if st.button("💾 Save Changes", key="save_spirits_split"):
+        # Merge edited data with calculated columns
+        full_df = calc_df.copy()
+        
+        # Update the full inventory (need to handle filtered view)
+        # For products in the edited view, update them in the full inventory
+        updated_inventory = st.session_state.spirits_inventory.copy()
+        
+        for idx, row in full_df.iterrows():
+            product_name = row['Product']
+            mask = updated_inventory['Product'] == product_name
+            if mask.any():
+                for col in full_df.columns:
+                    if col in updated_inventory.columns:
+                        updated_inventory.loc[mask, col] = row[col]
+        
+        # Handle new rows (if num_rows="dynamic" added new products)
+        existing_products = updated_inventory['Product'].tolist()
+        for idx, row in full_df.iterrows():
+            if row['Product'] not in existing_products:
+                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
+        
+        st.session_state.spirits_inventory = updated_inventory
+        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+        save_all_inventory_data()
+        st.success("✅ Changes saved!")
+        st.rerun()
+
+
 def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, display_name: str):
     """Renders an inventory tab with search, filter, and editing."""
+    
+    # V3.6.test: Use split display for spirits
+    if category == "spirits":
+        show_spirits_inventory_split(df, filter_columns)
+        return
+    
     if df is None or len(df) == 0:
         st.info(f"No {display_name.lower()} inventory data.")
         return
