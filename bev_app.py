@@ -42,6 +42,7 @@
 #           - Beer Menu Price: Cans/Bottles=Cost/Unit/(Margin/100), Kegs=(Cost/Unit*16)/(Margin/100)
 #           - Suggested Retail=Cost*1.44 for Spirits/Wine, rounded up
 #           - Added CSV upload instructions showing required vs calculated fields
+#           - Fixed: Generate Orders button now correctly reads Par and Total Current Inventory columns
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -646,8 +647,9 @@ def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
     
     orders = []
     for _, row in weekly_inv.iterrows():
-        par = row.get('Par Level', 0)
-        total_inv = row.get('Total Inventory', row.get('Bar Inventory', 0) + row.get('Storage Inventory', 0))
+        # V3.5: Fixed column name references to match weekly inventory structure
+        par = row.get('Par', row.get('Par Level', 0))
+        total_inv = row.get('Total Current Inventory', row.get('Total Inventory', row.get('Bar Inventory', 0) + row.get('Storage Inventory', 0)))
         if total_inv < par:
             order_qty = par - total_inv
             unit_cost = row.get('Unit Cost', 0)
