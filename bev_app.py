@@ -36,9 +36,12 @@
 #   V3.5 - Master Inventory calculated fields
 #           - Spirits: Cost/Oz, Neat Price, Value, Suggested Retail now non-editable
 #           - Wine: Bottle Price, Value, BTG, Suggested Retail now non-editable
-#           - Corrected formulas: Neat Price=(Cost/Oz)/(Margin/100), rounded up
+#           - Beer: Cost/Unit, Menu Price, Value now non-editable
+#           - Corrected formulas: Neat Price=((Cost/Oz)*2)/(Margin/100), rounded up
 #           - Corrected formulas: Bottle Price=Cost/(Margin/100), BTG=Cost/4, rounded up
-#           - Suggested Retail=Cost*1.44 for both, rounded up
+#           - Beer Menu Price: Cans/Bottles=Cost/Unit/(Margin/100), Kegs=(Cost/Unit*16)/(Margin/100)
+#           - Suggested Retail=Cost*1.44 for Spirits/Wine, rounded up
+#           - Added CSV upload instructions showing required vs calculated fields
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -717,8 +720,9 @@ def get_sample_spirits():
     df = pd.DataFrame(data)
     # Calculated fields (non-editable)
     df["Cost/Oz"] = df["Cost"] / df["Size (oz.)"]
+    # V3.5: Neat Price = ((Cost/Oz) * 2) / (Margin/100), rounded up
     df["Neat Price"] = df.apply(
-        lambda row: math.ceil((row["Cost"] / row["Size (oz.)"]) / (row["Margin"] / 100)) if row["Margin"] > 0 else 0, axis=1)
+        lambda row: math.ceil(((row["Cost"] / row["Size (oz.)"]) * 2) / (row["Margin"] / 100)) if row["Margin"] > 0 and row["Size (oz.)"] > 0 else 0, axis=1)
     df["Value"] = df["Cost"] * df["Inventory"]
     df["Suggested Retail"] = df["Cost"].apply(lambda x: math.ceil(x * 1.44))
     return df[["Product", "Type", "Cost", "Size (oz.)", "Cost/Oz", "Margin", 
@@ -766,28 +770,43 @@ def get_sample_beers():
     data = [
         {"Product": "New Glarus Staghorn Oktoberfest", "Type": "Can", 
          "Cost per Keg/Case": 26.40, "Size": 24.0, "UoM": "cans", 
-         "Margin": 21, "Menu Price": 5.0, "Inventory": 1.0, 
+         "Margin": 21, "Inventory": 1.0, 
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "New Glarus Moon Man", "Type": "Can", 
          "Cost per Keg/Case": 26.40, "Size": 24.0, "UoM": "cans", 
-         "Margin": 21, "Menu Price": 5.0, "Inventory": 2.0, 
+         "Margin": 21, "Inventory": 2.0, 
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "Coors Light", "Type": "Can", 
          "Cost per Keg/Case": 24.51, "Size": 30.0, "UoM": "cans", 
-         "Margin": 19, "Menu Price": 4.0, "Inventory": 1.0, 
+         "Margin": 19, "Inventory": 1.0, 
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "Hop Haus Yard Work IPA", "Type": "Sixtel", 
-         "Cost per Keg/Case": 75.00, "Size": 1.0, "UoM": "keg", 
-         "Margin": 22, "Menu Price": 7.0, "Inventory": 1.0, 
+         "Cost per Keg/Case": 75.00, "Size": 661.0, "UoM": "oz", 
+         "Margin": 22, "Inventory": 1.0, 
          "Distributor": "GB Beer", "Order Notes": ""},
-        {"Product": "High Life", "Type": "Bottles", 
+        {"Product": "High Life", "Type": "Bottle", 
          "Cost per Keg/Case": 21.15, "Size": 24.0, "UoM": "bottles", 
-         "Margin": 18, "Menu Price": 4.0, "Inventory": 2.0, 
+         "Margin": 18, "Inventory": 2.0, 
          "Distributor": "Frank Beer", "Order Notes": ""},
     ]
     df = pd.DataFrame(data)
+    # Calculated fields (non-editable)
     df["Cost/Unit"] = df["Cost per Keg/Case"] / df["Size"]
     df["Value"] = df["Cost per Keg/Case"] * df["Inventory"]
+    # V3.5: Menu Price - different formula for cans/bottles vs kegs
+    def calc_menu_price(row):
+        cost_unit = row["Cost/Unit"]
+        margin = row["Margin"]
+        if margin <= 0:
+            return 0
+        if row["Type"] in ["Can", "Bottle"]:
+            # For cans/bottles: Cost/Unit divided by margin, rounded to nearest dollar
+            return round(cost_unit / (margin / 100))
+        elif row["Type"] in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
+            # For kegs: Cost/Unit * 16 (pint pricing) divided by margin, rounded to nearest dollar
+            return round((cost_unit * 16) / (margin / 100))
+        return 0
+    df["Menu Price"] = df.apply(calc_menu_price, axis=1)
     return df[["Product", "Type", "Cost per Keg/Case", "Size", "UoM", 
                "Cost/Unit", "Margin", "Menu Price", "Inventory", "Value", 
                "Distributor", "Order Notes"]]
@@ -1235,9 +1254,10 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
         if 'Cost' in df.columns and 'Size (oz.)' in df.columns:
             df['Cost/Oz'] = df.apply(
                 lambda row: round(row['Cost'] / row['Size (oz.)'], 2) if row['Size (oz.)'] > 0 else 0, axis=1)
-        if 'Cost/Oz' in df.columns and 'Margin' in df.columns:
+        # V3.5: Neat Price = ((Cost/Oz) * 2) / (Margin/100), rounded up
+        if 'Cost' in df.columns and 'Size (oz.)' in df.columns and 'Margin' in df.columns:
             df['Neat Price'] = df.apply(
-                lambda row: math.ceil(row['Cost/Oz'] / (row['Margin'] / 100)) if row['Margin'] > 0 else 0, axis=1)
+                lambda row: math.ceil(((row['Cost'] / row['Size (oz.)']) * 2) / (row['Margin'] / 100)) if row['Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
         if 'Cost' in df.columns and 'Inventory' in df.columns:
             df['Value'] = round(df['Cost'] * df['Inventory'], 2)
         if 'Cost' in df.columns:
@@ -1285,11 +1305,25 @@ def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
         for col in ['Size', 'Inventory']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        # V3.5: Recalculate all calculated fields
         if 'Cost per Keg/Case' in df.columns and 'Size' in df.columns:
             df['Cost/Unit'] = df.apply(
                 lambda row: round(row['Cost per Keg/Case'] / row['Size'], 2) if row['Size'] > 0 else 0, axis=1)
         if 'Cost per Keg/Case' in df.columns and 'Inventory' in df.columns:
             df['Value'] = round(df['Cost per Keg/Case'] * df['Inventory'], 2)
+        # V3.5: Menu Price - different formula for cans/bottles vs kegs
+        if 'Cost/Unit' in df.columns and 'Margin' in df.columns and 'Type' in df.columns:
+            def calc_menu_price(row):
+                cost_unit = row['Cost/Unit']
+                margin = row['Margin']
+                if margin <= 0:
+                    return 0
+                if row['Type'] in ['Can', 'Bottle']:
+                    return round(cost_unit / (margin / 100))
+                elif row['Type'] in ['Half Barrel', 'Quarter Barrel', 'Sixtel']:
+                    return round((cost_unit * 16) / (margin / 100))
+                return 0
+            df['Menu Price'] = df.apply(calc_menu_price, axis=1)
         return df
     except Exception as e:
         st.error(f"Error processing beer data: {e}")
@@ -1463,6 +1497,82 @@ def show_inventory():
     with st.expander("📤 Upload Inventory Data (CSV)", expanded=False):
         st.markdown("Upload a CSV file to replace inventory data for any category.")
         upload_category = st.selectbox("Select category:", ["Spirits", "Wine", "Beer", "Ingredients"], key="upload_category")
+        
+        # V3.5: CSV Upload Instructions
+        st.markdown("---")
+        st.markdown("##### 📋 CSV Column Requirements")
+        st.markdown("**Only include the required fields below.** Calculated fields are auto-generated on upload.")
+        
+        if upload_category == "Spirits":
+            st.markdown("""
+            **Required Fields:**
+            - `Product` - Product name
+            - `Type` - Category (e.g., Gin, Vodka, Whiskey)
+            - `Cost` - Bottle cost
+            - `Size (oz.)` - Bottle size in ounces
+            - `Margin` - Target margin percentage (e.g., 20 for 20%)
+            - `Inventory` - Current stock count
+            - `Use` - Usage type (Rail, Backbar, Menu)
+            - `Distributor` - Supplier name
+            - `Order Notes` - Optional notes
+            
+            **Auto-Calculated (do not include):**
+            - `Cost/Oz` = Cost ÷ Size
+            - `Neat Price` = ((Cost/Oz) × 2) ÷ (Margin/100), rounded up
+            - `Value` = Cost × Inventory
+            - `Suggested Retail` = Cost × 1.44, rounded up
+            """)
+        elif upload_category == "Wine":
+            st.markdown("""
+            **Required Fields:**
+            - `Product` - Wine name/description
+            - `Type` - Category (Bubbles, White, Red, Rosé/Orange)
+            - `Cost` - Bottle cost
+            - `Size (oz.)` - Bottle size in ounces
+            - `Margin` - Target margin percentage (e.g., 35 for 35%)
+            - `Inventory` - Current stock count
+            - `Distributor` - Supplier name
+            
+            **Auto-Calculated (do not include):**
+            - `Bottle Price` = Cost ÷ (Margin/100), rounded up
+            - `Value` = Cost × Inventory
+            - `BTG` = Cost ÷ 4, rounded up
+            - `Suggested Retail` = Cost × 1.44, rounded up
+            """)
+        elif upload_category == "Beer":
+            st.markdown("""
+            **Required Fields:**
+            - `Product` - Beer name
+            - `Type` - Format (Can, Bottle, Sixtel, Quarter Barrel, Half Barrel)
+            - `Cost per Keg/Case` - Case/keg cost
+            - `Size` - Units per case (cans/bottles) or oz per keg (661 for Sixtel, 992 for Quarter Barrel, 1984 for Half Barrel)
+            - `UoM` - Unit of measure (cans, bottles, oz)
+            - `Margin` - Target margin percentage (e.g., 20 for 20%)
+            - `Inventory` - Current stock count
+            - `Distributor` - Supplier name
+            - `Order Notes` - Optional notes
+            
+            **Auto-Calculated (do not include):**
+            - `Cost/Unit` = Cost per Keg/Case ÷ Size
+            - `Menu Price` = For Cans/Bottles: Cost/Unit ÷ (Margin/100), rounded
+            - `Menu Price` = For Kegs: (Cost/Unit × 16) ÷ (Margin/100), rounded (pint pricing)
+            - `Value` = Cost per Keg/Case × Inventory
+            """)
+        elif upload_category == "Ingredients":
+            st.markdown("""
+            **Required Fields:**
+            - `Product` - Ingredient name
+            - `Cost` - Purchase cost
+            - `Size/Yield` - Quantity per purchase
+            - `UoM` - Unit of measure (oz, pieces, cherries, etc.)
+            - `Distributor` - Supplier name
+            - `Order Notes` - Optional notes
+            
+            **Auto-Calculated (do not include):**
+            - `Cost/Unit` = Cost ÷ Size/Yield
+            """)
+        
+        st.markdown("---")
         uploaded_file = st.file_uploader("Choose a CSV file", type="csv", key="csv_uploader")
         if uploaded_file is not None:
             try:
@@ -1516,7 +1626,7 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
     disabled_cols = {
         'spirits': ["Cost/Oz", "Neat Price", "Value", "Suggested Retail"],
         'wine': ["Bottle Price", "Value", "BTG", "Suggested Retail"],
-        'beer': ["Cost/Unit", "Value"],
+        'beer': ["Cost/Unit", "Menu Price", "Value"],
         'ingredients': ["Cost/Unit"],
     }.get(category, [])
     
@@ -1530,7 +1640,7 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
             "Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
             "Neat Price": st.column_config.NumberColumn(format="$%.0f", disabled=True),
             "Bottle Price": st.column_config.NumberColumn(format="$%.0f", disabled=True),
-            "Menu Price": st.column_config.NumberColumn(format="$%.2f"),
+            "Menu Price": st.column_config.NumberColumn(format="$%.0f", disabled=True),
             "BTG": st.column_config.NumberColumn(format="$%.0f", disabled=True),
             "Suggested Retail": st.column_config.NumberColumn(format="$%.0f", disabled=True),
             "Margin": st.column_config.NumberColumn(format="%.0f%%"),
@@ -1544,9 +1654,10 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
             if "Cost" in edited_df.columns and "Size (oz.)" in edited_df.columns:
                 edited_df["Cost/Oz"] = edited_df.apply(
                     lambda r: round(r['Cost'] / r['Size (oz.)'], 2) if r['Size (oz.)'] > 0 else 0, axis=1)
-            if "Cost/Oz" in edited_df.columns and "Margin" in edited_df.columns:
+            # V3.5: Neat Price = ((Cost/Oz) * 2) / (Margin/100), rounded up
+            if "Cost" in edited_df.columns and "Size (oz.)" in edited_df.columns and "Margin" in edited_df.columns:
                 edited_df["Neat Price"] = edited_df.apply(
-                    lambda r: math.ceil(r['Cost/Oz'] / (r['Margin'] / 100)) if r['Margin'] > 0 else 0, axis=1)
+                    lambda r: math.ceil(((r['Cost'] / r['Size (oz.)']) * 2) / (r['Margin'] / 100)) if r['Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
             if "Cost" in edited_df.columns and "Inventory" in edited_df.columns:
                 edited_df["Value"] = round(edited_df["Cost"] * edited_df["Inventory"], 2)
             if "Cost" in edited_df.columns:
@@ -1568,6 +1679,19 @@ def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, di
                 edited_df["Cost/Unit"] = edited_df.apply(lambda r: round(r['Cost per Keg/Case'] / r['Size'], 2) if r['Size'] > 0 else 0, axis=1)
             if "Cost per Keg/Case" in edited_df.columns and "Inventory" in edited_df.columns:
                 edited_df["Value"] = round(edited_df["Cost per Keg/Case"] * edited_df["Inventory"], 2)
+            # V3.5: Menu Price - different formula for cans/bottles vs kegs
+            if "Cost/Unit" in edited_df.columns and "Margin" in edited_df.columns and "Type" in edited_df.columns:
+                def calc_menu_price(row):
+                    cost_unit = row["Cost/Unit"]
+                    margin = row["Margin"]
+                    if margin <= 0:
+                        return 0
+                    if row["Type"] in ["Can", "Bottle"]:
+                        return round(cost_unit / (margin / 100))
+                    elif row["Type"] in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
+                        return round((cost_unit * 16) / (margin / 100))
+                    return 0
+                edited_df["Menu Price"] = edited_df.apply(calc_menu_price, axis=1)
             st.session_state.beer_inventory = edited_df
         elif category == "ingredients":
             if "Cost" in edited_df.columns and "Size/Yield" in edited_df.columns:
