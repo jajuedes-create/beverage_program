@@ -56,6 +56,8 @@
 #           - Added "Total Inventory" calculated field (sum of all locations)
 #           - Decimal values supported in inventory fields (step=0.5)
 #           - Calculated fields update on any interaction without clicking Save
+#           - Updated CSV upload instructions and processing for new location columns
+#           - Updated sample spirits data with location columns
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -689,61 +691,65 @@ def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
 @st.cache_data
 def get_sample_spirits():
     """Returns sample spirit inventory data (cached)."""
+    # V3.6.test: Updated with location columns (Upstairs Bar, Main Bar, Storage)
     data = [
         {"Product": "Hendrick's", "Type": "Gin", "Cost": 30.80, "Size (oz.)": 33.8, 
-         "Margin": 20, "Inventory": 1.0, "Use": "Backbar", 
+         "Margin": 20, "Upstairs Bar": 0.5, "Main Bar": 0.5, "Storage": 0.0, "Use": "Backbar", 
          "Distributor": "Breakthru", "Order Notes": "6 pk deal"},
         {"Product": "Tito's", "Type": "Vodka", "Cost": 24.50, "Size (oz.)": 33.8, 
-         "Margin": 18, "Inventory": 3.0, "Use": "Rail", 
+         "Margin": 18, "Upstairs Bar": 1.0, "Main Bar": 1.0, "Storage": 1.0, "Use": "Rail", 
          "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
         {"Product": "Ketel One", "Type": "Vodka", "Cost": 32.25, "Size (oz.)": 33.8, 
-         "Margin": 19, "Inventory": 3.0, "Use": "Backbar", 
+         "Margin": 19, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 1.5, "Use": "Backbar", 
          "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
         {"Product": "Tempus Fugit Crème de Cacao", "Type": "Cordial & Digestif", "Cost": 32.50, "Size (oz.)": 23.7, 
-         "Margin": 22, "Inventory": 6.0, "Use": "Menu", 
+         "Margin": 22, "Upstairs Bar": 2.0, "Main Bar": 2.0, "Storage": 2.0, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": "6 pk deal"},
         {"Product": "St. George Absinthe", "Type": "Cordial & Digestif", "Cost": 54.00, "Size (oz.)": 25.3, 
-         "Margin": 23, "Inventory": 1.0, "Use": "Menu", 
+         "Margin": 23, "Upstairs Bar": 0.0, "Main Bar": 0.5, "Storage": 0.5, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Espolòn Blanco", "Type": "Tequila", "Cost": 25.00, "Size (oz.)": 33.8, 
-         "Margin": 20, "Inventory": 4.0, "Use": "Rail", 
+         "Margin": 20, "Upstairs Bar": 1.0, "Main Bar": 1.5, "Storage": 1.5, "Use": "Rail", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Lustau Vermut Rojo", "Type": "Vermouth & Aperitif", "Cost": 16.00, "Size (oz.)": 25.3, 
-         "Margin": 18, "Inventory": 2.0, "Use": "Menu", 
+         "Margin": 18, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Buffalo Trace", "Type": "Whiskey", "Cost": 31.00, "Size (oz.)": 33.8, 
-         "Margin": 20, "Inventory": 2.0, "Use": "Rail", 
+         "Margin": 20, "Upstairs Bar": 0.5, "Main Bar": 0.5, "Storage": 1.0, "Use": "Rail", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Rittenhouse Rye", "Type": "Whiskey", "Cost": 28.00, "Size (oz.)": 25.3, 
-         "Margin": 19, "Inventory": 3.0, "Use": "Rail", 
+         "Margin": 19, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 1.5, "Use": "Rail", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Botanist", "Type": "Gin", "Cost": 33.74, "Size (oz.)": 33.8, 
-         "Margin": 21, "Inventory": 4.0, "Use": "Menu", 
+         "Margin": 21, "Upstairs Bar": 1.0, "Main Bar": 1.5, "Storage": 1.5, "Use": "Menu", 
          "Distributor": "General Beverage", "Order Notes": ""},
         {"Product": "Bordiga Extra Dry Vermouth", "Type": "Vermouth & Aperitif", "Cost": 23.00, "Size (oz.)": 25.3, 
-         "Margin": 18, "Inventory": 2.0, "Use": "Menu", 
+         "Margin": 18, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Campari", "Type": "Vermouth & Aperitif", "Cost": 28.00, "Size (oz.)": 33.8, 
-         "Margin": 20, "Inventory": 2.0, "Use": "Menu", 
+         "Margin": 20, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Angostura Bitters", "Type": "Bitters", "Cost": 32.00, "Size (oz.)": 16.0, 
-         "Margin": 15, "Inventory": 2.0, "Use": "Menu", 
+         "Margin": 15, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Angostura Orange Bitters", "Type": "Bitters", "Cost": 16.00, "Size (oz.)": 4.0, 
-         "Margin": 15, "Inventory": 2.0, "Use": "Menu", 
+         "Margin": 15, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": ""},
     ]
     df = pd.DataFrame(data)
+    # V3.6.test: Calculate Total Inventory from location columns
+    df["Total Inventory"] = df["Upstairs Bar"] + df["Main Bar"] + df["Storage"]
     # Calculated fields (non-editable)
     df["Cost/Oz"] = df["Cost"] / df["Size (oz.)"]
     # V3.5: Neat Price = ((Cost/Oz) * 2) / (Margin/100), rounded up
     df["Neat Price"] = df.apply(
         lambda row: math.ceil(((row["Cost"] / row["Size (oz.)"]) * 2) / (row["Margin"] / 100)) if row["Margin"] > 0 and row["Size (oz.)"] > 0 else 0, axis=1)
-    df["Value"] = df["Cost"] * df["Inventory"]
+    # V3.6.test: Value uses Total Inventory
+    df["Value"] = df["Cost"] * df["Total Inventory"]
     df["Suggested Retail"] = df["Cost"].apply(lambda x: math.ceil(x * 1.44))
     return df[["Product", "Type", "Cost", "Size (oz.)", "Cost/Oz", "Margin", 
-               "Neat Price", "Inventory", "Value", "Use", "Distributor", 
-               "Order Notes", "Suggested Retail"]]
+               "Neat Price", "Upstairs Bar", "Main Bar", "Storage", "Total Inventory",
+               "Value", "Use", "Distributor", "Order Notes", "Suggested Retail"]]
 
 
 @st.cache_data
@@ -1266,6 +1272,17 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
         for col in ['Size (oz.)', 'Inventory']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        # V3.6.test: Handle location columns (Upstairs Bar, Main Bar, Storage)
+        for col in ['Upstairs Bar', 'Main Bar', 'Storage']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            else:
+                df[col] = 0.0
+        
+        # V3.6.test: Calculate Total Inventory from location columns
+        df['Total Inventory'] = df['Upstairs Bar'] + df['Main Bar'] + df['Storage']
+        
         # V3.5: Recalculate all calculated fields with correct formulas
         if 'Cost' in df.columns and 'Size (oz.)' in df.columns:
             df['Cost/Oz'] = df.apply(
@@ -1274,8 +1291,9 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
         if 'Cost' in df.columns and 'Size (oz.)' in df.columns and 'Margin' in df.columns:
             df['Neat Price'] = df.apply(
                 lambda row: math.ceil(((row['Cost'] / row['Size (oz.)']) * 2) / (row['Margin'] / 100)) if row['Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
-        if 'Cost' in df.columns and 'Inventory' in df.columns:
-            df['Value'] = round(df['Cost'] * df['Inventory'], 2)
+        # V3.6.test: Value now uses Total Inventory
+        if 'Cost' in df.columns and 'Total Inventory' in df.columns:
+            df['Value'] = round(df['Cost'] * df['Total Inventory'], 2)
         if 'Cost' in df.columns:
             df['Suggested Retail'] = df['Cost'].apply(lambda x: math.ceil(x * 1.44))
         return df
@@ -1527,15 +1545,18 @@ def show_inventory():
             - `Cost` - Bottle cost
             - `Size (oz.)` - Bottle size in ounces
             - `Margin` - Target margin percentage (e.g., 20 for 20%)
-            - `Inventory` - Current stock count
+            - `Upstairs Bar` - Inventory at upstairs bar location (decimal values OK)
+            - `Main Bar` - Inventory at main bar location (decimal values OK)
+            - `Storage` - Inventory in storage (decimal values OK)
             - `Use` - Usage type (Rail, Backbar, Menu)
             - `Distributor` - Supplier name
             - `Order Notes` - Optional notes
             
             **Auto-Calculated (do not include):**
+            - `Total Inventory` = Upstairs Bar + Main Bar + Storage
             - `Cost/Oz` = Cost ÷ Size
             - `Neat Price` = ((Cost/Oz) × 2) ÷ (Margin/100), rounded up
-            - `Value` = Cost × Inventory
+            - `Value` = Cost × Total Inventory
             - `Suggested Retail` = Cost × 1.44, rounded up
             """)
         elif upload_category == "Wine":
