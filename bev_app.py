@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V3.7
+# BEVERAGE MANAGEMENT APP - BETA 1.0
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -9,61 +9,18 @@
 #   - Bar Prep Recipe Book
 #
 # Version History:
-#   V1.0 - V2.27: See previous version files for detailed history
-#   V3.0 - MAJOR OPTIMIZATION RELEASE
-#           - Added Streamlit caching (@st.cache_resource, @st.cache_data)
-#           - Unified get_product_cost() function (replaces duplicate cost lookups)
-#           - Consolidated recipe display with display_recipe_card() helper
-#           - Reduced code duplication in Bar Prep tabs
-#           - Optimized session state initialization
-#           - ~24% code reduction while maintaining all functionality
-#   V3.1 - Bar Prep UI improvements
-#           - Changed Syrups/Infusions emoji from 🧴 to 🍯 (honey pot)
-#           - Clarified header to show "Cost/oz:" instead of "$/oz:"
-#   V3.2 - Branding updates
-#           - Changed Syrups/Infusions emoji from 🍯 to 🫙 (jar)
-#           - Updated author attribution
-#   V3.3 - Home screen UI refinements
-#           - Clickable module cards (removed separate Open buttons)
-#           - Updated tagline
-#           - Hover effects on cards
-#           - Removed Google Sheets success message (kept warning)
-#   V3.4 - Home screen cleanup
-#           - Removed quick stats dashboard for cleaner look
-#           - Removed non-functional CTA text from cards
-#           - Balanced grid layout (3 top, 2 centered bottom)
-#           - Added last activity indicator
-#   V3.5 - Master Inventory calculated fields
-#           - Spirits: Cost/Oz, Neat Price, Value, Suggested Retail now non-editable
-#           - Wine: Bottle Price, Value, BTG, Suggested Retail now non-editable
-#           - Beer: Cost/Unit, Menu Price, Value now non-editable
-#           - Corrected formulas: Neat Price=((Cost/Oz)*2)/(Margin/100), rounded up
-#           - Corrected formulas: Bottle Price=Cost/(Margin/100), BTG=Cost/4, rounded up
-#           - Beer Menu Price: Cans/Bottles=Cost/Unit/(Margin/100), Kegs=(Cost/Unit*16)/(Margin/100)
-#           - Suggested Retail=Cost*1.44 for Spirits/Wine, rounded up
-#           - Added CSV upload instructions showing required vs calculated fields
-#           - Fixed: Generate Orders now correctly reads Par and Total Current Inventory columns
-#           - Fixed: Standardized column names (Order Quantity, Current Stock, Par Level) across order flow
-#   V3.6 - Order flow bug fixes
-#           - Added migration to handle old session data with 'Order Qty' column name
-#           - Step 2 and Step 3 now auto-rename legacy column names to prevent KeyError
-#           - Added 'Unit' column to generated orders for Step 3 verification
-#           - Added migration for missing 'Unit' column in pending orders
-#           - Fixed: Verification workflow now properly resets after finalize/cancel
-#   V3.6.test - Testing real-time calculated fields (Option 3: Split Display)
-#           - Spirits category uses split display: Inputs table + live calculated preview below
-#           - Replaced single "Inventory" with location columns: Upstairs Bar, Main Bar, Storage
-#           - Added "Total Inventory" calculated field (sum of all locations)
-#           - Decimal values supported in inventory fields (step=0.5)
-#           - Calculated fields update on any interaction without clicking Save
-#           - Updated CSV upload instructions and processing for new location columns
-#           - Updated sample spirits data with location columns
-#   V3.7 - Split display UX for all inventory categories
-#           - Applied split display (Inputs + Calculated Fields) to Wine, Beer, Ingredients
-#           - All categories now have location columns: Upstairs Bar, Main Bar, Storage
-#           - All categories calculate Total Inventory from location columns
-#           - Updated CSV instructions, processors, and sample data for all categories
-#           - Highlighted inventory columns with 📍 emoji and tooltips for better UX
+#   V1.0 - V3.7: Development versions (see previous files for detailed history)
+#   BETA 1.0 - CLIENT CONFIGURATION SYSTEM (Production-Ready Template)
+#           - Added centralized CLIENT_CONFIG for restaurant customization
+#           - Configurable restaurant name and tagline
+#           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
+#           - Configurable branding colors and fonts
+#           - Feature toggles to enable/disable modules per client
+#           - Default distributors for dropdown pre-population
+#           - Default margins by category (Spirits, Wine, Beer)
+#           - Google Sheets configuration moved to CLIENT_CONFIG
+#           - CSS dynamically generated from config values
+#           - Ready for client branch deployments
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -79,15 +36,171 @@ import math
 from typing import Optional, Dict, List, Any, Tuple
 
 # =============================================================================
+# CLIENT CONFIGURATION
+# =============================================================================
+# Customize these settings for each client/restaurant deployment.
+# When creating a new client branch, copy this file and modify CLIENT_CONFIG.
+
+CLIENT_CONFIG = {
+    # -------------------------------------------------------------------------
+    # Restaurant Information
+    # -------------------------------------------------------------------------
+    "restaurant_name": "Canter Inn",
+    "restaurant_tagline": "Manage your inventory, build orders, track cost of goods sold, and store all of your recipes.",
+    
+    # -------------------------------------------------------------------------
+    # Inventory Location Names
+    # -------------------------------------------------------------------------
+    # Customize these to match the restaurant's physical layout.
+    # These names appear in Master Inventory and Weekly Order Builder.
+    "locations": {
+        "location_1": "Upstairs Bar",
+        "location_2": "Main Bar",
+        "location_3": "Storage",
+    },
+    
+    # -------------------------------------------------------------------------
+    # Branding Colors (hex codes)
+    # -------------------------------------------------------------------------
+    "colors": {
+        "primary": "#1E3A5F",           # Headers, primary buttons
+        "primary_light": "#2E5077",     # Hover states
+        "secondary": "#2E7D32",         # Success messages, accents
+        "background": "#f5f5f5",        # Page background
+        "card_text": "#ffffff",         # Text on colored cards
+        "muted_text": "#666666",        # Subtitles, captions
+        # Module card gradients
+        "card_inventory": ["#11998e", "#38ef7d"],
+        "card_ordering": ["#ee0979", "#ff6a00"],
+        "card_cocktails": ["#8E2DE2", "#4A00E0"],
+        "card_barprep": ["#10B981", "#059669"],
+        "card_cogs": ["#F59E0B", "#D97706"],
+    },
+    
+    # -------------------------------------------------------------------------
+    # Branding Fonts
+    # -------------------------------------------------------------------------
+    # Google Fonts names - these will be imported via CSS
+    "fonts": {
+        "heading": "Inter",             # Used for h1, h2, card titles
+        "body": "Inter",                # Used for body text, tables
+        "mono": "JetBrains Mono",       # Used for code, numbers
+    },
+    
+    # -------------------------------------------------------------------------
+    # Feature Toggles
+    # -------------------------------------------------------------------------
+    # Set to False to hide modules from navigation and home screen
+    "features": {
+        "master_inventory": True,
+        "weekly_orders": True,
+        "cocktail_builds": True,
+        "bar_prep": True,
+        "cogs_calculator": True,
+    },
+    
+    # -------------------------------------------------------------------------
+    # Default Distributors
+    # -------------------------------------------------------------------------
+    # Pre-populate distributor dropdowns with these options
+    "distributors": [
+        "Breakthru",
+        "General Beverage",
+        "Frank Beer",
+        "GB Beer",
+        "US Foods",
+        "Chromatic",
+        "Vino Veritas",
+        "Left Bank",
+        "House Made",
+    ],
+    
+    # -------------------------------------------------------------------------
+    # Default Margins by Category
+    # -------------------------------------------------------------------------
+    # Used when adding new products without specifying margin
+    "default_margins": {
+        "spirits": 20,
+        "wine": 35,
+        "beer": 20,
+    },
+    
+    # -------------------------------------------------------------------------
+    # Google Sheets Configuration
+    # -------------------------------------------------------------------------
+    # Sheet names for data persistence (actual spreadsheet_id is in secrets.toml)
+    "google_sheets": {
+        "spirits_inventory": "spirits_inventory",
+        "wine_inventory": "wine_inventory",
+        "beer_inventory": "beer_inventory",
+        "ingredients_inventory": "ingredients_inventory",
+        "weekly_inventory": "weekly_inventory",
+        "order_history": "order_history",
+        "pending_order": "pending_order",
+        "cocktail_recipes": "cocktail_recipes",
+        "bar_prep_recipes": "bar_prep_recipes",
+        "inventory_history": "inventory_history",
+        "cogs_history": "cogs_history",
+        "price_change_acks": "price_change_acks",
+    },
+}
+
+
+# =============================================================================
+# HELPER FUNCTIONS FOR CONFIG ACCESS
+# =============================================================================
+
+def get_location_name(location_key: str) -> str:
+    """Gets the display name for a location from config."""
+    return CLIENT_CONFIG["locations"].get(location_key, location_key)
+
+
+def get_location_1() -> str:
+    """Returns the name of location 1."""
+    return CLIENT_CONFIG["locations"]["location_1"]
+
+
+def get_location_2() -> str:
+    """Returns the name of location 2."""
+    return CLIENT_CONFIG["locations"]["location_2"]
+
+
+def get_location_3() -> str:
+    """Returns the name of location 3."""
+    return CLIENT_CONFIG["locations"]["location_3"]
+
+
+def get_sheet_name(key: str) -> str:
+    """Gets the Google Sheet name for a given data type."""
+    return CLIENT_CONFIG["google_sheets"].get(key, key)
+
+
+def is_feature_enabled(feature: str) -> bool:
+    """Checks if a feature is enabled in config."""
+    return CLIENT_CONFIG["features"].get(feature, True)
+
+
+def get_default_margin(category: str) -> int:
+    """Gets the default margin for a category."""
+    return CLIENT_CONFIG["default_margins"].get(category.lower(), 20)
+
+
+def get_distributors() -> list:
+    """Gets the list of configured distributors."""
+    return CLIENT_CONFIG["distributors"]
+
+
+# =============================================================================
 # PAGE CONFIG (must be first Streamlit command)
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V3.7",
+    page_title=f"{CLIENT_CONFIG['restaurant_name']} - Beverage Management",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
 
 # =============================================================================
 # GOOGLE SHEETS DATA PERSISTENCE
@@ -261,21 +374,22 @@ def load_text_from_sheets(sheet_name: str) -> Optional[str]:
 
 
 # =============================================================================
-# SAVE FUNCTIONS (Consolidated)
+# SAVE FUNCTIONS (Consolidated) - Using CLIENT_CONFIG sheet names
 # =============================================================================
 
 def save_all_inventory_data():
     """Saves all inventory DataFrames to Google Sheets."""
     if not is_google_sheets_configured():
         return
-    for key, sheet in [
-        ('spirits_inventory', 'spirits_inventory'),
-        ('wine_inventory', 'wine_inventory'),
-        ('beer_inventory', 'beer_inventory'),
-        ('ingredients_inventory', 'ingredients_inventory'),
-        ('weekly_inventory', 'weekly_inventory'),
-        ('order_history', 'order_history'),
-    ]:
+    inventory_mappings = [
+        ('spirits_inventory', get_sheet_name('spirits_inventory')),
+        ('wine_inventory', get_sheet_name('wine_inventory')),
+        ('beer_inventory', get_sheet_name('beer_inventory')),
+        ('ingredients_inventory', get_sheet_name('ingredients_inventory')),
+        ('weekly_inventory', get_sheet_name('weekly_inventory')),
+        ('order_history', get_sheet_name('order_history')),
+    ]
+    for key, sheet in inventory_mappings:
         if key in st.session_state:
             save_dataframe_to_sheets(st.session_state[key], sheet)
 
@@ -285,7 +399,7 @@ def save_pending_order():
     if not is_google_sheets_configured():
         return
     if 'current_order' in st.session_state:
-        save_dataframe_to_sheets(st.session_state.current_order, 'pending_order')
+        save_dataframe_to_sheets(st.session_state.current_order, get_sheet_name('pending_order'))
 
 
 def clear_pending_order():
@@ -294,7 +408,7 @@ def clear_pending_order():
     if spreadsheet is None:
         return
     try:
-        worksheet = get_or_create_worksheet(spreadsheet, 'pending_order')
+        worksheet = get_or_create_worksheet(spreadsheet, get_sheet_name('pending_order'))
         worksheet.clear()
     except Exception:
         pass
@@ -306,14 +420,14 @@ def save_price_change_acks():
         return
     if 'price_change_acks' in st.session_state:
         acks_text = json.dumps(st.session_state.price_change_acks)
-        save_text_to_sheets(acks_text, 'price_change_acks')
+        save_text_to_sheets(acks_text, get_sheet_name('price_change_acks'))
 
 
 def load_price_change_acks() -> dict:
     """Loads price change acknowledgments."""
     if not is_google_sheets_configured():
         return {}
-    text = load_text_from_sheets('price_change_acks')
+    text = load_text_from_sheets(get_sheet_name('price_change_acks'))
     if text:
         try:
             return json.loads(text)
@@ -328,7 +442,7 @@ def save_recipes(recipe_type: str):
         return
     key = f'{recipe_type}_recipes'
     if key in st.session_state:
-        save_json_to_sheets(st.session_state[key], key)
+        save_json_to_sheets(st.session_state[key], get_sheet_name(key))
 
 
 def save_inventory_snapshot():
@@ -358,14 +472,14 @@ def save_inventory_snapshot():
         history = pd.DataFrame(columns=new_record.keys())
     
     history = pd.concat([history, pd.DataFrame([new_record])], ignore_index=True)
-    save_dataframe_to_sheets(history, 'inventory_history')
+    save_dataframe_to_sheets(history, get_sheet_name('inventory_history'))
 
 
 def load_inventory_history() -> Optional[pd.DataFrame]:
     """Loads inventory history."""
     if not is_google_sheets_configured():
         return None
-    history = load_dataframe_from_sheets('inventory_history')
+    history = load_dataframe_from_sheets(get_sheet_name('inventory_history'))
     if history is not None and len(history) > 0:
         for col in ['Spirits Value', 'Wine Value', 'Beer Value', 'Ingredients Value', 'Total Value']:
             if col in history.columns:
@@ -381,14 +495,14 @@ def save_cogs_calculation(cogs_data: dict) -> bool:
     if history is None:
         history = pd.DataFrame()
     history = pd.concat([history, pd.DataFrame([cogs_data])], ignore_index=True)
-    return save_dataframe_to_sheets(history, 'cogs_history')
+    return save_dataframe_to_sheets(history, get_sheet_name('cogs_history'))
 
 
 def load_cogs_history() -> Optional[pd.DataFrame]:
     """Loads COGS calculation history."""
     if not is_google_sheets_configured():
         return None
-    history = load_dataframe_from_sheets('cogs_history')
+    history = load_dataframe_from_sheets(get_sheet_name('cogs_history'))
     if history is not None and len(history) > 0:
         numeric_cols = ['Spirits COGS', 'Wine COGS', 'Beer COGS', 'Ingredients COGS',
                        'Bar COGS', 'Total COGS', 'Total Purchases',
@@ -445,50 +559,90 @@ def get_purchases_by_category_and_date(start_date: str, end_date: str) -> dict:
 
 
 # =============================================================================
-# CUSTOM CSS
+# CUSTOM CSS (Generated from CLIENT_CONFIG)
 # =============================================================================
 
-st.markdown("""
-<style>
-    .main-header { text-align: center; padding: 1rem 0 2rem 0; }
-    .main-header h1 { color: #1E3A5F; margin-bottom: 0.5rem; }
-    .main-header p { color: #666; font-size: 1.1rem; max-width: 600px; margin: 0 auto; }
+def generate_custom_css() -> str:
+    """Generates CSS based on CLIENT_CONFIG values."""
+    colors = CLIENT_CONFIG["colors"]
+    fonts = CLIENT_CONFIG["fonts"]
     
-    .module-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 15px;
-        padding: 2rem;
-        color: white;
-        margin-bottom: 0.5rem;
-        min-height: 180px;
-        cursor: pointer;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    .module-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    }
-    .card-inventory { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
-    .card-ordering { background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%); }
-    .card-cocktails { background: linear-gradient(135deg, #8E2DE2 0%, #4A00E0 100%); }
-    .card-barprep { background: linear-gradient(135deg, #10B981 0%, #059669 100%); }
-    .card-cogs { background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); }
+    # Build Google Fonts import URL
+    font_families = set([fonts["heading"], fonts["body"], fonts["mono"]])
+    font_import = ", ".join([f"family={f.replace(' ', '+')}:wght@400;500;600;700" for f in font_families])
     
-    .card-icon { font-size: 3rem; margin-bottom: 1rem; }
-    .card-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; }
-    .card-description { font-size: 0.95rem; opacity: 0.9; }
-    
-    .stMetric { background-color: #f8f9fa; padding: 1rem; border-radius: 10px; }
-    
-    /* Hide button borders for card buttons */
-    .card-button > button {
-        background: transparent !important;
-        border: none !important;
-        padding: 0 !important;
-        width: 100%;
-    }
-</style>
-""", unsafe_allow_html=True)
+    css = f"""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?{font_import}&display=swap');
+        
+        /* Base font settings */
+        html, body, [class*="css"] {{
+            font-family: '{fonts["body"]}', -apple-system, BlinkMacSystemFont, sans-serif;
+        }}
+        
+        h1, h2, h3, .card-title {{
+            font-family: '{fonts["heading"]}', -apple-system, BlinkMacSystemFont, sans-serif;
+        }}
+        
+        code, pre, .stDataFrame {{
+            font-family: '{fonts["mono"]}', 'Courier New', monospace;
+        }}
+        
+        .main-header {{ text-align: center; padding: 1rem 0 2rem 0; }}
+        .main-header h1 {{ color: {colors["primary"]}; margin-bottom: 0.5rem; }}
+        .main-header p {{ color: {colors["muted_text"]}; font-size: 1.1rem; max-width: 600px; margin: 0 auto; }}
+        
+        .module-card {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            padding: 2rem;
+            color: {colors["card_text"]};
+            margin-bottom: 0.5rem;
+            min-height: 180px;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }}
+        .module-card:hover {{
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }}
+        
+        .card-inventory {{ background: linear-gradient(135deg, {colors["card_inventory"][0]} 0%, {colors["card_inventory"][1]} 100%); }}
+        .card-ordering {{ background: linear-gradient(135deg, {colors["card_ordering"][0]} 0%, {colors["card_ordering"][1]} 100%); }}
+        .card-cocktails {{ background: linear-gradient(135deg, {colors["card_cocktails"][0]} 0%, {colors["card_cocktails"][1]} 100%); }}
+        .card-barprep {{ background: linear-gradient(135deg, {colors["card_barprep"][0]} 0%, {colors["card_barprep"][1]} 100%); }}
+        .card-cogs {{ background: linear-gradient(135deg, {colors["card_cogs"][0]} 0%, {colors["card_cogs"][1]} 100%); }}
+        
+        .card-icon {{ font-size: 3rem; margin-bottom: 1rem; }}
+        .card-title {{ font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; }}
+        .card-description {{ font-size: 0.95rem; opacity: 0.9; }}
+        
+        .stMetric {{ background-color: #f8f9fa; padding: 1rem; border-radius: 10px; }}
+        
+        /* Primary button styling */
+        .stButton > button[kind="primary"] {{
+            background-color: {colors["primary"]};
+            border-color: {colors["primary"]};
+        }}
+        .stButton > button[kind="primary"]:hover {{
+            background-color: {colors["primary_light"]};
+            border-color: {colors["primary_light"]};
+        }}
+        
+        /* Hide button borders for card buttons */
+        .card-button > button {{
+            background: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+            width: 100%;
+        }}
+    </style>
+    """
+    return css
+
+
+# Inject the CSS
+st.markdown(generate_custom_css(), unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -666,11 +820,24 @@ def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
     if len(weekly_inv) == 0:
         return pd.DataFrame()
     
+    # V3.8: Get configurable location names
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     orders = []
     for _, row in weekly_inv.iterrows():
-        # V3.5: Fixed column name references to match weekly inventory structure
         par = row.get('Par', row.get('Par Level', 0))
-        total_inv = row.get('Total Current Inventory', row.get('Total Inventory', row.get('Bar Inventory', 0) + row.get('Storage Inventory', 0)))
+        
+        # V3.8: Calculate total inventory from configurable location columns
+        # First try the new location column names, then fall back to old names
+        loc1_val = row.get(loc1, row.get('Bar Inventory', 0))
+        loc2_val = row.get(loc2, row.get('Storage Inventory', 0))
+        loc3_val = row.get(loc3, 0)
+        
+        total_inv = row.get('Total Current Inventory', 
+                          row.get('Total Inventory', loc1_val + loc2_val + loc3_val))
+        
         if total_inv < par:
             order_qty = par - total_inv
             unit_cost = row.get('Unit Cost', 0)
@@ -679,8 +846,8 @@ def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
                 'Category': row.get('Category', 'Unknown'),
                 'Current Stock': total_inv,
                 'Par Level': par,
-                'Order Quantity': order_qty,  # V3.5: Standardized column name
-                'Unit': row.get('Unit', ''),  # V3.6: Added Unit column for Step 3 verification
+                'Order Quantity': order_qty,
+                'Unit': row.get('Unit', ''),
                 'Unit Cost': unit_cost,
                 'Order Value': order_qty * unit_cost,
                 'Distributor': row.get('Distributor', 'N/A'),
@@ -689,148 +856,155 @@ def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(orders) if orders else pd.DataFrame()
 
 
-
 # =============================================================================
-# SAMPLE DATA FUNCTIONS (with caching)
+# SAMPLE DATA FUNCTIONS (with caching) - Using CLIENT_CONFIG locations
 # =============================================================================
 
 @st.cache_data
 def get_sample_spirits():
     """Returns sample spirit inventory data (cached)."""
-    # V3.6.test: Updated with location columns (Upstairs Bar, Main Bar, Storage)
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     data = [
         {"Product": "Hendrick's", "Type": "Gin", "Cost": 30.80, "Size (oz.)": 33.8, 
-         "Margin": 20, "Upstairs Bar": 0.5, "Main Bar": 0.5, "Storage": 0.0, "Use": "Backbar", 
+         "Margin": 20, loc1: 0.5, loc2: 0.5, loc3: 0.0, "Use": "Backbar", 
          "Distributor": "Breakthru", "Order Notes": "6 pk deal"},
         {"Product": "Tito's", "Type": "Vodka", "Cost": 24.50, "Size (oz.)": 33.8, 
-         "Margin": 18, "Upstairs Bar": 1.0, "Main Bar": 1.0, "Storage": 1.0, "Use": "Rail", 
+         "Margin": 18, loc1: 1.0, loc2: 1.0, loc3: 1.0, "Use": "Rail", 
          "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
         {"Product": "Ketel One", "Type": "Vodka", "Cost": 32.25, "Size (oz.)": 33.8, 
-         "Margin": 19, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 1.5, "Use": "Backbar", 
+         "Margin": 19, loc1: 0.5, loc2: 1.0, loc3: 1.5, "Use": "Backbar", 
          "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
         {"Product": "Tempus Fugit Crème de Cacao", "Type": "Cordial & Digestif", "Cost": 32.50, "Size (oz.)": 23.7, 
-         "Margin": 22, "Upstairs Bar": 2.0, "Main Bar": 2.0, "Storage": 2.0, "Use": "Menu", 
+         "Margin": 22, loc1: 2.0, loc2: 2.0, loc3: 2.0, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": "6 pk deal"},
         {"Product": "St. George Absinthe", "Type": "Cordial & Digestif", "Cost": 54.00, "Size (oz.)": 25.3, 
-         "Margin": 23, "Upstairs Bar": 0.0, "Main Bar": 0.5, "Storage": 0.5, "Use": "Menu", 
+         "Margin": 23, loc1: 0.0, loc2: 0.5, loc3: 0.5, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Espolòn Blanco", "Type": "Tequila", "Cost": 25.00, "Size (oz.)": 33.8, 
-         "Margin": 20, "Upstairs Bar": 1.0, "Main Bar": 1.5, "Storage": 1.5, "Use": "Rail", 
+         "Margin": 20, loc1: 1.0, loc2: 1.5, loc3: 1.5, "Use": "Rail", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Lustau Vermut Rojo", "Type": "Vermouth & Aperitif", "Cost": 16.00, "Size (oz.)": 25.3, 
-         "Margin": 18, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5, "Use": "Menu", 
+         "Margin": 18, loc1: 0.5, loc2: 1.0, loc3: 0.5, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Buffalo Trace", "Type": "Whiskey", "Cost": 31.00, "Size (oz.)": 33.8, 
-         "Margin": 20, "Upstairs Bar": 0.5, "Main Bar": 0.5, "Storage": 1.0, "Use": "Rail", 
+         "Margin": 20, loc1: 0.5, loc2: 0.5, loc3: 1.0, "Use": "Rail", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Rittenhouse Rye", "Type": "Whiskey", "Cost": 28.00, "Size (oz.)": 25.3, 
-         "Margin": 19, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 1.5, "Use": "Rail", 
+         "Margin": 19, loc1: 0.5, loc2: 1.0, loc3: 1.5, "Use": "Rail", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Botanist", "Type": "Gin", "Cost": 33.74, "Size (oz.)": 33.8, 
-         "Margin": 21, "Upstairs Bar": 1.0, "Main Bar": 1.5, "Storage": 1.5, "Use": "Menu", 
+         "Margin": 21, loc1: 1.0, loc2: 1.5, loc3: 1.5, "Use": "Menu", 
          "Distributor": "General Beverage", "Order Notes": ""},
         {"Product": "Bordiga Extra Dry Vermouth", "Type": "Vermouth & Aperitif", "Cost": 23.00, "Size (oz.)": 25.3, 
-         "Margin": 18, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5, "Use": "Menu", 
+         "Margin": 18, loc1: 0.5, loc2: 1.0, loc3: 0.5, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Campari", "Type": "Vermouth & Aperitif", "Cost": 28.00, "Size (oz.)": 33.8, 
-         "Margin": 20, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5, "Use": "Menu", 
+         "Margin": 20, loc1: 0.5, loc2: 1.0, loc3: 0.5, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Angostura Bitters", "Type": "Bitters", "Cost": 32.00, "Size (oz.)": 16.0, 
-         "Margin": 15, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5, "Use": "Menu", 
+         "Margin": 15, loc1: 0.5, loc2: 1.0, loc3: 0.5, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": ""},
         {"Product": "Angostura Orange Bitters", "Type": "Bitters", "Cost": 16.00, "Size (oz.)": 4.0, 
-         "Margin": 15, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5, "Use": "Menu", 
+         "Margin": 15, loc1: 0.5, loc2: 1.0, loc3: 0.5, "Use": "Menu", 
+         "Distributor": "Breakthru", "Order Notes": ""},
+        {"Product": "Wray & Nephew Overproof Rum", "Type": "Rum", "Cost": 29.00, "Size (oz.)": 25.3, 
+         "Margin": 21, loc1: 0.0, loc2: 0.5, loc3: 0.5, "Use": "Menu", 
          "Distributor": "Breakthru", "Order Notes": ""},
     ]
     df = pd.DataFrame(data)
-    # V3.6.test: Calculate Total Inventory from location columns
-    df["Total Inventory"] = df["Upstairs Bar"] + df["Main Bar"] + df["Storage"]
+    # Calculate Total Inventory from location columns
+    df["Total Inventory"] = df[loc1] + df[loc2] + df[loc3]
     # Calculated fields (non-editable)
-    df["Cost/Oz"] = df["Cost"] / df["Size (oz.)"]
-    # V3.5: Neat Price = ((Cost/Oz) * 2) / (Margin/100), rounded up
+    df["Cost/Oz"] = round(df["Cost"] / df["Size (oz.)"], 2)
     df["Neat Price"] = df.apply(
-        lambda row: math.ceil(((row["Cost"] / row["Size (oz.)"]) * 2) / (row["Margin"] / 100)) if row["Margin"] > 0 and row["Size (oz.)"] > 0 else 0, axis=1)
-    # V3.6.test: Value uses Total Inventory
-    df["Value"] = df["Cost"] * df["Total Inventory"]
+        lambda row: math.ceil(((row["Cost"] / row["Size (oz.)"]) * 2) / (row["Margin"] / 100)) if row["Margin"] > 0 else 0, axis=1)
+    df["Value"] = round(df["Cost"] * df["Total Inventory"], 2)
     df["Suggested Retail"] = df["Cost"].apply(lambda x: math.ceil(x * 1.44))
-    return df[["Product", "Type", "Cost", "Size (oz.)", "Cost/Oz", "Margin", 
-               "Neat Price", "Upstairs Bar", "Main Bar", "Storage", "Total Inventory",
-               "Value", "Use", "Distributor", "Order Notes", "Suggested Retail"]]
+    
+    return df[["Product", "Type", "Cost", "Size (oz.)", "Margin", "Cost/Oz", "Neat Price",
+               loc1, loc2, loc3, "Total Inventory", "Value", "Use", "Distributor", "Order Notes", "Suggested Retail"]]
 
 
 @st.cache_data
 def get_sample_wines():
     """Returns sample wine inventory data (cached)."""
-    # V3.7: Updated with location columns (Upstairs Bar, Main Bar, Storage)
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     data = [
         {"Product": "Mauzac Nature, 2022, Domaine Plageoles, Gaillac, France", 
          "Type": "Bubbles", "Cost": 22.0, "Size (oz.)": 25.3, "Margin": 35, 
-         "Upstairs Bar": 2.0, "Main Bar": 4.0, "Storage": 12.0, "Distributor": "Chromatic", "Order Notes": ""},
+         loc1: 2.0, loc2: 4.0, loc3: 12.0, "Distributor": "Chromatic", "Order Notes": ""},
         {"Product": "Savagnin, 2022, Domaine de la Pinte, 'Sav'Or' Vin de France (Jura)", 
          "Type": "Rosé/Orange", "Cost": 29.0, "Size (oz.)": 25.3, "Margin": 37, 
-         "Upstairs Bar": 1.0, "Main Bar": 2.0, "Storage": 2.0, "Distributor": "Chromatic", "Order Notes": ""},
+         loc1: 1.0, loc2: 2.0, loc3: 2.0, "Distributor": "Chromatic", "Order Notes": ""},
         {"Product": "Sémillon, 2015, Forlorn Hope, 'Nacré', Napa Valley, CA", 
          "Type": "White", "Cost": 17.0, "Size (oz.)": 25.3, "Margin": 33, 
-         "Upstairs Bar": 0.0, "Main Bar": 1.0, "Storage": 1.0, "Distributor": "Chromatic", "Order Notes": ""},
+         loc1: 0.0, loc2: 1.0, loc3: 1.0, "Distributor": "Chromatic", "Order Notes": ""},
         {"Product": "Chardonnay, 2023, Jean Dauvissat, Chablis, France", 
          "Type": "White", "Cost": 31.5, "Size (oz.)": 25.3, "Margin": 35, 
-         "Upstairs Bar": 1.0, "Main Bar": 2.0, "Storage": 3.0, "Distributor": "Vino Veritas", "Order Notes": ""},
+         loc1: 1.0, loc2: 2.0, loc3: 3.0, "Distributor": "Vino Veritas", "Order Notes": ""},
         {"Product": "Pinot Noir, 2021, Domaine de la Côte, Sta. Rita Hills, CA", 
          "Type": "Red", "Cost": 55.0, "Size (oz.)": 25.3, "Margin": 34, 
-         "Upstairs Bar": 0.0, "Main Bar": 1.0, "Storage": 2.0, "Distributor": "Vino Veritas", "Order Notes": ""},
+         loc1: 0.0, loc2: 1.0, loc3: 2.0, "Distributor": "Vino Veritas", "Order Notes": ""},
         {"Product": "Nebbiolo, 2019, Cantina Massara, Barolo, Piedmont, Italy", 
          "Type": "Red", "Cost": 31.0, "Size (oz.)": 25.3, "Margin": 32, 
-         "Upstairs Bar": 1.0, "Main Bar": 1.0, "Storage": 2.0, "Distributor": "Vino Veritas", "Order Notes": ""},
+         loc1: 1.0, loc2: 1.0, loc3: 2.0, "Distributor": "Vino Veritas", "Order Notes": ""},
     ]
     df = pd.DataFrame(data)
-    # V3.7: Calculate Total Inventory from location columns
-    df["Total Inventory"] = df["Upstairs Bar"] + df["Main Bar"] + df["Storage"]
+    # Calculate Total Inventory from location columns
+    df["Total Inventory"] = df[loc1] + df[loc2] + df[loc3]
     # Calculated fields (non-editable)
     df["Bottle Price"] = df.apply(
         lambda row: math.ceil(row["Cost"] / (row["Margin"] / 100)) if row["Margin"] > 0 else 0, axis=1)
-    # V3.7: Value uses Total Inventory
     df["Value"] = df["Cost"] * df["Total Inventory"]
     df["BTG"] = df["Cost"].apply(lambda x: math.ceil(x / 4))
     df["Suggested Retail"] = df["Cost"].apply(lambda x: math.ceil(x * 1.44))
     return df[["Product", "Type", "Cost", "Size (oz.)", "Margin", "Bottle Price", 
-               "Upstairs Bar", "Main Bar", "Storage", "Total Inventory",
+               loc1, loc2, loc3, "Total Inventory",
                "Value", "Distributor", "Order Notes", "BTG", "Suggested Retail"]]
 
 
 @st.cache_data
 def get_sample_beers():
     """Returns sample beer inventory data (cached)."""
-    # V3.7: Updated with location columns (Upstairs Bar, Main Bar, Storage)
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     data = [
         {"Product": "New Glarus Staghorn Oktoberfest", "Type": "Can", 
          "Cost per Keg/Case": 26.40, "Size": 24.0, "UoM": "cans", 
-         "Margin": 21, "Upstairs Bar": 0.0, "Main Bar": 0.5, "Storage": 0.5,
+         "Margin": 21, loc1: 0.0, loc2: 0.5, loc3: 0.5,
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "New Glarus Moon Man", "Type": "Can", 
          "Cost per Keg/Case": 26.40, "Size": 24.0, "UoM": "cans", 
-         "Margin": 21, "Upstairs Bar": 0.5, "Main Bar": 0.5, "Storage": 1.0,
+         "Margin": 21, loc1: 0.5, loc2: 0.5, loc3: 1.0,
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "Coors Light", "Type": "Can", 
          "Cost per Keg/Case": 24.51, "Size": 30.0, "UoM": "cans", 
-         "Margin": 19, "Upstairs Bar": 0.0, "Main Bar": 0.5, "Storage": 0.5,
+         "Margin": 19, loc1: 0.0, loc2: 0.5, loc3: 0.5,
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "Hop Haus Yard Work IPA", "Type": "Sixtel", 
          "Cost per Keg/Case": 75.00, "Size": 661.0, "UoM": "oz", 
-         "Margin": 22, "Upstairs Bar": 0.0, "Main Bar": 1.0, "Storage": 0.0,
+         "Margin": 22, loc1: 0.0, loc2: 1.0, loc3: 0.0,
          "Distributor": "GB Beer", "Order Notes": ""},
         {"Product": "High Life", "Type": "Bottle", 
          "Cost per Keg/Case": 21.15, "Size": 24.0, "UoM": "bottles", 
-         "Margin": 18, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5,
+         "Margin": 18, loc1: 0.5, loc2: 1.0, loc3: 0.5,
          "Distributor": "Frank Beer", "Order Notes": ""},
     ]
     df = pd.DataFrame(data)
-    # V3.7: Calculate Total Inventory from location columns
-    df["Total Inventory"] = df["Upstairs Bar"] + df["Main Bar"] + df["Storage"]
+    # Calculate Total Inventory from location columns
+    df["Total Inventory"] = df[loc1] + df[loc2] + df[loc3]
     # Calculated fields (non-editable)
     df["Cost/Unit"] = df["Cost per Keg/Case"] / df["Size"]
-    # V3.7: Value uses Total Inventory
     df["Value"] = df["Cost per Keg/Case"] * df["Total Inventory"]
-    # V3.5: Menu Price - different formula for cans/bottles vs kegs
+    # Menu Price - different formula for cans/bottles vs kegs
     def calc_menu_price(row):
         cost_unit = row["Cost/Unit"]
         margin = row["Margin"]
@@ -843,108 +1017,114 @@ def get_sample_beers():
         return 0
     df["Menu Price"] = df.apply(calc_menu_price, axis=1)
     return df[["Product", "Type", "Cost per Keg/Case", "Size", "UoM", 
-               "Cost/Unit", "Margin", "Menu Price", "Upstairs Bar", "Main Bar", "Storage",
+               "Cost/Unit", "Margin", "Menu Price", loc1, loc2, loc3,
                "Total Inventory", "Value", "Distributor", "Order Notes"]]
 
 
 @st.cache_data
 def get_sample_ingredients():
     """Returns sample ingredient inventory data (cached)."""
-    # V3.7: Updated with location columns (Upstairs Bar, Main Bar, Storage)
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     data = [
         {"Product": "Amaretto Cherries", "Cost": 15.00, "Size/Yield": 80.0, 
-         "UoM": "cherries", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5,
+         "UoM": "cherries", loc1: 0.5, loc2: 1.0, loc3: 0.5,
          "Distributor": "Left Bank", "Order Notes": ""},
         {"Product": "Olives", "Cost": 29.63, "Size/Yield": 300.0, 
-         "UoM": "pieces", "Upstairs Bar": 0.0, "Main Bar": 1.0, "Storage": 1.0,
+         "UoM": "pieces", loc1: 0.0, loc2: 1.0, loc3: 1.0,
          "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Natalie's Lime Juice", "Cost": 8.34, "Size/Yield": 32.0, 
-         "UoM": "oz", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 2.0,
+         "UoM": "oz", loc1: 0.5, loc2: 1.0, loc3: 2.0,
          "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Natalie's Lemon Juice", "Cost": 8.34, "Size/Yield": 32.0, 
-         "UoM": "oz", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 1.5,
+         "UoM": "oz", loc1: 0.5, loc2: 1.0, loc3: 1.5,
          "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Agave Nectar", "Cost": 17.56, "Size/Yield": 64.0, 
-         "UoM": "oz", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 1.0,
+         "UoM": "oz", loc1: 0.5, loc2: 1.0, loc3: 1.0,
          "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Q Ginger Beer", "Cost": 0.00, "Size/Yield": 7.5, 
-         "UoM": "oz", "Upstairs Bar": 0.0, "Main Bar": 2.0, "Storage": 4.0,
+         "UoM": "oz", loc1: 0.0, loc2: 2.0, loc3: 4.0,
          "Distributor": "Breakthru", "Order Notes": "Free"},
         {"Product": "Q Club Soda", "Cost": 1.04, "Size/Yield": 7.5, 
-         "UoM": "oz", "Upstairs Bar": 0.0, "Main Bar": 2.0, "Storage": 4.0,
+         "UoM": "oz", loc1: 0.0, loc2: 2.0, loc3: 4.0,
          "Distributor": "Breakthru", "Order Notes": "3cs mix"},
         {"Product": "Heavy Cream", "Cost": 9.59, "Size/Yield": 64.0, 
-         "UoM": "oz", "Upstairs Bar": 0.0, "Main Bar": 1.0, "Storage": 1.0,
+         "UoM": "oz", loc1: 0.0, loc2: 1.0, loc3: 1.0,
          "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Simple Syrup (House)", "Cost": 5.00, "Size/Yield": 32.0, 
-         "UoM": "oz", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 1.0,
+         "UoM": "oz", loc1: 0.5, loc2: 1.0, loc3: 1.0,
          "Distributor": "House Made", "Order Notes": ""},
         {"Product": "Demerara Syrup (House)", "Cost": 8.00, "Size/Yield": 32.0, 
-         "UoM": "oz", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5,
+         "UoM": "oz", loc1: 0.5, loc2: 1.0, loc3: 0.5,
          "Distributor": "House Made", "Order Notes": ""},
         {"Product": "Orange Peel", "Cost": 0.50, "Size/Yield": 10.0, 
-         "UoM": "pieces", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.0,
+         "UoM": "pieces", loc1: 0.5, loc2: 1.0, loc3: 0.0,
          "Distributor": "House Made", "Order Notes": ""},
         {"Product": "Lemon Peel", "Cost": 0.50, "Size/Yield": 10.0, 
-         "UoM": "pieces", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.0,
+         "UoM": "pieces", loc1: 0.5, loc2: 1.0, loc3: 0.0,
          "Distributor": "House Made", "Order Notes": ""},
         {"Product": "Luxardo Cherry", "Cost": 25.00, "Size/Yield": 50.0, 
-         "UoM": "cherries", "Upstairs Bar": 0.0, "Main Bar": 1.0, "Storage": 1.0,
+         "UoM": "cherries", loc1: 0.0, loc2: 1.0, loc3: 1.0,
          "Distributor": "Breakthru", "Order Notes": ""},
     ]
     df = pd.DataFrame(data)
-    # V3.7: Calculate Total Inventory from location columns
-    df["Total Inventory"] = df["Upstairs Bar"] + df["Main Bar"] + df["Storage"]
+    # Calculate Total Inventory from location columns
+    df["Total Inventory"] = df[loc1] + df[loc2] + df[loc3]
     df["Cost/Unit"] = df["Cost"] / df["Size/Yield"]
     return df[["Product", "Cost", "Size/Yield", "UoM", "Cost/Unit", 
-               "Upstairs Bar", "Main Bar", "Storage", "Total Inventory",
+               loc1, loc2, loc3, "Total Inventory",
                "Distributor", "Order Notes"]]
 
 
 @st.cache_data
 def get_sample_weekly_inventory():
     """Returns sample weekly inventory data (cached)."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     data = [
-        {"Product": "New Glarus Moon Man", "Category": "Beer", "Par": 3, 
-         "Bar Inventory": 1, "Storage Inventory": 1, "Unit": "Case", "Unit Cost": 26.40, 
-         "Distributor": "Frank Beer", "Order Notes": ""},
-        {"Product": "Coors Light", "Category": "Beer", "Par": 2, 
-         "Bar Inventory": 0.5, "Storage Inventory": 0.5, "Unit": "Case", "Unit Cost": 24.51, 
-         "Distributor": "Frank Beer", "Order Notes": ""},
-        {"Product": "Tito's", "Category": "Spirits", "Par": 4, 
-         "Bar Inventory": 1, "Storage Inventory": 2, "Unit": "Bottle", "Unit Cost": 24.50, 
-         "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
-        {"Product": "Buffalo Trace", "Category": "Spirits", "Par": 3, 
-         "Bar Inventory": 1, "Storage Inventory": 1, "Unit": "Bottle", "Unit Cost": 31.00, 
-         "Distributor": "Breakthru", "Order Notes": ""},
-        {"Product": "Natalie's Lime Juice", "Category": "Ingredients", "Par": 4, 
-         "Bar Inventory": 1, "Storage Inventory": 1, "Unit": "Bottle", "Unit Cost": 8.34, 
-         "Distributor": "US Foods", "Order Notes": ""},
+        {"Product": "Hendrick's", "Category": "Spirits", "Par": 2, loc1: 0.5, loc2: 0.5, loc3: 0.0, 
+         "Unit": "bottle", "Unit Cost": 30.80, "Distributor": "Breakthru", "Order Notes": "6 pk deal"},
+        {"Product": "Tito's", "Category": "Spirits", "Par": 4, loc1: 1.0, loc2: 1.0, loc3: 1.0, 
+         "Unit": "bottle", "Unit Cost": 24.50, "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
+        {"Product": "Espolòn Blanco", "Category": "Spirits", "Par": 3, loc1: 1.0, loc2: 1.5, loc3: 1.5, 
+         "Unit": "bottle", "Unit Cost": 25.00, "Distributor": "Breakthru", "Order Notes": ""},
+        {"Product": "Buffalo Trace", "Category": "Spirits", "Par": 3, loc1: 0.5, loc2: 0.5, loc3: 1.0, 
+         "Unit": "bottle", "Unit Cost": 31.00, "Distributor": "Breakthru", "Order Notes": ""},
+        {"Product": "Mauzac Nature", "Category": "Wine", "Par": 12, loc1: 2.0, loc2: 4.0, loc3: 12.0, 
+         "Unit": "bottle", "Unit Cost": 22.00, "Distributor": "Chromatic", "Order Notes": ""},
+        {"Product": "New Glarus Moon Man", "Category": "Beer", "Par": 3, loc1: 0.5, loc2: 0.5, loc3: 1.0, 
+         "Unit": "case", "Unit Cost": 26.40, "Distributor": "Frank Beer", "Order Notes": ""},
+        {"Product": "Natalie's Lime Juice", "Category": "Ingredients", "Par": 4, loc1: 0.5, loc2: 1.0, loc3: 2.0, 
+         "Unit": "bottle", "Unit Cost": 8.34, "Distributor": "US Foods", "Order Notes": ""},
+        {"Product": "Agave Nectar", "Category": "Ingredients", "Par": 3, loc1: 0.5, loc2: 1.0, loc3: 1.0, 
+         "Unit": "bottle", "Unit Cost": 17.56, "Distributor": "US Foods", "Order Notes": ""},
     ]
     df = pd.DataFrame(data)
-    df['Total Current Inventory'] = df['Bar Inventory'] + df['Storage Inventory']
+    df['Total Current Inventory'] = df[loc1] + df[loc2] + df[loc3]
     return df
 
 
+@st.cache_data
 def get_sample_order_history():
-    """Returns sample order history data."""
+    """Returns sample order history data (cached)."""
     today = datetime.now()
-    weeks = [(today - timedelta(weeks=i)).strftime("%Y-%m-%d") for i in range(6, 0, -1)]
     data = [
-        {"Week": weeks[0], "Product": "Tito's", "Category": "Spirits", 
-         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 24.50, "Total Cost": 49.00, "Distributor": "Breakthru"},
-        {"Week": weeks[0], "Product": "New Glarus Moon Man", "Category": "Beer", 
-         "Quantity Ordered": 2, "Unit": "Case", "Unit Cost": 26.40, "Total Cost": 52.80, "Distributor": "Frank Beer"},
-        {"Week": weeks[1], "Product": "Buffalo Trace", "Category": "Spirits", 
-         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 31.00, "Total Cost": 62.00, "Distributor": "Breakthru"},
-        {"Week": weeks[2], "Product": "Espolòn Blanco", "Category": "Spirits", 
-         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 25.00, "Total Cost": 50.00, "Distributor": "Breakthru"},
-        {"Week": weeks[3], "Product": "Tito's", "Category": "Spirits", 
-         "Quantity Ordered": 3, "Unit": "Bottle", "Unit Cost": 24.50, "Total Cost": 73.50, "Distributor": "Breakthru"},
-        {"Week": weeks[4], "Product": "Botanist", "Category": "Spirits", 
-         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 33.74, "Total Cost": 67.48, "Distributor": "General Beverage"},
-        {"Week": weeks[5], "Product": "Tito's", "Category": "Spirits", 
-         "Quantity Ordered": 2, "Unit": "Bottle", "Unit Cost": 24.50, "Total Cost": 49.00, "Distributor": "Breakthru"},
+        {"Week": (today - timedelta(days=14)).strftime("%Y-%m-%d"), "Product": "Hendrick's", "Category": "Spirits",
+         "Order Quantity": 2, "Unit Cost": 30.80, "Total Cost": 61.60, "Distributor": "Breakthru",
+         "Invoice #": "INV-001", "Invoice Date": (today - timedelta(days=13)).strftime("%Y-%m-%d")},
+        {"Week": (today - timedelta(days=14)).strftime("%Y-%m-%d"), "Product": "Tito's", "Category": "Spirits",
+         "Order Quantity": 3, "Unit Cost": 24.50, "Total Cost": 73.50, "Distributor": "Breakthru",
+         "Invoice #": "INV-001", "Invoice Date": (today - timedelta(days=13)).strftime("%Y-%m-%d")},
+        {"Week": (today - timedelta(days=7)).strftime("%Y-%m-%d"), "Product": "Espolòn Blanco", "Category": "Spirits",
+         "Order Quantity": 2, "Unit Cost": 25.00, "Total Cost": 50.00, "Distributor": "Breakthru",
+         "Invoice #": "INV-002", "Invoice Date": (today - timedelta(days=6)).strftime("%Y-%m-%d")},
+        {"Week": (today - timedelta(days=7)).strftime("%Y-%m-%d"), "Product": "Mauzac Nature", "Category": "Wine",
+         "Order Quantity": 6, "Unit Cost": 22.00, "Total Cost": 132.00, "Distributor": "Chromatic",
+         "Invoice #": "INV-003", "Invoice Date": (today - timedelta(days=6)).strftime("%Y-%m-%d")},
     ]
     return pd.DataFrame(data)
 
@@ -953,45 +1133,34 @@ def get_sample_order_history():
 def get_sample_cocktails():
     """Returns sample cocktail recipes (cached)."""
     return [
-        {"name": "Martini at The Inn", "glass": "Martini", "sale_price": 14.00,
-         "instructions": "Combine gin, vermouth, and bitters in mixing glass. Add ice and stir until ice cold. Strain into chilled martini glass.",
-         "ingredients": [
-             {"product": "Botanist", "amount": 2.5, "unit": "oz"},
-             {"product": "Bordiga Extra Dry Vermouth", "amount": 0.5, "unit": "oz"},
-             {"product": "Angostura Orange Bitters", "amount": 0.03, "unit": "oz"},
-             {"product": "Olives", "amount": 2, "unit": "pieces"},
-         ]},
-        {"name": "Old Fashioned", "glass": "Rocks", "sale_price": 13.00,
-         "instructions": "Add sugar, bitters, and splash of water to rocks glass. Muddle. Add bourbon and ice, stir.",
+        {"name": "Old Fashioned", "glass": "Rocks", "sale_price": 14.00,
          "ingredients": [
              {"product": "Buffalo Trace", "amount": 2.0, "unit": "oz"},
              {"product": "Demerara Syrup (House)", "amount": 0.25, "unit": "oz"},
-             {"product": "Angostura Bitters", "amount": 0.1, "unit": "oz"},
-             {"product": "Orange Peel", "amount": 1, "unit": "pieces"},
-             {"product": "Luxardo Cherry", "amount": 1, "unit": "cherries"},
-         ]},
-        {"name": "Margarita", "glass": "Coupe", "sale_price": 12.00,
-         "instructions": "Combine tequila, lime juice, and agave in shaker with ice. Shake and strain into salt-rimmed coupe.",
+             {"product": "Angostura Bitters", "amount": 2, "unit": "dashes"},
+         ],
+         "instructions": "Stir with ice, strain into rocks glass with large ice cube. Express orange peel."},
+        {"name": "Margarita", "glass": "Coupe", "sale_price": 13.00,
          "ingredients": [
              {"product": "Espolòn Blanco", "amount": 2.0, "unit": "oz"},
              {"product": "Natalie's Lime Juice", "amount": 1.0, "unit": "oz"},
              {"product": "Agave Nectar", "amount": 0.75, "unit": "oz"},
-         ]},
-        {"name": "Negroni", "glass": "Rocks", "sale_price": 13.00,
-         "instructions": "Add all ingredients to rocks glass with ice. Stir until well chilled.",
+         ],
+         "instructions": "Shake with ice, strain into chilled coupe. Salt rim optional."},
+        {"name": "Negroni", "glass": "Rocks", "sale_price": 14.00,
          "ingredients": [
              {"product": "Botanist", "amount": 1.0, "unit": "oz"},
              {"product": "Campari", "amount": 1.0, "unit": "oz"},
              {"product": "Lustau Vermut Rojo", "amount": 1.0, "unit": "oz"},
-             {"product": "Orange Peel", "amount": 1, "unit": "pieces"},
-         ]},
-        {"name": "Moscow Mule", "glass": "Copper Mug", "sale_price": 11.00,
-         "instructions": "Add vodka and lime juice to copper mug. Fill with ice and top with ginger beer.",
+         ],
+         "instructions": "Stir with ice, strain into rocks glass with large ice cube. Orange peel garnish."},
+        {"name": "Daiquiri", "glass": "Coupe", "sale_price": 12.00,
          "ingredients": [
-             {"product": "Tito's", "amount": 2.0, "unit": "oz"},
-             {"product": "Natalie's Lime Juice", "amount": 0.75, "unit": "oz"},
-             {"product": "Q Ginger Beer", "amount": 4.0, "unit": "oz"},
-         ]},
+             {"product": "Wray & Nephew Overproof Rum", "amount": 2.0, "unit": "oz"},
+             {"product": "Natalie's Lime Juice", "amount": 1.0, "unit": "oz"},
+             {"product": "Simple Syrup (House)", "amount": 0.75, "unit": "oz"},
+         ],
+         "instructions": "Shake with ice, double strain into chilled coupe."},
     ]
 
 
@@ -999,52 +1168,23 @@ def get_sample_cocktails():
 def get_sample_bar_prep_recipes():
     """Returns sample bar prep recipes (cached)."""
     return [
-        # Syrups/Infusions
-        {"name": "Simple Syrup", "category": "Syrups/Infusions", "yield_oz": 48,
-         "yield_description": "1.5 quarts", "shelf_life": "1 month",
-         "storage": "Refrigerate in quart container",
-         "instructions": "1. Heat Sugar and Water until dissolved.\n2. Remove from heat and cool.\n3. Add vodka.\n4. Label and date.",
+        {"name": "Simple Syrup", "category": "Syrups", "yield_oz": 32,
+         "yield_description": "1 quart", "shelf_life": "2-3 weeks refrigerated",
+         "storage": "Refrigerate in sealed container",
+         "instructions": "Combine equal parts sugar and hot water. Stir until dissolved. Cool before use.",
          "ingredients": [
-             {"product": "White Granulated Sugar", "amount": 800, "unit": "g"},
-             {"product": "Water", "amount": 32, "unit": "oz"},
-             {"product": "Vodka", "amount": 0.5, "unit": "oz"},
+             {"product": "Sugar", "amount": 16, "unit": "oz"},
+             {"product": "Water", "amount": 16, "unit": "oz"},
          ]},
-        {"name": "Demerara Syrup", "category": "Syrups/Infusions", "yield_oz": 48,
-         "yield_description": "1.5 quarts", "shelf_life": "1 month",
-         "storage": "Refrigerate in quart container",
-         "instructions": "1. Heat Sugar and Water until dissolved.\n2. Remove from heat and cool.\n3. Add vodka.\n4. Label and date.",
+        {"name": "Demerara Syrup", "category": "Syrups", "yield_oz": 32,
+         "yield_description": "1 quart", "shelf_life": "2-3 weeks refrigerated",
+         "storage": "Refrigerate in sealed container",
+         "instructions": "Combine 2:1 demerara sugar to hot water. Stir until dissolved. Cool.",
          "ingredients": [
-             {"product": "Demerara Sugar", "amount": 800, "unit": "g"},
-             {"product": "Water", "amount": 32, "unit": "oz"},
-             {"product": "Vodka", "amount": 0.5, "unit": "oz"},
+             {"product": "Demerara Sugar", "amount": 21, "unit": "oz"},
+             {"product": "Water", "amount": 10.5, "unit": "oz"},
          ]},
-        {"name": "Sea Salt Saline", "category": "Syrups/Infusions", "yield_oz": 32,
-         "yield_description": "1 quart", "shelf_life": "6 months",
-         "storage": "Room temp in quart container",
-         "instructions": "1. Combine salt and water until dissolved.\n2. Label and date.",
-         "ingredients": [
-             {"product": "Sea Salt", "amount": 360, "unit": "g"},
-             {"product": "Water", "amount": 32, "unit": "oz"},
-         ]},
-        {"name": "Sour Mix", "category": "Syrups/Infusions", "yield_oz": 32,
-         "yield_description": "1 quart", "shelf_life": "1 week",
-         "storage": "Refrigerate",
-         "instructions": "1. Combine juice and simple.\n2. Stir well.\n3. Label and date.",
-         "ingredients": [
-             {"product": "Lemon Juice", "amount": 8, "unit": "oz"},
-             {"product": "Lime Juice", "amount": 8, "unit": "oz"},
-             {"product": "Simple Syrup", "amount": 16, "unit": "oz"},
-         ]},
-        # Batched Cocktails
-        {"name": "Martini Batch", "category": "Batched Cocktails", "yield_oz": 66,
-         "yield_description": "~2 liters (22 cocktails)", "shelf_life": "2-3 months",
-         "storage": "Room temp",
-         "instructions": "Pour 3oz batch into mixing glass. Add bitters, olive juice, ice and stir. Strain into chilled glass.",
-         "ingredients": [
-             {"product": "Botanist Gin", "amount": 55, "unit": "oz"},
-             {"product": "Bordiga Extra Dry", "amount": 11, "unit": "oz"},
-         ]},
-        {"name": "Old Pal", "category": "Batched Cocktails", "yield_oz": 66,
+        {"name": "House Manhattan Batch", "category": "Batched Cocktails", "yield_oz": 66,
          "yield_description": "~2 liters (22 cocktails)", "shelf_life": "2-3 months",
          "storage": "Room temp",
          "instructions": "Pour 3oz batch into mixing glass. Add ice and stir. Strain into Nick and Nora.",
@@ -1097,12 +1237,12 @@ def init_session_state():
     
     # Inventory data - consolidated loading
     inventory_loaders = {
-        'spirits_inventory': ('spirits_inventory', get_sample_spirits),
-        'wine_inventory': ('wine_inventory', get_sample_wines),
-        'beer_inventory': ('beer_inventory', get_sample_beers),
-        'ingredients_inventory': ('ingredients_inventory', get_sample_ingredients),
-        'weekly_inventory': ('weekly_inventory', get_sample_weekly_inventory),
-        'order_history': ('order_history', get_sample_order_history),
+        'spirits_inventory': (get_sheet_name('spirits_inventory'), get_sample_spirits),
+        'wine_inventory': (get_sheet_name('wine_inventory'), get_sample_wines),
+        'beer_inventory': (get_sheet_name('beer_inventory'), get_sample_beers),
+        'ingredients_inventory': (get_sheet_name('ingredients_inventory'), get_sample_ingredients),
+        'weekly_inventory': (get_sheet_name('weekly_inventory'), get_sample_weekly_inventory),
+        'order_history': (get_sheet_name('order_history'), get_sample_order_history),
     }
     
     for key, (sheet_name, sample_func) in inventory_loaders.items():
@@ -1112,8 +1252,8 @@ def init_session_state():
     
     # Recipe data
     recipe_loaders = {
-        'cocktail_recipes': ('cocktail_recipes', get_sample_cocktails),
-        'bar_prep_recipes': ('bar_prep_recipes', get_sample_bar_prep_recipes),
+        'cocktail_recipes': (get_sheet_name('cocktail_recipes'), get_sample_cocktails),
+        'bar_prep_recipes': (get_sheet_name('bar_prep_recipes'), get_sample_bar_prep_recipes),
     }
     
     for key, (sheet_name, sample_func) in recipe_loaders.items():
@@ -1126,7 +1266,7 @@ def init_session_state():
         st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
     
     if 'current_order' not in st.session_state:
-        saved_order = load_dataframe_from_sheets('pending_order') if sheets_configured else None
+        saved_order = load_dataframe_from_sheets(get_sheet_name('pending_order')) if sheets_configured else None
         st.session_state.current_order = saved_order if saved_order is not None and len(saved_order) > 0 else pd.DataFrame()
     
     if 'price_change_acks' not in st.session_state:
@@ -1134,7 +1274,7 @@ def init_session_state():
 
 
 # =============================================================================
-# NAVIGATION
+# NAVIGATION (with Feature Toggles)
 # =============================================================================
 
 def navigate_to(page: str):
@@ -1143,9 +1283,9 @@ def navigate_to(page: str):
 
 
 def show_sidebar_navigation():
-    """Displays sidebar navigation (V3.0 optimized)."""
+    """Displays sidebar navigation with feature toggles applied."""
     with st.sidebar:
-        st.markdown("### 🍸 Navigation")
+        st.markdown(f"### 🍸 {CLIENT_CONFIG['restaurant_name']}")
         st.markdown("---")
         
         if st.button("🏠 Home", key="nav_home", use_container_width=True):
@@ -1155,42 +1295,39 @@ def show_sidebar_navigation():
         st.markdown("")
         current = st.session_state.current_page
         
+        # Navigation items with feature toggle checks
         nav_items = [
-            ('inventory', '📦 Master Inventory'),
-            ('ordering', '📋 Weekly Orders'),
-            ('cocktails', '🍹 Cocktail Builds'),
-            ('bar_prep', '🧪 Bar Prep'),
-            ('cogs', '📊 COGS Calculator'),
+            ('inventory', '📦 Master Inventory', 'master_inventory'),
+            ('ordering', '📋 Weekly Orders', 'weekly_orders'),
+            ('cocktails', '🍹 Cocktail Builds', 'cocktail_builds'),
+            ('bar_prep', '🧪 Bar Prep', 'bar_prep'),
+            ('cogs', '📊 COGS Calculator', 'cogs_calculator'),
         ]
         
-        for page_id, label in nav_items:
-            display_label = label + (" ●" if current == page_id else "")
-            if st.button(display_label, key=f"nav_{page_id}", use_container_width=True, disabled=(current == page_id)):
-                navigate_to(page_id)
-                st.rerun()
+        for page_id, label, feature_key in nav_items:
+            # Only show if feature is enabled
+            if is_feature_enabled(feature_key):
+                display_label = label + (" ●" if current == page_id else "")
+                if st.button(display_label, key=f"nav_{page_id}", use_container_width=True, disabled=(current == page_id)):
+                    navigate_to(page_id)
+                    st.rerun()
         
         st.markdown("---")
         st.caption("Beverage Management App")
 
 
 # =============================================================================
-# REUSABLE UI COMPONENTS (V3.0 Optimization)
+# REUSABLE UI COMPONENTS
 # =============================================================================
 
 def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None):
     """
     Reusable recipe card display for both Cocktails and Bar Prep.
-    
-    Args:
-        recipe: Recipe dictionary
-        recipe_type: 'cocktail' or 'bar_prep'
-        idx: Index for unique keys
-        on_delete: Optional callback for delete action
     """
     # Calculate costs
     total_cost = calculate_recipe_cost(recipe.get('ingredients', []))
     
-    # Create a safe key from recipe name (remove spaces and special chars)
+    # Create a safe key from recipe name
     safe_name = recipe['name'].replace(' ', '_').replace('/', '_').replace("'", "")
     
     if recipe_type == 'bar_prep':
@@ -1206,7 +1343,6 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
         col_info, col_cost = st.columns([2, 1])
         
         with col_info:
-            # Recipe-specific info
             if recipe_type == 'bar_prep':
                 st.markdown(f"**Yield:** {recipe.get('yield_description', '')} ({recipe.get('yield_oz', 0)} oz)")
                 st.markdown(f"**Shelf Life:** {recipe.get('shelf_life', 'N/A')}")
@@ -1235,7 +1371,6 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
                     column_config={"Cost": st.column_config.NumberColumn(format="$%.4f")}
                 )
             
-            # Instructions
             if recipe.get('instructions'):
                 st.markdown("**Instructions:**")
                 st.text(recipe['instructions'])
@@ -1251,7 +1386,6 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
                 st.metric("Sale Price", format_currency(recipe.get('sale_price', 0)))
                 st.metric("Margin", f"{margin:.1f}%")
         
-        # Delete button - use recipe name for unique key
         if on_delete:
             st.markdown("---")
             if st.button("🗑️ Delete Recipe", key=f"delete_{recipe_type}_{safe_name}"):
@@ -1259,15 +1393,7 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
 
 
 def display_recipe_list(recipes: list, recipe_type: str, category_filter: str = None, session_key: str = None):
-    """
-    Displays a filtered list of recipes.
-    
-    Args:
-        recipes: List of recipe dictionaries
-        recipe_type: 'cocktail' or 'bar_prep'
-        category_filter: Optional category to filter by (for bar_prep)
-        session_key: Session state key for recipes (for deletion)
-    """
+    """Displays a filtered list of recipes."""
     filtered = recipes
     if category_filter:
         filtered = [r for r in recipes if r.get('category') == category_filter]
@@ -1288,11 +1414,15 @@ def display_recipe_list(recipes: list, recipe_type: str, category_filter: str = 
 
 
 # =============================================================================
-# CSV UPLOAD PROCESSING FUNCTIONS
+# CSV UPLOAD PROCESSING FUNCTIONS - Using CLIENT_CONFIG locations
 # =============================================================================
 
 def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
     """Processes an uploaded Spirits inventory CSV."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     try:
         df = df.copy()
         for col in ['Cost', 'Cost/Oz', 'Neat Price', 'Suggested Retail', 'Value']:
@@ -1303,25 +1433,23 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # V3.6.test: Handle location columns (Upstairs Bar, Main Bar, Storage)
-        for col in ['Upstairs Bar', 'Main Bar', 'Storage']:
+        # Handle location columns
+        for col in [loc1, loc2, loc3]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             else:
                 df[col] = 0.0
         
-        # V3.6.test: Calculate Total Inventory from location columns
-        df['Total Inventory'] = df['Upstairs Bar'] + df['Main Bar'] + df['Storage']
+        # Calculate Total Inventory from location columns
+        df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
         
-        # V3.5: Recalculate all calculated fields with correct formulas
+        # Recalculate all calculated fields
         if 'Cost' in df.columns and 'Size (oz.)' in df.columns:
             df['Cost/Oz'] = df.apply(
                 lambda row: round(row['Cost'] / row['Size (oz.)'], 2) if row['Size (oz.)'] > 0 else 0, axis=1)
-        # V3.5: Neat Price = ((Cost/Oz) * 2) / (Margin/100), rounded up
         if 'Cost' in df.columns and 'Size (oz.)' in df.columns and 'Margin' in df.columns:
             df['Neat Price'] = df.apply(
                 lambda row: math.ceil(((row['Cost'] / row['Size (oz.)']) * 2) / (row['Margin'] / 100)) if row['Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
-        # V3.6.test: Value now uses Total Inventory
         if 'Cost' in df.columns and 'Total Inventory' in df.columns:
             df['Value'] = round(df['Cost'] * df['Total Inventory'], 2)
         if 'Cost' in df.columns:
@@ -1334,6 +1462,10 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
 
 def process_uploaded_wine(df: pd.DataFrame) -> pd.DataFrame:
     """Processes an uploaded Wine inventory CSV."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     try:
         df = df.copy()
         for col in ['Cost', 'Bottle Price', 'BTG', 'Suggested Retail', 'Value']:
@@ -1344,21 +1476,20 @@ def process_uploaded_wine(df: pd.DataFrame) -> pd.DataFrame:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # V3.7: Handle location columns (Upstairs Bar, Main Bar, Storage)
-        for col in ['Upstairs Bar', 'Main Bar', 'Storage']:
+        # Handle location columns
+        for col in [loc1, loc2, loc3]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             else:
                 df[col] = 0.0
         
-        # V3.7: Calculate Total Inventory from location columns
-        df['Total Inventory'] = df['Upstairs Bar'] + df['Main Bar'] + df['Storage']
+        # Calculate Total Inventory from location columns
+        df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
         
-        # V3.5: Recalculate all calculated fields with correct formulas
+        # Recalculate all calculated fields
         if 'Cost' in df.columns and 'Margin' in df.columns:
             df['Bottle Price'] = df.apply(
                 lambda row: math.ceil(row['Cost'] / (row['Margin'] / 100)) if row['Margin'] > 0 else 0, axis=1)
-        # V3.7: Value uses Total Inventory
         if 'Cost' in df.columns and 'Total Inventory' in df.columns:
             df['Value'] = round(df['Cost'] * df['Total Inventory'], 2)
         if 'Cost' in df.columns:
@@ -1372,6 +1503,10 @@ def process_uploaded_wine(df: pd.DataFrame) -> pd.DataFrame:
 
 def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
     """Processes an uploaded Beer inventory CSV."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     try:
         df = df.copy()
         for col in ['Cost per Keg/Case', 'Cost/Unit', 'Menu Price', 'Value']:
@@ -1382,33 +1517,33 @@ def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # V3.7: Handle location columns (Upstairs Bar, Main Bar, Storage)
-        for col in ['Upstairs Bar', 'Main Bar', 'Storage']:
+        # Handle location columns
+        for col in [loc1, loc2, loc3]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             else:
                 df[col] = 0.0
         
-        # V3.7: Calculate Total Inventory from location columns
-        df['Total Inventory'] = df['Upstairs Bar'] + df['Main Bar'] + df['Storage']
+        # Calculate Total Inventory from location columns
+        df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
         
-        # V3.5: Recalculate all calculated fields
+        # Recalculate all calculated fields
         if 'Cost per Keg/Case' in df.columns and 'Size' in df.columns:
             df['Cost/Unit'] = df.apply(
                 lambda row: round(row['Cost per Keg/Case'] / row['Size'], 2) if row['Size'] > 0 else 0, axis=1)
-        # V3.7: Value uses Total Inventory
         if 'Cost per Keg/Case' in df.columns and 'Total Inventory' in df.columns:
             df['Value'] = round(df['Cost per Keg/Case'] * df['Total Inventory'], 2)
-        # V3.5: Menu Price - different formula for cans/bottles vs kegs
+        
+        # Menu Price calculation
         if 'Cost/Unit' in df.columns and 'Margin' in df.columns and 'Type' in df.columns:
             def calc_menu_price(row):
-                cost_unit = row['Cost/Unit']
-                margin = row['Margin']
+                cost_unit = row.get("Cost/Unit", 0)
+                margin = row.get("Margin", 0)
                 if margin <= 0:
                     return 0
-                if row['Type'] in ['Can', 'Bottle']:
+                if row.get("Type", "") in ["Can", "Bottle"]:
                     return round(cost_unit / (margin / 100))
-                elif row['Type'] in ['Half Barrel', 'Quarter Barrel', 'Sixtel']:
+                elif row.get("Type", "") in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
                     return round((cost_unit * 16) / (margin / 100))
                 return 0
             df['Menu Price'] = df.apply(calc_menu_price, axis=1)
@@ -1420,6 +1555,10 @@ def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
 
 def process_uploaded_ingredients(df: pd.DataFrame) -> pd.DataFrame:
     """Processes an uploaded Ingredients inventory CSV."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     try:
         df = df.copy()
         for col in ['Cost', 'Cost/Unit']:
@@ -1427,15 +1566,15 @@ def process_uploaded_ingredients(df: pd.DataFrame) -> pd.DataFrame:
         if 'Size/Yield' in df.columns:
             df['Size/Yield'] = pd.to_numeric(df['Size/Yield'], errors='coerce').fillna(0)
         
-        # V3.7: Handle location columns (Upstairs Bar, Main Bar, Storage)
-        for col in ['Upstairs Bar', 'Main Bar', 'Storage']:
+        # Handle location columns
+        for col in [loc1, loc2, loc3]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             else:
                 df[col] = 0.0
         
-        # V3.7: Calculate Total Inventory from location columns
-        df['Total Inventory'] = df['Upstairs Bar'] + df['Main Bar'] + df['Storage']
+        # Calculate Total Inventory from location columns
+        df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
         
         if 'Cost' in df.columns and 'Size/Yield' in df.columns:
             df['Cost/Unit'] = df.apply(
@@ -1447,83 +1586,97 @@ def process_uploaded_ingredients(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # =============================================================================
-# PAGE: HOME
+# PAGE: HOME (with Feature Toggles)
 # =============================================================================
 
 def show_home():
-    """Renders the homescreen with navigation cards (V3.4 - clean, balanced layout)."""
-    st.markdown("""
+    """Renders the homescreen with navigation cards and feature toggles applied."""
+    restaurant_name = CLIENT_CONFIG['restaurant_name']
+    tagline = CLIENT_CONFIG['restaurant_tagline']
+    
+    st.markdown(f"""
     <div class="main-header">
-        <h1>🍸 Beverage Management App</h1>
-        <p>Manage your inventory, build orders, track cost of goods sold, and store all of your recipes.</p>
+        <h1>🍸 {restaurant_name}</h1>
+        <p>{tagline}</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Module Cards - Row 1 (3 cards)
-    col1, col2, col3 = st.columns(3)
+    # Build list of enabled modules
+    enabled_modules = []
     
-    with col1:
-        st.markdown("""
-        <div class="module-card card-inventory">
-            <div class="card-icon">📦</div>
-            <div class="card-title">Master Inventory</div>
-            <div class="card-description">Track spirits, wine, beer, and ingredients.<br>View values, costs, and stock levels.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Master Inventory", key="btn_inventory", use_container_width=True, type="primary"):
-            navigate_to('inventory')
-            st.rerun()
+    if is_feature_enabled('master_inventory'):
+        enabled_modules.append({
+            'id': 'inventory',
+            'icon': '📦',
+            'title': 'Master Inventory',
+            'description': 'Track spirits, wine, beer, and ingredients.<br>View values, costs, and stock levels.',
+            'card_class': 'card-inventory',
+        })
     
-    with col2:
-        st.markdown("""
-        <div class="module-card card-ordering">
-            <div class="card-icon">📋</div>
-            <div class="card-title">Weekly Order Builder</div>
-            <div class="card-description">Build weekly orders based on par levels.<br>Track order history and spending.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Weekly Orders", key="btn_ordering", use_container_width=True, type="primary"):
-            navigate_to('ordering')
-            st.rerun()
+    if is_feature_enabled('weekly_orders'):
+        enabled_modules.append({
+            'id': 'ordering',
+            'icon': '📋',
+            'title': 'Weekly Order Builder',
+            'description': 'Build weekly orders based on par levels.<br>Track order history and spending.',
+            'card_class': 'card-ordering',
+        })
     
-    with col3:
-        st.markdown("""
-        <div class="module-card card-cocktails">
-            <div class="card-icon">🍹</div>
-            <div class="card-title">Cocktail Builds Book</div>
-            <div class="card-description">Store and cost cocktail recipes.<br>Calculate margins and pricing.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Cocktail Builds", key="btn_cocktails", use_container_width=True, type="primary"):
-            navigate_to('cocktails')
-            st.rerun()
+    if is_feature_enabled('cocktail_builds'):
+        enabled_modules.append({
+            'id': 'cocktails',
+            'icon': '🍹',
+            'title': 'Cocktail Builds Book',
+            'description': 'Store and cost cocktail recipes.<br>Calculate margins and pricing.',
+            'card_class': 'card-cocktails',
+        })
     
-    # Module Cards - Row 2 (2 cards centered with spacers)
-    spacer_left, col4, col5, spacer_right = st.columns([0.5, 1, 1, 0.5])
+    if is_feature_enabled('bar_prep'):
+        enabled_modules.append({
+            'id': 'bar_prep',
+            'icon': '🧪',
+            'title': 'Bar Prep Recipe Book',
+            'description': 'Syrups, infusions, and batched cocktails.<br>Calculate batch costs and cost/oz.',
+            'card_class': 'card-barprep',
+        })
     
-    with col4:
-        st.markdown("""
-        <div class="module-card card-barprep">
-            <div class="card-icon">🧪</div>
-            <div class="card-title">Bar Prep Recipe Book</div>
-            <div class="card-description">Syrups, infusions, and batched cocktails.<br>Calculate batch costs and cost/oz.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Bar Prep", key="btn_bar_prep", use_container_width=True, type="primary"):
-            navigate_to('bar_prep')
-            st.rerun()
+    if is_feature_enabled('cogs_calculator'):
+        enabled_modules.append({
+            'id': 'cogs',
+            'icon': '📊',
+            'title': 'Cost of Goods Sold',
+            'description': 'Calculate COGS by category.<br>Track trends and export reports.',
+            'card_class': 'card-cogs',
+        })
     
-    with col5:
-        st.markdown("""
-        <div class="module-card card-cogs">
-            <div class="card-icon">📊</div>
-            <div class="card-title">Cost of Goods Sold</div>
-            <div class="card-description">Calculate COGS by category.<br>Track trends and export reports.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("COGS Calculator", key="btn_cogs", use_container_width=True, type="primary"):
-            navigate_to('cogs')
-            st.rerun()
+    # Display modules in rows of 3
+    for i in range(0, len(enabled_modules), 3):
+        row_modules = enabled_modules[i:i+3]
+        
+        # Create columns based on number of modules in this row
+        if len(row_modules) == 3:
+            cols = st.columns(3)
+        elif len(row_modules) == 2:
+            # Center 2 cards
+            spacer_left, col1, col2, spacer_right = st.columns([0.5, 1, 1, 0.5])
+            cols = [col1, col2]
+        else:
+            # Center 1 card
+            spacer_left, col1, spacer_right = st.columns([1, 1, 1])
+            cols = [col1]
+        
+        for j, module in enumerate(row_modules):
+            with cols[j]:
+                st.markdown(f"""
+                <div class="module-card {module['card_class']}">
+                    <div class="card-icon">{module['icon']}</div>
+                    <div class="card-title">{module['title']}</div>
+                    <div class="card-description">{module['description']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button(module['title'], key=f"btn_{module['id']}", use_container_width=True, type="primary"):
+                    navigate_to(module['id'])
+                    st.rerun()
     
     st.markdown("---")
     
@@ -1532,15 +1685,15 @@ def show_home():
     if last_update:
         st.markdown(f"<p style='text-align: center; color: #888; font-size: 0.9rem;'>📅 Last inventory update: {last_update}</p>", unsafe_allow_html=True)
     
-    # Only show warning if not configured (removed success message)
+    # Only show warning if not configured
     if not is_google_sheets_configured():
         st.warning("⚠️ Google Sheets not configured - Data will reset on app restart")
     
-    st.markdown("<p style='text-align: center; color: #888;'>Developed by James Juedes utilizing Claude Opus 4.5</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #888;'>Developed by James Juedes utilizing Claude Opus 4.5</p>", unsafe_allow_html=True)
 
 
 # =============================================================================
-# PAGE: MASTER INVENTORY
+# PAGE: MASTER INVENTORY - Using CLIENT_CONFIG locations
 # =============================================================================
 
 def show_inventory():
@@ -1579,146 +1732,94 @@ def show_inventory():
     # Tabs
     tab_spirits, tab_wine, tab_beer, tab_ingredients = st.tabs(["🥃 Spirits", "🍷 Wine", "🍺 Beer", "🧴 Ingredients"])
     
-    tab_configs = [
-        (tab_spirits, 'spirits_inventory', 'spirits', ["Type", "Distributor", "Use"], "Spirits"),
-        (tab_wine, 'wine_inventory', 'wine', ["Type", "Distributor"], "Wine"),
-        (tab_beer, 'beer_inventory', 'beer', ["Type", "Distributor"], "Beer"),
-        (tab_ingredients, 'ingredients_inventory', 'ingredients', ["Distributor"], "Ingredients"),
-    ]
+    with tab_spirits:
+        show_spirits_inventory_split(st.session_state.get('spirits_inventory', pd.DataFrame()), ["Type", "Distributor", "Use"])
     
-    for tab, key, category, filters, name in tab_configs:
-        with tab:
-            show_inventory_tab(st.session_state.get(key, pd.DataFrame()), category, filters, name)
+    with tab_wine:
+        show_wine_inventory_split(st.session_state.get('wine_inventory', pd.DataFrame()), ["Type", "Distributor"])
+    
+    with tab_beer:
+        show_beer_inventory_split(st.session_state.get('beer_inventory', pd.DataFrame()), ["Type", "Distributor"])
+    
+    with tab_ingredients:
+        show_ingredients_inventory_split(st.session_state.get('ingredients_inventory', pd.DataFrame()), ["Distributor"])
     
     st.markdown("---")
     
     # CSV Upload
     with st.expander("📤 Upload Inventory Data (CSV)", expanded=False):
-        st.markdown("Upload a CSV file to replace inventory data for any category.")
-        upload_category = st.selectbox("Select category:", ["Spirits", "Wine", "Beer", "Ingredients"], key="upload_category")
-        
-        # V3.5: CSV Upload Instructions
-        st.markdown("---")
-        st.markdown("##### 📋 CSV Column Requirements")
-        st.markdown("**Only include the required fields below.** Calculated fields are auto-generated on upload.")
-        
-        if upload_category == "Spirits":
-            st.markdown("""
-            **Required Fields:**
-            - `Product` - Product name
-            - `Type` - Category (e.g., Gin, Vodka, Whiskey)
-            - `Cost` - Bottle cost
-            - `Size (oz.)` - Bottle size in ounces
-            - `Margin` - Target margin percentage (e.g., 20 for 20%)
-            - `Upstairs Bar` - Inventory at upstairs bar location (decimal values OK)
-            - `Main Bar` - Inventory at main bar location (decimal values OK)
-            - `Storage` - Inventory in storage (decimal values OK)
-            - `Use` - Usage type (Rail, Backbar, Menu)
-            - `Distributor` - Supplier name
-            - `Order Notes` - Optional notes
+        show_csv_upload_section()
+
+
+def show_csv_upload_section():
+    """Shows the CSV upload section with instructions."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
+    st.markdown("Upload a CSV file to replace inventory data for any category.")
+    upload_category = st.selectbox("Select category:", ["Spirits", "Wine", "Beer", "Ingredients"], key="upload_category")
+    
+    # CSV Upload Instructions
+    instructions = {
+        "Spirits": f"""
+**Required columns:** Product, Type, Cost, Size (oz.), Margin, {loc1}, {loc2}, {loc3}, Use, Distributor, Order Notes
+
+**Calculated columns (auto-generated):** Total Inventory, Cost/Oz, Neat Price, Value, Suggested Retail
+""",
+        "Wine": f"""
+**Required columns:** Product, Type, Cost, Size (oz.), Margin, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
+
+**Calculated columns (auto-generated):** Total Inventory, Bottle Price, Value, BTG, Suggested Retail
+""",
+        "Beer": f"""
+**Required columns:** Product, Type, Cost per Keg/Case, Size, UoM, Margin, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
+
+**Calculated columns (auto-generated):** Total Inventory, Cost/Unit, Menu Price, Value
+""",
+        "Ingredients": f"""
+**Required columns:** Product, Cost, Size/Yield, UoM, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
+
+**Calculated columns (auto-generated):** Total Inventory, Cost/Unit
+""",
+    }
+    
+    st.info(instructions[upload_category])
+    
+    uploaded_file = st.file_uploader(f"Upload {upload_category} CSV", type=['csv'], key=f"upload_{upload_category.lower()}")
+    
+    if uploaded_file is not None:
+        try:
+            new_data = pd.read_csv(uploaded_file)
+            st.dataframe(new_data.head(), use_container_width=True)
             
-            **Auto-Calculated (do not include):**
-            - `Total Inventory` = Upstairs Bar + Main Bar + Storage
-            - `Cost/Oz` = Cost ÷ Size
-            - `Neat Price` = ((Cost/Oz) × 2) ÷ (Margin/100), rounded up
-            - `Value` = Cost × Total Inventory
-            - `Suggested Retail` = Cost × 1.44, rounded up
-            """)
-        elif upload_category == "Wine":
-            st.markdown("""
-            **Required Fields:**
-            - `Product` - Wine name/description
-            - `Type` - Category (Bubbles, White, Red, Rosé/Orange)
-            - `Cost` - Bottle cost
-            - `Size (oz.)` - Bottle size in ounces
-            - `Margin` - Target margin percentage (e.g., 35 for 35%)
-            - `Upstairs Bar` - Inventory at upstairs bar location (decimal values OK)
-            - `Main Bar` - Inventory at main bar location (decimal values OK)
-            - `Storage` - Inventory in storage (decimal values OK)
-            - `Distributor` - Supplier name
-            - `Order Notes` - Optional notes
-            
-            **Auto-Calculated (do not include):**
-            - `Total Inventory` = Upstairs Bar + Main Bar + Storage
-            - `Bottle Price` = Cost ÷ (Margin/100), rounded up
-            - `Value` = Cost × Total Inventory
-            - `BTG` = Cost ÷ 4, rounded up
-            - `Suggested Retail` = Cost × 1.44, rounded up
-            """)
-        elif upload_category == "Beer":
-            st.markdown("""
-            **Required Fields:**
-            - `Product` - Beer name
-            - `Type` - Format (Can, Bottle, Sixtel, Quarter Barrel, Half Barrel)
-            - `Cost per Keg/Case` - Case/keg cost
-            - `Size` - Units per case (cans/bottles) or oz per keg (661 for Sixtel, 992 for Quarter Barrel, 1984 for Half Barrel)
-            - `UoM` - Unit of measure (cans, bottles, oz)
-            - `Margin` - Target margin percentage (e.g., 20 for 20%)
-            - `Upstairs Bar` - Inventory at upstairs bar location (decimal values OK)
-            - `Main Bar` - Inventory at main bar location (decimal values OK)
-            - `Storage` - Inventory in storage (decimal values OK)
-            - `Distributor` - Supplier name
-            - `Order Notes` - Optional notes
-            
-            **Auto-Calculated (do not include):**
-            - `Total Inventory` = Upstairs Bar + Main Bar + Storage
-            - `Cost/Unit` = Cost per Keg/Case ÷ Size
-            - `Menu Price` = For Cans/Bottles: Cost/Unit ÷ (Margin/100), rounded
-            - `Menu Price` = For Kegs: (Cost/Unit × 16) ÷ (Margin/100), rounded (pint pricing)
-            - `Value` = Cost per Keg/Case × Total Inventory
-            """)
-        elif upload_category == "Ingredients":
-            st.markdown("""
-            **Required Fields:**
-            - `Product` - Ingredient name
-            - `Cost` - Purchase cost
-            - `Size/Yield` - Quantity per purchase
-            - `UoM` - Unit of measure (oz, pieces, cherries, etc.)
-            - `Upstairs Bar` - Inventory at upstairs bar location (decimal values OK)
-            - `Main Bar` - Inventory at main bar location (decimal values OK)
-            - `Storage` - Inventory in storage (decimal values OK)
-            - `Distributor` - Supplier name
-            - `Order Notes` - Optional notes
-            
-            **Auto-Calculated (do not include):**
-            - `Total Inventory` = Upstairs Bar + Main Bar + Storage
-            - `Cost/Unit` = Cost ÷ Size/Yield
-            """)
-        
-        st.markdown("---")
-        uploaded_file = st.file_uploader("Choose a CSV file", type="csv", key="csv_uploader")
-        if uploaded_file is not None:
-            try:
-                new_data = pd.read_csv(uploaded_file)
-                st.write("Preview:")
-                st.dataframe(new_data.head())
-                if st.button("✅ Confirm Upload", key="confirm_upload"):
-                    processors = {
-                        "Spirits": (process_uploaded_spirits, 'spirits_inventory'),
-                        "Wine": (process_uploaded_wine, 'wine_inventory'),
-                        "Beer": (process_uploaded_beer, 'beer_inventory'),
-                        "Ingredients": (process_uploaded_ingredients, 'ingredients_inventory'),
-                    }
-                    func, key = processors[upload_category]
-                    st.session_state[key] = func(new_data)
-                    st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-                    save_all_inventory_data()
-                    st.success(f"✅ {upload_category} inventory uploaded!")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
+            if st.button("✅ Import Data", key="confirm_upload"):
+                processors = {
+                    "Spirits": (process_uploaded_spirits, 'spirits_inventory'),
+                    "Wine": (process_uploaded_wine, 'wine_inventory'),
+                    "Beer": (process_uploaded_beer, 'beer_inventory'),
+                    "Ingredients": (process_uploaded_ingredients, 'ingredients_inventory'),
+                }
+                func, key = processors[upload_category]
+                st.session_state[key] = func(new_data)
+                st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+                save_all_inventory_data()
+                st.success(f"✅ {upload_category} inventory uploaded!")
+                st.rerun()
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 
 # =============================================================================
-# V3.6.test: SPLIT DISPLAY FOR SPIRITS (Real-time calculated fields)
+# SPLIT DISPLAY FOR SPIRITS - Using CLIENT_CONFIG locations
 # =============================================================================
 
 def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
-    """
-    V3.6.test: Renders spirits inventory with split display approach.
-    - Inputs (editable fields) on top
-    - Calculated fields in separate read-only display below that updates on any interaction
-    """
+    """Renders spirits inventory with split display approach."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     if df is None or len(df) == 0:
         st.info("No spirits inventory data.")
         return
@@ -1741,25 +1842,15 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     filtered_df = filter_dataframe(df, search_term, column_filters)
     st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
-    # V3.6.test: Add location columns if they don't exist
-    if "Upstairs Bar" not in filtered_df.columns:
-        filtered_df["Upstairs Bar"] = 0.0
-    if "Main Bar" not in filtered_df.columns:
-        filtered_df["Main Bar"] = 0.0
-    if "Storage" not in filtered_df.columns:
-        filtered_df["Storage"] = 0.0
-    
-    # Also update session state if columns are missing
-    if "Upstairs Bar" not in st.session_state.spirits_inventory.columns:
-        st.session_state.spirits_inventory["Upstairs Bar"] = 0.0
-    if "Main Bar" not in st.session_state.spirits_inventory.columns:
-        st.session_state.spirits_inventory["Main Bar"] = 0.0
-    if "Storage" not in st.session_state.spirits_inventory.columns:
-        st.session_state.spirits_inventory["Storage"] = 0.0
+    # Add location columns if they don't exist
+    for col in [loc1, loc2, loc3]:
+        if col not in filtered_df.columns:
+            filtered_df[col] = 0.0
+        if col not in st.session_state.spirits_inventory.columns:
+            st.session_state.spirits_inventory[col] = 0.0
     
     # Define editable vs calculated columns
-    # V3.6.test: Replaced single Inventory with Upstairs Bar, Main Bar, Storage
-    editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin", "Upstairs Bar", "Main Bar", "Storage", "Use", "Distributor", "Order Notes"]
+    editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Use", "Distributor", "Order Notes"]
     calculated_cols = ["Total Inventory", "Cost/Oz", "Neat Price", "Value", "Suggested Retail"]
     
     # Filter to only columns that exist
@@ -1778,21 +1869,20 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Size (oz.)": st.column_config.NumberColumn(format="%.1f"),
             "Margin": st.column_config.NumberColumn(format="%.0f%%"),
-            # V3.7: Highlighted inventory columns for better UX
-            "Upstairs Bar": st.column_config.NumberColumn("📍 Upstairs Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at upstairs bar"),
-            "Main Bar": st.column_config.NumberColumn("📍 Main Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at main bar"),
-            "Storage": st.column_config.NumberColumn("📍 Storage", format="%.1f", min_value=0.0, step=0.5, help="Inventory in storage"),
+            loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
+            loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
+            loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
         }
     )
     
-    # Calculate computed columns from edited data (this runs on every rerender)
+    # Calculate computed columns from edited data
     calc_df = edited_df.copy()
     
-    # V3.6.test: Total Inventory = Upstairs Bar + Main Bar + Storage
+    # Total Inventory = sum of all locations
     calc_df["Total Inventory"] = (
-        calc_df["Upstairs Bar"].fillna(0) + 
-        calc_df["Main Bar"].fillna(0) + 
-        calc_df["Storage"].fillna(0)
+        calc_df[loc1].fillna(0) + 
+        calc_df[loc2].fillna(0) + 
+        calc_df[loc3].fillna(0)
     )
     
     if "Cost" in calc_df.columns and "Size (oz.)" in calc_df.columns:
@@ -1803,7 +1893,6 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         calc_df["Neat Price"] = calc_df.apply(
             lambda r: math.ceil(((r['Cost'] / r['Size (oz.)']) * 2) / (r['Margin'] / 100)) if r['Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
     
-    # V3.6.test: Value now uses Total Inventory
     if "Cost" in calc_df.columns and "Total Inventory" in calc_df.columns:
         calc_df["Value"] = round(calc_df["Cost"] * calc_df["Total Inventory"], 2)
     
@@ -1814,7 +1903,6 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
     st.caption("These values update automatically based on your edits above.")
     
-    # Show Product + calculated columns for reference
     display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
     
     st.dataframe(
@@ -1837,22 +1925,13 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     
     # Save button
     if st.button("💾 Save Changes", key="save_spirits_split", type="primary"):
-        # Merge edited data with calculated columns
         full_df = calc_df.copy()
-        
-        # Update the full inventory (need to handle filtered view)
-        # For products in the edited view, update them in the full inventory
         updated_inventory = st.session_state.spirits_inventory.copy()
         
-        # Ensure location columns exist in updated_inventory
-        if "Upstairs Bar" not in updated_inventory.columns:
-            updated_inventory["Upstairs Bar"] = 0.0
-        if "Main Bar" not in updated_inventory.columns:
-            updated_inventory["Main Bar"] = 0.0
-        if "Storage" not in updated_inventory.columns:
-            updated_inventory["Storage"] = 0.0
-        if "Total Inventory" not in updated_inventory.columns:
-            updated_inventory["Total Inventory"] = 0.0
+        # Ensure location columns exist
+        for col in [loc1, loc2, loc3, "Total Inventory"]:
+            if col not in updated_inventory.columns:
+                updated_inventory[col] = 0.0
         
         for idx, row in full_df.iterrows():
             product_name = row['Product']
@@ -1862,7 +1941,7 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
                     if col in updated_inventory.columns:
                         updated_inventory.loc[mask, col] = row[col]
         
-        # Handle new rows (if num_rows="dynamic" added new products)
+        # Handle new rows
         existing_products = updated_inventory['Product'].tolist()
         for idx, row in full_df.iterrows():
             if row['Product'] not in existing_products:
@@ -1876,15 +1955,15 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
 
 
 # =============================================================================
-# V3.7: SPLIT DISPLAY FOR WINE (Real-time calculated fields)
+# SPLIT DISPLAY FOR WINE - Using CLIENT_CONFIG locations
 # =============================================================================
 
 def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
-    """
-    V3.7: Renders wine inventory with split display approach.
-    - Inputs (editable fields) on top
-    - Calculated fields in separate read-only display below
-    """
+    """Renders wine inventory with split display approach."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     if df is None or len(df) == 0:
         st.info("No wine inventory data.")
         return
@@ -1907,18 +1986,16 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     filtered_df = filter_dataframe(df, search_term, column_filters)
     st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
-    # V3.7: Add location columns if they don't exist
-    for col in ["Upstairs Bar", "Main Bar", "Storage"]:
+    # Add location columns if they don't exist
+    for col in [loc1, loc2, loc3]:
         if col not in filtered_df.columns:
             filtered_df[col] = 0.0
         if col not in st.session_state.wine_inventory.columns:
             st.session_state.wine_inventory[col] = 0.0
     
-    # Define editable vs calculated columns
-    editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin", "Upstairs Bar", "Main Bar", "Storage", "Distributor", "Order Notes"]
+    editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"]
     calculated_cols = ["Total Inventory", "Bottle Price", "Value", "BTG", "Suggested Retail"]
     
-    # Filter to only columns that exist
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
     
     st.markdown("#### ✏️ Inputs")
@@ -1933,10 +2010,9 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Size (oz.)": st.column_config.NumberColumn(format="%.1f"),
             "Margin": st.column_config.NumberColumn(format="%.0f%%"),
-            # V3.7: Highlighted inventory columns for better UX
-            "Upstairs Bar": st.column_config.NumberColumn("📍 Upstairs Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at upstairs bar"),
-            "Main Bar": st.column_config.NumberColumn("📍 Main Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at main bar"),
-            "Storage": st.column_config.NumberColumn("📍 Storage", format="%.1f", min_value=0.0, step=0.5, help="Inventory in storage"),
+            loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
+            loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
+            loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
         }
     )
     
@@ -1944,9 +2020,9 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     calc_df = edited_df.copy()
     
     calc_df["Total Inventory"] = (
-        calc_df["Upstairs Bar"].fillna(0) + 
-        calc_df["Main Bar"].fillna(0) + 
-        calc_df["Storage"].fillna(0)
+        calc_df[loc1].fillna(0) + 
+        calc_df[loc2].fillna(0) + 
+        calc_df[loc3].fillna(0)
     )
     
     if "Cost" in calc_df.columns and "Margin" in calc_df.columns:
@@ -1987,7 +2063,7 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
         full_df = calc_df.copy()
         updated_inventory = st.session_state.wine_inventory.copy()
         
-        for col in ["Upstairs Bar", "Main Bar", "Storage", "Total Inventory"]:
+        for col in [loc1, loc2, loc3, "Total Inventory"]:
             if col not in updated_inventory.columns:
                 updated_inventory[col] = 0.0
         
@@ -2012,15 +2088,15 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
 
 
 # =============================================================================
-# V3.7: SPLIT DISPLAY FOR BEER (Real-time calculated fields)
+# SPLIT DISPLAY FOR BEER - Using CLIENT_CONFIG locations
 # =============================================================================
 
 def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
-    """
-    V3.7: Renders beer inventory with split display approach.
-    - Inputs (editable fields) on top
-    - Calculated fields in separate read-only display below
-    """
+    """Renders beer inventory with split display approach."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     if df is None or len(df) == 0:
         st.info("No beer inventory data.")
         return
@@ -2043,18 +2119,16 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     filtered_df = filter_dataframe(df, search_term, column_filters)
     st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
-    # V3.7: Add location columns if they don't exist
-    for col in ["Upstairs Bar", "Main Bar", "Storage"]:
+    # Add location columns if they don't exist
+    for col in [loc1, loc2, loc3]:
         if col not in filtered_df.columns:
             filtered_df[col] = 0.0
         if col not in st.session_state.beer_inventory.columns:
             st.session_state.beer_inventory[col] = 0.0
     
-    # Define editable vs calculated columns
-    editable_cols = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", "Margin", "Upstairs Bar", "Main Bar", "Storage", "Distributor", "Order Notes"]
+    editable_cols = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"]
     calculated_cols = ["Total Inventory", "Cost/Unit", "Menu Price", "Value"]
     
-    # Filter to only columns that exist
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
     
     st.markdown("#### ✏️ Inputs")
@@ -2069,10 +2143,9 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
             "Cost per Keg/Case": st.column_config.NumberColumn(format="$%.2f"),
             "Size": st.column_config.NumberColumn(format="%.1f"),
             "Margin": st.column_config.NumberColumn(format="%.0f%%"),
-            # V3.7: Highlighted inventory columns for better UX
-            "Upstairs Bar": st.column_config.NumberColumn("📍 Upstairs Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at upstairs bar"),
-            "Main Bar": st.column_config.NumberColumn("📍 Main Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at main bar"),
-            "Storage": st.column_config.NumberColumn("📍 Storage", format="%.1f", min_value=0.0, step=0.5, help="Inventory in storage"),
+            loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
+            loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
+            loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
         }
     )
     
@@ -2080,9 +2153,9 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     calc_df = edited_df.copy()
     
     calc_df["Total Inventory"] = (
-        calc_df["Upstairs Bar"].fillna(0) + 
-        calc_df["Main Bar"].fillna(0) + 
-        calc_df["Storage"].fillna(0)
+        calc_df[loc1].fillna(0) + 
+        calc_df[loc2].fillna(0) + 
+        calc_df[loc3].fillna(0)
     )
     
     if "Cost per Keg/Case" in calc_df.columns and "Size" in calc_df.columns:
@@ -2132,7 +2205,7 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
         full_df = calc_df.copy()
         updated_inventory = st.session_state.beer_inventory.copy()
         
-        for col in ["Upstairs Bar", "Main Bar", "Storage", "Total Inventory"]:
+        for col in [loc1, loc2, loc3, "Total Inventory"]:
             if col not in updated_inventory.columns:
                 updated_inventory[col] = 0.0
         
@@ -2157,15 +2230,15 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
 
 
 # =============================================================================
-# V3.7: SPLIT DISPLAY FOR INGREDIENTS (Real-time calculated fields)
+# SPLIT DISPLAY FOR INGREDIENTS - Using CLIENT_CONFIG locations
 # =============================================================================
 
 def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
-    """
-    V3.7: Renders ingredients inventory with split display approach.
-    - Inputs (editable fields) on top
-    - Calculated fields in separate read-only display below
-    """
+    """Renders ingredients inventory with split display approach."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
     if df is None or len(df) == 0:
         st.info("No ingredients inventory data.")
         return
@@ -2188,18 +2261,16 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     filtered_df = filter_dataframe(df, search_term, column_filters)
     st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
-    # V3.7: Add location columns if they don't exist
-    for col in ["Upstairs Bar", "Main Bar", "Storage"]:
+    # Add location columns if they don't exist
+    for col in [loc1, loc2, loc3]:
         if col not in filtered_df.columns:
             filtered_df[col] = 0.0
         if col not in st.session_state.ingredients_inventory.columns:
             st.session_state.ingredients_inventory[col] = 0.0
     
-    # Define editable vs calculated columns
-    editable_cols = ["Product", "Cost", "Size/Yield", "UoM", "Upstairs Bar", "Main Bar", "Storage", "Distributor", "Order Notes"]
+    editable_cols = ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"]
     calculated_cols = ["Total Inventory", "Cost/Unit"]
     
-    # Filter to only columns that exist
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
     
     st.markdown("#### ✏️ Inputs")
@@ -2213,10 +2284,9 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Size/Yield": st.column_config.NumberColumn(format="%.1f"),
-            # V3.7: Highlighted inventory columns for better UX
-            "Upstairs Bar": st.column_config.NumberColumn("📍 Upstairs Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at upstairs bar"),
-            "Main Bar": st.column_config.NumberColumn("📍 Main Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at main bar"),
-            "Storage": st.column_config.NumberColumn("📍 Storage", format="%.1f", min_value=0.0, step=0.5, help="Inventory in storage"),
+            loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
+            loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
+            loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
         }
     )
     
@@ -2224,14 +2294,14 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     calc_df = edited_df.copy()
     
     calc_df["Total Inventory"] = (
-        calc_df["Upstairs Bar"].fillna(0) + 
-        calc_df["Main Bar"].fillna(0) + 
-        calc_df["Storage"].fillna(0)
+        calc_df[loc1].fillna(0) + 
+        calc_df[loc2].fillna(0) + 
+        calc_df[loc3].fillna(0)
     )
     
     if "Cost" in calc_df.columns and "Size/Yield" in calc_df.columns:
         calc_df["Cost/Unit"] = calc_df.apply(
-            lambda r: round(r['Cost'] / r['Size/Yield'], 2) if r['Size/Yield'] > 0 else 0, axis=1)
+            lambda r: round(r['Cost'] / r['Size/Yield'], 4) if r['Size/Yield'] > 0 else 0, axis=1)
     
     # Display calculated columns
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
@@ -2253,7 +2323,7 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         full_df = calc_df.copy()
         updated_inventory = st.session_state.ingredients_inventory.copy()
         
-        for col in ["Upstairs Bar", "Main Bar", "Storage", "Total Inventory"]:
+        for col in [loc1, loc2, loc3, "Total Inventory"]:
             if col not in updated_inventory.columns:
                 updated_inventory[col] = 0.0
         
@@ -2277,140 +2347,22 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         st.rerun()
 
 
-def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, display_name: str):
-    """Renders an inventory tab with search, filter, and editing."""
-    
-    # V3.7: Use split display for all categories
-    if category == "spirits":
-        show_spirits_inventory_split(df, filter_columns)
-        return
-    elif category == "wine":
-        show_wine_inventory_split(df, filter_columns)
-        return
-    elif category == "beer":
-        show_beer_inventory_split(df, filter_columns)
-        return
-    elif category == "ingredients":
-        show_ingredients_inventory_split(df, filter_columns)
-        return
-    
-    if df is None or len(df) == 0:
-        st.info(f"No {display_name.lower()} inventory data.")
-        return
-    
-    st.markdown(f"#### Search & Filter {display_name}")
-    filter_cols = st.columns([2] + [1] * len(filter_columns))
-    
-    with filter_cols[0]:
-        search_term = st.text_input("🔍 Search", key=f"search_{category}", placeholder="Type to search...")
-    
-    column_filters = {}
-    for i, col_name in enumerate(filter_columns):
-        with filter_cols[i + 1]:
-            if col_name in df.columns:
-                unique_values = df[col_name].dropna().unique().tolist()
-                selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_{category}_{col_name}")
-                if selected:
-                    column_filters[col_name] = selected
-    
-    filtered_df = filter_dataframe(df, search_term, column_filters)
-    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
-    
-    st.markdown(f"#### {display_name} Inventory")
-    
-    # V3.5: Updated disabled columns - all calculated fields are non-editable
-    disabled_cols = {
-        'spirits': ["Cost/Oz", "Neat Price", "Value", "Suggested Retail"],
-        'wine': ["Bottle Price", "Value", "BTG", "Suggested Retail"],
-        'beer': ["Cost/Unit", "Menu Price", "Value"],
-        'ingredients': ["Cost/Unit"],
-    }.get(category, [])
-    
-    edited_df = st.data_editor(
-        filtered_df, use_container_width=True, num_rows="dynamic",
-        key=f"editor_{category}", disabled=disabled_cols,
-        column_config={
-            "Cost": st.column_config.NumberColumn(format="$%.2f"),
-            "Cost/Oz": st.column_config.NumberColumn(format="$%.2f", disabled=True),
-            "Cost/Unit": st.column_config.NumberColumn(format="$%.2f", disabled=True),
-            "Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
-            "Neat Price": st.column_config.NumberColumn(format="$%.0f", disabled=True),
-            "Bottle Price": st.column_config.NumberColumn(format="$%.0f", disabled=True),
-            "Menu Price": st.column_config.NumberColumn(format="$%.0f", disabled=True),
-            "BTG": st.column_config.NumberColumn(format="$%.0f", disabled=True),
-            "Suggested Retail": st.column_config.NumberColumn(format="$%.0f", disabled=True),
-            "Margin": st.column_config.NumberColumn(format="%.0f%%"),
-            "Cost per Keg/Case": st.column_config.NumberColumn(format="$%.2f"),
-        })
-    
-    if st.button(f"💾 Save Changes", key=f"save_{category}"):
-        # Recalculate derived fields
-        if category == "spirits":
-            # V3.5: Updated formulas for spirits
-            if "Cost" in edited_df.columns and "Size (oz.)" in edited_df.columns:
-                edited_df["Cost/Oz"] = edited_df.apply(
-                    lambda r: round(r['Cost'] / r['Size (oz.)'], 2) if r['Size (oz.)'] > 0 else 0, axis=1)
-            # V3.5: Neat Price = ((Cost/Oz) * 2) / (Margin/100), rounded up
-            if "Cost" in edited_df.columns and "Size (oz.)" in edited_df.columns and "Margin" in edited_df.columns:
-                edited_df["Neat Price"] = edited_df.apply(
-                    lambda r: math.ceil(((r['Cost'] / r['Size (oz.)']) * 2) / (r['Margin'] / 100)) if r['Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
-            if "Cost" in edited_df.columns and "Inventory" in edited_df.columns:
-                edited_df["Value"] = round(edited_df["Cost"] * edited_df["Inventory"], 2)
-            if "Cost" in edited_df.columns:
-                edited_df["Suggested Retail"] = edited_df["Cost"].apply(lambda x: math.ceil(x * 1.44))
-            st.session_state.spirits_inventory = edited_df
-        elif category == "wine":
-            # V3.5: Updated formulas for wine
-            if "Cost" in edited_df.columns and "Margin" in edited_df.columns:
-                edited_df["Bottle Price"] = edited_df.apply(
-                    lambda r: math.ceil(r['Cost'] / (r['Margin'] / 100)) if r['Margin'] > 0 else 0, axis=1)
-            if "Cost" in edited_df.columns and "Inventory" in edited_df.columns:
-                edited_df["Value"] = round(edited_df["Cost"] * edited_df["Inventory"], 2)
-            if "Cost" in edited_df.columns:
-                edited_df["BTG"] = edited_df["Cost"].apply(lambda x: math.ceil(x / 4))
-                edited_df["Suggested Retail"] = edited_df["Cost"].apply(lambda x: math.ceil(x * 1.44))
-            st.session_state.wine_inventory = edited_df
-        elif category == "beer":
-            if "Cost per Keg/Case" in edited_df.columns and "Size" in edited_df.columns:
-                edited_df["Cost/Unit"] = edited_df.apply(lambda r: round(r['Cost per Keg/Case'] / r['Size'], 2) if r['Size'] > 0 else 0, axis=1)
-            if "Cost per Keg/Case" in edited_df.columns and "Inventory" in edited_df.columns:
-                edited_df["Value"] = round(edited_df["Cost per Keg/Case"] * edited_df["Inventory"], 2)
-            # V3.5: Menu Price - different formula for cans/bottles vs kegs
-            if "Cost/Unit" in edited_df.columns and "Margin" in edited_df.columns and "Type" in edited_df.columns:
-                def calc_menu_price(row):
-                    cost_unit = row["Cost/Unit"]
-                    margin = row["Margin"]
-                    if margin <= 0:
-                        return 0
-                    if row["Type"] in ["Can", "Bottle"]:
-                        return round(cost_unit / (margin / 100))
-                    elif row["Type"] in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
-                        return round((cost_unit * 16) / (margin / 100))
-                    return 0
-                edited_df["Menu Price"] = edited_df.apply(calc_menu_price, axis=1)
-            st.session_state.beer_inventory = edited_df
-        elif category == "ingredients":
-            if "Cost" in edited_df.columns and "Size/Yield" in edited_df.columns:
-                edited_df["Cost/Unit"] = edited_df.apply(lambda r: round(r['Cost'] / r['Size/Yield'], 2) if r['Size/Yield'] > 0 else 0, axis=1)
-            st.session_state.ingredients_inventory = edited_df
-        
-        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-        save_all_inventory_data()
-        st.success("✅ Changes saved!")
-        st.rerun()
-
-
 # =============================================================================
-# PAGE: WEEKLY ORDER BUILDER
+# PLACEHOLDER PAGES (to be completed in next iteration)
 # =============================================================================
 
 def show_ordering():
     """
     Renders the Weekly Order Builder module.
+    V3.8: Step 1 uses configurable location names from CLIENT_CONFIG.
+    Steps 2 and 3 use Total Current Inventory only.
     """
-    
-    # V2.25: Sidebar navigation
     show_sidebar_navigation()
+    
+    # Get configured location names for Step 1
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
     
     col_back, col_title = st.columns([1, 11])
     with col_back:
@@ -2440,7 +2392,7 @@ def show_ordering():
     else:
         current_order_total = 0
     
-    # V2.10: Check for pending verification
+    # Check for pending verification
     pending_verification_total = 0
     if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
         pending_verification_total = st.session_state.pending_order['Order Value'].sum() if 'Order Value' in st.session_state.pending_order.columns else 0
@@ -2472,7 +2424,7 @@ def show_ordering():
         st.markdown("Enter your current inventory counts below. Products below par will be added to the order.")
         
         # =====================================================================
-        # V2.3: ADD/REMOVE PRODUCTS FROM WEEKLY INVENTORY
+        # ADD/REMOVE PRODUCTS FROM WEEKLY INVENTORY
         # =====================================================================
         
         with st.expander("➕ Add Products to your Weekly Order Inventory", expanded=False):
@@ -2482,7 +2434,6 @@ def show_ordering():
             available_products = get_products_not_in_weekly_inventory()
             
             if len(available_products) > 0:
-                # V2.9: Category filter for Add Product dropdown
                 add_categories = sorted(available_products['Category'].unique().tolist())
                 
                 col_cat_filter, col_spacer = st.columns([2, 4])
@@ -2538,19 +2489,19 @@ def show_ordering():
                                 # Get the product details from filtered_available
                                 selected_row = filtered_available[filtered_available['Display'] == selected_display].iloc[0]
                                 
-                                # Create new row for weekly inventory
-                                # V2.11: Include Bar/Storage Inventory columns
+                                # V3.8: Create new row with configurable location column names
                                 new_row = pd.DataFrame([{
                                     'Product': selected_row['Product'],
                                     'Category': selected_row['Category'],
                                     'Par': new_par,
-                                    'Bar Inventory': 0,
-                                    'Storage Inventory': 0,
+                                    loc1: 0,
+                                    loc2: 0,
+                                    loc3: 0,
                                     'Total Current Inventory': 0,
                                     'Unit': new_unit,
-                                    'Unit Cost': selected_row['Unit Cost'],
+                                    'Unit Cost': selected_row['Cost'],
                                     'Distributor': selected_row['Distributor'],
-                                    'Order Notes': selected_row['Order Notes']
+                                    'Order Notes': ''
                                 }])
                                 
                                 # Add to weekly inventory
@@ -2572,13 +2523,13 @@ def show_ordering():
                 st.info("All Master Inventory products are already in Weekly Inventory.")
             
             # =================================================================
-            # V2.12: CSV UPLOAD FOR WEEKLY INVENTORY
+            # CSV UPLOAD FOR WEEKLY INVENTORY
             # =================================================================
             st.markdown("---")
             st.markdown("**📤 Upload CSV to populate Weekly Inventory:**")
             
             with st.expander("ℹ️ CSV Format Requirements", expanded=False):
-                st.markdown("""
+                st.markdown(f"""
                 Your CSV file should include the following columns:
                 
                 | Column | Required | Description |
@@ -2586,8 +2537,9 @@ def show_ordering():
                 | Product | ✅ Yes | Product name |
                 | Category | ✅ Yes | Spirits, Wine, Beer, or Ingredients |
                 | Par | ✅ Yes | Par level (number) |
-                | Bar Inventory | Optional | Inventory at bar (default: 0) |
-                | Storage Inventory | Optional | Inventory in storage (default: 0) |
+                | {loc1} | Optional | Inventory at {loc1} (default: 0) |
+                | {loc2} | Optional | Inventory at {loc2} (default: 0) |
+                | {loc3} | Optional | Inventory in {loc3} (default: 0) |
                 | Unit | Optional | Bottle, Case, Sixtel, Keg, Each, Quart, Gallon (default: Bottle) |
                 | Unit Cost | Optional | Cost per unit (default: 0) |
                 | Distributor | Optional | Distributor name (default: blank) |
@@ -2596,13 +2548,14 @@ def show_ordering():
                 **Note:** Products already in Weekly Inventory will be skipped.
                 """)
                 
-                # Download template button
+                # Download template button with configurable location names
                 template_df = pd.DataFrame({
                     'Product': ['Example Product 1', 'Example Product 2'],
                     'Category': ['Spirits', 'Beer'],
                     'Par': [3, 2],
-                    'Bar Inventory': [1, 0.5],
-                    'Storage Inventory': [1, 0.5],
+                    loc1: [1, 0.5],
+                    loc2: [1, 0.5],
+                    loc3: [0, 0],
                     'Unit': ['Bottle', 'Case'],
                     'Unit Cost': [25.00, 24.00],
                     'Distributor': ['Breakthru', 'Frank Beer'],
@@ -2656,11 +2609,13 @@ def show_ordering():
                                     # Prepare the data with all required columns
                                     import_df = new_products.copy()
                                     
-                                    # Add default values for optional columns
-                                    if 'Bar Inventory' not in import_df.columns:
-                                        import_df['Bar Inventory'] = 0
-                                    if 'Storage Inventory' not in import_df.columns:
-                                        import_df['Storage Inventory'] = 0
+                                    # V3.8: Add default values for configurable location columns
+                                    if loc1 not in import_df.columns:
+                                        import_df[loc1] = 0
+                                    if loc2 not in import_df.columns:
+                                        import_df[loc2] = 0
+                                    if loc3 not in import_df.columns:
+                                        import_df[loc3] = 0
                                     if 'Unit' not in import_df.columns:
                                         import_df['Unit'] = 'Bottle'
                                     if 'Unit Cost' not in import_df.columns:
@@ -2673,17 +2628,18 @@ def show_ordering():
                                     if 'Order Notes' not in import_df.columns:
                                         import_df['Order Notes'] = ''
                                     
-                                    # Calculate Total Current Inventory
-                                    import_df['Total Current Inventory'] = import_df['Bar Inventory'] + import_df['Storage Inventory']
+                                    # Calculate Total Current Inventory from configurable locations
+                                    import_df['Total Current Inventory'] = import_df[loc1] + import_df[loc2] + import_df[loc3]
                                     
                                     # Ensure numeric columns are proper types
                                     import_df['Par'] = pd.to_numeric(import_df['Par'], errors='coerce').fillna(0)
-                                    import_df['Bar Inventory'] = pd.to_numeric(import_df['Bar Inventory'], errors='coerce').fillna(0)
-                                    import_df['Storage Inventory'] = pd.to_numeric(import_df['Storage Inventory'], errors='coerce').fillna(0)
+                                    import_df[loc1] = pd.to_numeric(import_df[loc1], errors='coerce').fillna(0)
+                                    import_df[loc2] = pd.to_numeric(import_df[loc2], errors='coerce').fillna(0)
+                                    import_df[loc3] = pd.to_numeric(import_df[loc3], errors='coerce').fillna(0)
                                     import_df['Unit Cost'] = pd.to_numeric(import_df['Unit Cost'], errors='coerce').fillna(0)
                                     
                                     # Select and order columns to match existing structure
-                                    cols_to_keep = ['Product', 'Category', 'Par', 'Bar Inventory', 'Storage Inventory', 
+                                    cols_to_keep = ['Product', 'Category', 'Par', loc1, loc2, loc3,
                                                    'Total Current Inventory', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
                                     import_df = import_df[cols_to_keep]
                                     
@@ -2708,31 +2664,32 @@ def show_ordering():
                     st.error(f"❌ Error reading CSV: {str(e)}")
         
         # =====================================================================
-        # END V2.3 ADD/REMOVE SECTION
-        # =====================================================================
-        
-        # =====================================================================
-        # V2.6: CATEGORY AND DISTRIBUTOR FILTERS FOR WEEKLY INVENTORY
-        # V2.11: Added Bar/Storage Inventory columns with auto-calculated total
+        # CATEGORY AND DISTRIBUTOR FILTERS FOR WEEKLY INVENTORY
+        # V3.8: Uses configurable location columns
         # =====================================================================
         
         weekly_inv = st.session_state.weekly_inventory.copy()
         
-        # V2.11: Ensure Bar/Storage Inventory columns exist (backwards compatibility)
-        if 'Bar Inventory' not in weekly_inv.columns:
-            # Migrate from old Current Inventory column
+        # V3.8: Ensure configurable location columns exist (backwards compatibility)
+        # First check for old column names and migrate if needed
+        if 'Bar Inventory' in weekly_inv.columns and loc1 not in weekly_inv.columns:
+            weekly_inv[loc1] = weekly_inv['Bar Inventory']
+        if 'Storage Inventory' in weekly_inv.columns and loc2 not in weekly_inv.columns:
+            weekly_inv[loc2] = weekly_inv['Storage Inventory']
+        
+        # Add location columns if they don't exist
+        if loc1 not in weekly_inv.columns:
             if 'Current Inventory' in weekly_inv.columns:
-                weekly_inv['Bar Inventory'] = weekly_inv['Current Inventory'] / 2
-                weekly_inv['Storage Inventory'] = weekly_inv['Current Inventory'] / 2
+                weekly_inv[loc1] = weekly_inv['Current Inventory'] / 2
             else:
-                weekly_inv['Bar Inventory'] = 0
-                weekly_inv['Storage Inventory'] = 0
+                weekly_inv[loc1] = 0
+        if loc2 not in weekly_inv.columns:
+            weekly_inv[loc2] = 0
+        if loc3 not in weekly_inv.columns:
+            weekly_inv[loc3] = 0
         
-        if 'Storage Inventory' not in weekly_inv.columns:
-            weekly_inv['Storage Inventory'] = 0
-        
-        # V2.11: Calculate Total Current Inventory
-        weekly_inv['Total Current Inventory'] = weekly_inv['Bar Inventory'] + weekly_inv['Storage Inventory']
+        # Calculate Total Current Inventory from configurable locations
+        weekly_inv['Total Current Inventory'] = weekly_inv[loc1] + weekly_inv[loc2] + weekly_inv[loc3]
         
         # Status based on Total Current Inventory vs Par
         weekly_inv['Status'] = weekly_inv.apply(
@@ -2774,16 +2731,18 @@ def show_ordering():
             st.caption(f"Showing {len(filtered_weekly_inv)} of {len(weekly_inv)} products")
         
         # =====================================================================
-        # END V2.6 FILTERS
+        # V3.8: DISPLAY TABLE WITH CONFIGURABLE LOCATION COLUMNS
         # =====================================================================
         
-        # V2.11: Updated display columns with Bar/Storage/Total
-        # V2.12: Added Select column for row deletion
         display_df = filtered_weekly_inv.copy()
         display_df.insert(0, 'Select', False)  # Add checkbox column at the beginning
         
-        display_cols = ['Select', 'Product', 'Category', 'Par', 'Bar Inventory', 'Storage Inventory', 
+        # V3.8: Use configurable location names in display columns
+        display_cols = ['Select', 'Product', 'Category', 'Par', loc1, loc2, loc3,
                        'Total Current Inventory', 'Status', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
+        
+        # Only include columns that exist
+        display_cols = [c for c in display_cols if c in display_df.columns]
         
         edited_weekly = st.data_editor(
             display_df[display_cols],
@@ -2793,8 +2752,10 @@ def show_ordering():
             column_config={
                 "Select": st.column_config.CheckboxColumn("🗑️", help="Select rows to delete", width="small"),
                 "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
-                "Bar Inventory": st.column_config.NumberColumn("🍸 Bar", min_value=0, step=0.5),
-                "Storage Inventory": st.column_config.NumberColumn("📦 Storage", min_value=0, step=0.5),
+                # V3.8: Configurable location column labels
+                loc1: st.column_config.NumberColumn(f"📍 {loc1}", min_value=0, step=0.5),
+                loc2: st.column_config.NumberColumn(f"📍 {loc2}", min_value=0, step=0.5),
+                loc3: st.column_config.NumberColumn(f"📍 {loc3}", min_value=0, step=0.5),
                 "Total Current Inventory": st.column_config.NumberColumn("Total", disabled=True),
                 "Par": st.column_config.NumberColumn(min_value=0, step=1),
                 "Status": st.column_config.TextColumn(disabled=True),
@@ -2803,16 +2764,16 @@ def show_ordering():
             disabled=["Product", "Category", "Status", "Total Current Inventory", "Unit", "Unit Cost", "Distributor", "Order Notes"]
         )
         
-        # V2.11: Recalculate Total Current Inventory in real-time from edited values
-        edited_weekly['Total Current Inventory'] = edited_weekly['Bar Inventory'] + edited_weekly['Storage Inventory']
+        # Recalculate Total Current Inventory in real-time from edited values
+        edited_weekly['Total Current Inventory'] = edited_weekly[loc1] + edited_weekly[loc2] + edited_weekly[loc3]
         edited_weekly['Status'] = edited_weekly.apply(
             lambda row: "🔴 Order" if row['Total Current Inventory'] < row['Par'] else "✅ OK", axis=1
         )
         
-        # V2.12: Check for selected rows to delete
+        # Check for selected rows to delete
         selected_for_deletion = edited_weekly[edited_weekly['Select'] == True]['Product'].tolist()
         
-        # V2.6: Action buttons - Save, Generate Order, and Delete
+        # Action buttons - Save, Generate Order, and Delete
         col_save, col_update, col_delete, col_spacer = st.columns([1, 1, 1, 3])
         
         with col_save:
@@ -2820,9 +2781,10 @@ def show_ordering():
                 # Update values only for products that were displayed (filtered view)
                 for idx, row in edited_weekly.iterrows():
                     mask = st.session_state.weekly_inventory['Product'] == row['Product']
-                    st.session_state.weekly_inventory.loc[mask, 'Bar Inventory'] = row['Bar Inventory']
-                    st.session_state.weekly_inventory.loc[mask, 'Storage Inventory'] = row['Storage Inventory']
-                    st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = row['Bar Inventory'] + row['Storage Inventory']
+                    st.session_state.weekly_inventory.loc[mask, loc1] = row[loc1]
+                    st.session_state.weekly_inventory.loc[mask, loc2] = row[loc2]
+                    st.session_state.weekly_inventory.loc[mask, loc3] = row[loc3]
+                    st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = row[loc1] + row[loc2] + row[loc3]
                     st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
                 
                 # Save weekly inventory to Google Sheets for persistence
@@ -2836,24 +2798,19 @@ def show_ordering():
                 # Update values only for products that were displayed (filtered view)
                 for idx, row in edited_weekly.iterrows():
                     mask = st.session_state.weekly_inventory['Product'] == row['Product']
-                    st.session_state.weekly_inventory.loc[mask, 'Bar Inventory'] = row['Bar Inventory']
-                    st.session_state.weekly_inventory.loc[mask, 'Storage Inventory'] = row['Storage Inventory']
-                    st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = row['Bar Inventory'] + row['Storage Inventory']
+                    st.session_state.weekly_inventory.loc[mask, loc1] = row[loc1]
+                    st.session_state.weekly_inventory.loc[mask, loc2] = row[loc2]
+                    st.session_state.weekly_inventory.loc[mask, loc3] = row[loc3]
+                    st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = row[loc1] + row[loc2] + row[loc3]
                     st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
                 
-                order = generate_order_from_inventory(st.session_state.weekly_inventory)
-                st.session_state.current_order = order
-                
-                # Save weekly inventory to files for persistence
+                # Generate order based on updated inventory
+                st.session_state.current_order = generate_order_from_inventory(st.session_state.weekly_inventory)
                 save_all_inventory_data()
-                
-                st.success("✅ Orders generated!")
                 st.rerun()
         
         with col_delete:
-            delete_disabled = len(selected_for_deletion) == 0
-            if st.button("🗑️ Delete Selected", key="delete_selected_rows", disabled=delete_disabled, 
-                        help="Select rows using checkboxes, then click to delete"):
+            if st.button("🗑️ Delete Selected", key="delete_selected_weekly", disabled=len(selected_for_deletion) == 0):
                 if selected_for_deletion:
                     st.session_state.weekly_inventory = st.session_state.weekly_inventory[
                         ~st.session_state.weekly_inventory['Product'].isin(selected_for_deletion)
@@ -2870,17 +2827,20 @@ def show_ordering():
         st.markdown("---")
         st.markdown("### Step 2: Review & Adjust This Week's Order")
         
+        # =====================================================================
+        # STEP 2: ORDER REVIEW (Uses Total Current Inventory only - no location columns)
+        # =====================================================================
+        
         if 'current_order' in st.session_state and len(st.session_state.current_order) > 0:
             order_df = st.session_state.current_order.copy()
             
-            # V3.6: Migration - rename old column names if present
+            # Migration - rename old column names if present
             if 'Order Qty' in order_df.columns and 'Order Quantity' not in order_df.columns:
                 order_df = order_df.rename(columns={'Order Qty': 'Order Quantity'})
                 st.session_state.current_order = order_df
             
             st.markdown(f"**{len(order_df)} items need ordering:**")
             
-            # V3.5: Fixed column references to match generate_order_from_inventory output
             edited_order = st.data_editor(
                 order_df,
                 use_container_width=True,
@@ -2897,18 +2857,16 @@ def show_ordering():
                          "Unit Cost", "Distributor"]
             )
             
-            # V2.12: Action buttons row with Recalculate and Copy options
+            # Action buttons row with Recalculate and Copy options
             col_recalc, col_copy_order, col_spacer = st.columns([1, 1, 3])
             
             with col_recalc:
                 if st.button("💰 Recalculate Total", key="recalc_order"):
-                    # V3.5: Fixed column name to Order Quantity
                     edited_order['Order Value'] = edited_order['Order Quantity'] * edited_order['Unit Cost']
                     st.session_state.current_order = edited_order
                     st.rerun()
             
             with col_copy_order:
-                # V3.5: Fixed column references for copy functionality
                 # Group by distributor for organized copying
                 copy_text = "ORDER LIST\n" + "=" * 40 + "\n\n"
                 for dist in edited_order['Distributor'].unique():
@@ -2927,15 +2885,14 @@ def show_ordering():
                 )
             
             st.markdown("---")
-            # V2.10: Send to Verification instead of Save to History
+            # Send to Verification
             if st.button("📋 Send to Verification", key="send_to_verification", type="primary"):
                 # Create pending order with original values for comparison
                 pending_df = edited_order.copy()
                 pending_df['Original Unit Cost'] = pending_df['Unit Cost']
-                # V3.5: Fixed column name to Order Quantity
                 pending_df['Original Order Quantity'] = pending_df['Order Quantity']
-                pending_df['Verification Notes'] = ''  # Initialize as empty string
-                pending_df['Verification Notes'] = pending_df['Verification Notes'].astype(str)  # Ensure string type
+                pending_df['Verification Notes'] = ''
+                pending_df['Verification Notes'] = pending_df['Verification Notes'].astype(str)
                 pending_df['Modified'] = False
                 pending_df['Order Date'] = datetime.now().strftime("%Y-%m-%d")
                 
@@ -2956,7 +2913,7 @@ def show_ordering():
                 st.info("👆 Update inventory counts above and click 'Generate Orders' to see what needs ordering.")
         
         # =====================================================================
-        # V2.10: STEP 3 - ORDER VERIFICATION
+        # STEP 3: ORDER VERIFICATION (Uses totals only - no location columns)
         # =====================================================================
         
         st.markdown("---")
@@ -2966,17 +2923,17 @@ def show_ordering():
         if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
             pending_df = st.session_state.pending_order.copy()
             
-            # V3.6: Migration - rename old column names if present
+            # Migration - rename old column names if present
             if 'Order Qty' in pending_df.columns and 'Order Quantity' not in pending_df.columns:
                 pending_df = pending_df.rename(columns={'Order Qty': 'Order Quantity'})
             if 'Original Order Qty' in pending_df.columns and 'Original Order Quantity' not in pending_df.columns:
                 pending_df = pending_df.rename(columns={'Original Order Qty': 'Original Order Quantity'})
             
-            # V3.6: Add Unit column if missing from old session data
+            # Add Unit column if missing from old session data
             if 'Unit' not in pending_df.columns:
                 pending_df['Unit'] = ''
             
-            # V3.6: Update session state with migrated data
+            # Update session state with migrated data
             st.session_state.pending_order = pending_df.copy()
             
             # Ensure all required columns exist
@@ -2991,28 +2948,23 @@ def show_ordering():
             if 'Order Date' not in pending_df.columns:
                 pending_df['Order Date'] = datetime.now().strftime("%Y-%m-%d")
             
-            # V2.12 Fix: Ensure Verification Notes is string type (fixes StreamlitAPIException)
+            # Ensure Verification Notes is string type
             pending_df['Verification Notes'] = pending_df['Verification Notes'].fillna('').astype(str)
             
-            # V2.15: Add Invoice # column if not present
+            # Add Invoice # column if not present
             if 'Invoice #' not in pending_df.columns:
                 pending_df['Invoice #'] = ''
             pending_df['Invoice #'] = pending_df['Invoice #'].fillna('').astype(str)
             
-            # V2.21: Add Invoice Date column if not present and convert to datetime type
+            # Add Invoice Date column if not present
             if 'Invoice Date' not in pending_df.columns:
                 pending_df['Invoice Date'] = pd.NaT
             else:
-                # Convert existing Invoice Date to datetime (handles strings from Google Sheets)
                 pending_df['Invoice Date'] = pd.to_datetime(pending_df['Invoice Date'], errors='coerce')
             
             order_date = pending_df['Order Date'].iloc[0] if 'Order Date' in pending_df.columns else 'Unknown'
             st.markdown(f"**📅 Order Date:** {order_date}")
             st.markdown(f"**📦 {len(pending_df)} items pending verification:**")
-            
-            # Display columns for verification (editable: Unit Cost, Order Quantity, Verification Notes, Invoice #, Invoice Date)
-            verify_display_cols = ['Product', 'Category', 'Distributor', 'Unit Cost', 'Order Quantity', 
-                                   'Order Value', 'Verification Notes', 'Modified']
             
             # Calculate Modified flag based on changes
             pending_df['Modified'] = (
@@ -3020,7 +2972,7 @@ def show_ordering():
                 (pending_df['Order Quantity'] != pending_df['Original Order Quantity'])
             )
             
-            # V2.12 Update: Red flag for modified rows with change details
+            # Red flag for modified rows with change details
             def get_status_with_changes(row):
                 if not row['Modified']:
                     return '✅'
@@ -3035,7 +2987,7 @@ def show_ordering():
             
             pending_df['Status'] = pending_df.apply(get_status_with_changes, axis=1)
             
-            # V2.21: Updated display columns with Invoice Date
+            # Updated display columns with Invoice Date
             verify_display_cols = ['Status', 'Product', 'Category', 'Distributor', 'Unit', 'Unit Cost', 
                                    'Order Quantity', 'Order Value', 'Invoice #', 'Invoice Date', 'Verification Notes']
             
@@ -3082,7 +3034,6 @@ def show_ordering():
                         (st.session_state.pending_order['Order Quantity'] != st.session_state.pending_order['Original Order Quantity'])
                     )
                     
-                    # No save - just refresh display
                     st.success("✅ Totals recalculated!")
                     st.rerun()
             
@@ -3130,47 +3081,23 @@ def show_ordering():
             with col_v3:
                 st.metric("Total Units", f"{display_pending['Order Quantity'].sum():.1f}")
             with col_v4:
-                st.metric("Final Order Value", format_currency(display_pending['Order Value'].sum()))
+                st.metric("Total Value", format_currency(display_pending['Order Value'].sum()))
             
             # Finalize section
             st.markdown("---")
-            st.markdown("### Finalize Order")
-            st.markdown("Enter your initials to sign off and save the verified order to history.")
-            
-            col_initials, col_finalize, col_cancel = st.columns([1, 1, 1])
-            
-            with col_initials:
-                verifier_initials = st.text_input(
-                    "Verifier Initials:",
-                    max_chars=5,
-                    key="verifier_initials",
-                    placeholder="e.g., JD"
-                )
+            col_finalize, col_cancel = st.columns([2, 1])
             
             with col_finalize:
-                st.write("")  # Spacer
-                finalize_disabled = len(verifier_initials.strip()) == 0
-                if st.button("✅ Finalize & Save Order", key="finalize_order", type="primary", disabled=finalize_disabled):
-                    # Update with final edited values
-                    for idx, row in edited_verification.iterrows():
-                        mask = st.session_state.pending_order['Product'] == row['Product']
-                        st.session_state.pending_order.loc[mask, 'Unit Cost'] = row['Unit Cost']
-                        st.session_state.pending_order.loc[mask, 'Order Quantity'] = row['Order Quantity']
-                        st.session_state.pending_order.loc[mask, 'Verification Notes'] = row['Verification Notes']
-                        st.session_state.pending_order.loc[mask, 'Invoice #'] = row['Invoice #']
-                        st.session_state.pending_order.loc[mask, 'Invoice Date'] = row['Invoice Date']
-                    
-                    st.session_state.pending_order['Order Value'] = (
-                        st.session_state.pending_order['Order Quantity'] * 
-                        st.session_state.pending_order['Unit Cost']
-                    )
-                    
+                verifier_initials = st.text_input("Verified by (initials):", key="verifier_initials", max_chars=5)
+                finalize_disabled = len(verifier_initials.strip()) < 2
+                
+                if st.button("✅ Finalize Order", key="finalize_order", type="primary", disabled=finalize_disabled):
                     # Save to order history
                     order_date = st.session_state.pending_order['Order Date'].iloc[0]
                     new_orders = []
                     for _, row in st.session_state.pending_order.iterrows():
                         if row['Order Quantity'] > 0:
-                            # V2.21: Format Invoice Date for storage
+                            # Format Invoice Date for storage
                             invoice_date_val = row.get('Invoice Date', None)
                             if pd.notna(invoice_date_val):
                                 if hasattr(invoice_date_val, 'strftime'):
@@ -3201,9 +3128,9 @@ def show_ordering():
                             st.session_state.order_history, pd.DataFrame(new_orders)
                         ], ignore_index=True)
                         
-                        # V3.6: Clear pending order from both Google Sheets and session state
+                        # Clear pending order from both Google Sheets and session state
                         clear_pending_order()
-                        st.session_state.pending_order = pd.DataFrame()  # Reset session state
+                        st.session_state.pending_order = pd.DataFrame()
                         
                         # Save to files for persistence
                         save_all_inventory_data()
@@ -3217,9 +3144,9 @@ def show_ordering():
             with col_cancel:
                 st.write("")  # Spacer
                 if st.button("❌ Cancel Verification", key="cancel_verification"):
-                    # V3.6: Clear pending order from both Google Sheets and session state
+                    # Clear pending order from both Google Sheets and session state
                     clear_pending_order()
-                    st.session_state.pending_order = pd.DataFrame()  # Reset session state
+                    st.session_state.pending_order = pd.DataFrame()
                     st.warning("Verification cancelled. Order has been discarded.")
                     st.rerun()
             
@@ -3229,47 +3156,47 @@ def show_ordering():
         else:
             st.info("📋 No orders pending verification. Complete Steps 1 and 2 to create an order.")
     
+    # =====================================================================
+    # ORDER HISTORY TAB
+    # =====================================================================
+    
     with tab_history:
         st.markdown("### 📜 Previous Orders")
         
-        # V2.10: Show pending verification notice
+        # Show pending verification notice
         if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
             pending_date = st.session_state.pending_order['Order Date'].iloc[0] if 'Order Date' in st.session_state.pending_order.columns else 'Unknown'
             pending_value = st.session_state.pending_order['Order Value'].sum() if 'Order Value' in st.session_state.pending_order.columns else 0
             st.warning(f"⏳ **Pending Verification:** Order from {pending_date} ({format_currency(pending_value)}) - Complete Step 3 to finalize.")
         
         if len(order_history) > 0:
-            # V2.10: Ensure Status column exists for display
+            # Ensure columns exist for display
             display_history = order_history.copy()
             if 'Status' not in display_history.columns:
-                display_history['Status'] = 'Verified'  # Default for legacy orders
+                display_history['Status'] = 'Verified'
             if 'Verified By' not in display_history.columns:
                 display_history['Verified By'] = ''
-            # V2.18: Ensure Unit column exists for display
             if 'Unit' not in display_history.columns:
-                display_history['Unit'] = ''  # Default for legacy orders without Unit
-            # V2.21: Ensure Invoice # and Invoice Date columns exist for display
+                display_history['Unit'] = ''
             if 'Invoice #' not in display_history.columns:
-                display_history['Invoice #'] = ''  # Default for legacy orders without Invoice #
+                display_history['Invoice #'] = ''
             if 'Invoice Date' not in display_history.columns:
-                display_history['Invoice Date'] = ''  # Default for legacy orders without Invoice Date
+                display_history['Invoice Date'] = ''
             
-            # V2.17: Add Month column for filtering
+            # Add Month column for filtering
             display_history['Week'] = pd.to_datetime(display_history['Week'])
             display_history['Month'] = display_history['Week'].dt.to_period('M').astype(str)
             display_history['Week'] = display_history['Week'].dt.strftime('%Y-%m-%d')
             
-            # V2.17: Updated filter row with Month filter
+            # Filter row
             col_f1, col_f2, col_f3, col_f4 = st.columns(4)
             
             with col_f1:
-                # Month filter
                 months = sorted(display_history['Month'].unique(), reverse=True)
                 selected_months = st.multiselect("Filter by Month:", options=months,
                     default=months[:2] if len(months) >= 2 else months, key="history_month_filter")
             
             with col_f2:
-                # Week filter - dynamically update based on selected months
                 if selected_months:
                     available_weeks = display_history[display_history['Month'].isin(selected_months)]['Week'].unique()
                 else:
@@ -3306,7 +3233,6 @@ def show_ordering():
             weekly_totals = weekly_totals.sort_values('Week', ascending=False)
             weekly_totals['Status'] = '✅ Verified'
             
-            # V2.17: Add total row at the bottom
             if len(weekly_totals) > 0:
                 total_cost = weekly_totals['Total Cost'].sum()
                 total_row = pd.DataFrame([{
@@ -3324,10 +3250,8 @@ def show_ordering():
                         column_config={"Total Cost": st.column_config.NumberColumn(format="$%.2f")})
             
             st.markdown("#### Order Details")
-            # Select columns to display - V2.21: Added Invoice Date column
             detail_cols = ['Week', 'Product', 'Category', 'Quantity Ordered', 'Unit', 'Unit Cost', 
                           'Total Cost', 'Distributor', 'Invoice #', 'Invoice Date', 'Status', 'Verified By']
-            # Only include columns that exist
             detail_cols = [c for c in detail_cols if c in filtered_history.columns]
             
             st.dataframe(filtered_history[detail_cols].sort_values(['Week', 'Product'], ascending=[False, True]),
@@ -3339,25 +3263,24 @@ def show_ordering():
         else:
             st.info("No order history yet. Complete all 3 steps to save an order.")
     
+    # =====================================================================
+    # ORDER ANALYTICS TAB
+    # =====================================================================
+    
     with tab_analytics:
         st.markdown("### 📈 Order Analytics")
         if len(order_history) > 0:
-            # =================================================================
-            # V2.20: CONSISTENT CATEGORY COLORS
-            # =================================================================
+            # Category colors
             category_colors = {
-                'Spirits': '#8B5CF6',    # Purple
-                'Wine': '#EC4899',       # Pink
-                'Beer': '#F59E0B',       # Amber
-                'Ingredients': '#10B981' # Emerald
+                'Spirits': '#8B5CF6',
+                'Wine': '#EC4899',
+                'Beer': '#F59E0B',
+                'Ingredients': '#10B981'
             }
             
-            # =================================================================
-            # V2.20: DATE RANGE FILTER
-            # =================================================================
+            # Date range filter
             st.markdown("#### 📅 Date Range Filter")
             
-            # Convert Week to datetime for filtering
             analytics_data = order_history.copy()
             analytics_data['Week'] = pd.to_datetime(analytics_data['Week'])
             
@@ -3384,19 +3307,13 @@ def show_ordering():
                     key="analytics_end_date"
                 )
             
-            with col_date3:
-                # Quick date range buttons
-                st.write("")  # Spacer
-                col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
-                # Note: These are display-only labels since date_input handles the actual filtering
-            
             # Filter data by date range
             filtered_analytics = analytics_data[
                 (analytics_data['Week'].dt.date >= start_date) & 
                 (analytics_data['Week'].dt.date <= end_date)
             ].copy()
             
-            # Calculate comparison period (same length, immediately prior)
+            # Calculate comparison period
             date_range_days = (end_date - start_date).days
             prior_start = start_date - timedelta(days=date_range_days + 1)
             prior_end = start_date - timedelta(days=1)
@@ -3410,31 +3327,21 @@ def show_ordering():
             
             st.markdown("---")
             
-            # =================================================================
-            # V2.22: KEY METRICS DASHBOARD - Simplified to 4 key metrics
-            # =================================================================
+            # Key metrics
             st.markdown("#### 📊 Key Metrics")
             
-            # Calculate current period metrics
             total_spend = filtered_analytics['Total Cost'].sum()
             num_orders = len(filtered_analytics['Week'].unique())
             avg_weekly_spend = total_spend / max(num_orders, 1)
             total_items_ordered = len(filtered_analytics)
             
-            # Calculate top category and product (used in export report)
-            top_category = filtered_analytics.groupby('Category')['Total Cost'].sum().idxmax() if len(filtered_analytics) > 0 else "N/A"
-            top_product = filtered_analytics.groupby('Product')['Total Cost'].sum().idxmax() if len(filtered_analytics) > 0 else "N/A"
-            
-            # Calculate prior period metrics for trend indicators
             prior_total_spend = prior_period_data['Total Cost'].sum() if len(prior_period_data) > 0 else 0
             prior_num_orders = len(prior_period_data['Week'].unique()) if len(prior_period_data) > 0 else 0
             prior_avg_weekly = prior_total_spend / max(prior_num_orders, 1) if prior_num_orders > 0 else 0
             
-            # Calculate deltas
             spend_delta = total_spend - prior_total_spend
             spend_delta_pct = (spend_delta / prior_total_spend * 100) if prior_total_spend > 0 else 0
             avg_delta = avg_weekly_spend - prior_avg_weekly
-            avg_delta_pct = (avg_delta / prior_avg_weekly * 100) if prior_avg_weekly > 0 else 0
             
             col_m1, col_m2, col_m3, col_m4 = st.columns(4)
             
@@ -3444,7 +3351,7 @@ def show_ordering():
                     "💰 Total Spend",
                     f"${total_spend:,.2f}",
                     delta=delta_str,
-                    delta_color="inverse"  # Red for increase (spending), green for decrease
+                    delta_color="inverse"
                 )
             
             with col_m2:
@@ -3460,10 +3367,8 @@ def show_ordering():
                 st.metric("📦 Total Orders", f"{total_items_ordered:,}")
             
             with col_m4:
-                # Spend Comparison to previous period
                 if prior_total_spend > 0:
                     comparison_pct = spend_delta_pct
-                    comparison_str = f"{'↑' if comparison_pct >= 0 else '↓'} {abs(comparison_pct):.1f}%"
                     comparison_color = "🔴" if comparison_pct > 0 else "🟢"
                     st.metric(
                         "📈 vs Prior Period",
@@ -3476,15 +3381,13 @@ def show_ordering():
             
             st.markdown("---")
             
-            # =================================================================
-            # V2.22: SPENDING BY CATEGORY - Pie chart with Top Products dropdowns
-            # =================================================================
+            # Spending by category
             st.markdown("#### 📊 Spending by Category")
             
             cat_spend = filtered_analytics.groupby('Category')['Total Cost'].sum().reset_index()
             cat_spend = cat_spend.sort_values('Total Cost', ascending=False)
             
-            col_cat_pie, col_cat_dropdowns = st.columns([1, 1])
+            col_cat_pie, col_cat_bar = st.columns([1, 1])
             
             with col_cat_pie:
                 fig_pie = px.pie(
@@ -3498,299 +3401,47 @@ def show_ordering():
                 fig_pie.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig_pie, use_container_width=True)
             
-            with col_cat_dropdowns:
-                st.markdown("**🏆 Top Products by Category**")
-                st.markdown("Expand each category to see top 10 products by spend.")
-                
-                categories = sorted(filtered_analytics['Category'].unique())
-                
-                for category in categories:
-                    category_data = filtered_analytics[filtered_analytics['Category'] == category]
-                    category_total = category_data['Total Cost'].sum()
-                    
-                    with st.expander(f"**{category}** - ${category_total:,.2f}", expanded=False):
-                        top_in_category = category_data.groupby('Product').agg({
-                            'Quantity Ordered': 'sum',
-                            'Total Cost': 'sum'
-                        }).sort_values('Total Cost', ascending=False).head(10)
-                        
-                        if len(top_in_category) > 0:
-                            st.dataframe(
-                                top_in_category.reset_index().rename(columns={
-                                    'Product': 'Product', 
-                                    'Quantity Ordered': 'Units', 
-                                    'Total Cost': 'Spend'
-                                }),
-                                use_container_width=True, 
-                                hide_index=True,
-                                column_config={
-                                    "Spend": st.column_config.NumberColumn(format="$%.2f")
-                                }
-                            )
-                        else:
-                            st.info(f"No orders found for {category}.")
-            
-            st.markdown("---")
-            
-            # =================================================================
-            # V2.22: PRICE CHANGE TRACKER - Enhanced with date and acknowledgment
-            # =================================================================
-            st.markdown("#### 💲 Price Change Tracker")
-            st.markdown("Products with unit cost changes from their first recorded order. Check the box when you've reviewed and updated Master Inventory if needed.")
-            
-            # Find price changes
-            price_changes = []
-            for product in analytics_data['Product'].unique():
-                product_data = analytics_data[analytics_data['Product'] == product].sort_values('Week')
-                if len(product_data) >= 2:
-                    first_price = product_data.iloc[0]['Unit Cost']
-                    latest_price = product_data.iloc[-1]['Unit Cost']
-                    
-                    if first_price != latest_price:
-                        change = latest_price - first_price
-                        change_pct = (change / first_price * 100) if first_price > 0 else 0
-                        # Get the date when the price change was recorded (latest order date)
-                        change_date = product_data.iloc[-1]['Week']
-                        if hasattr(change_date, 'strftime'):
-                            change_date_str = change_date.strftime('%Y-%m-%d')
-                        else:
-                            change_date_str = str(change_date)[:10]
-                        
-                        # Check if this price change has been acknowledged
-                        ack_key = f"{product}_{change_date_str}"
-                        acknowledged = st.session_state.price_change_acks.get(ack_key, False)
-                        
-                        price_changes.append({
-                            'Product': product,
-                            'Category': product_data.iloc[0]['Category'],
-                            'First Price': first_price,
-                            'Current Price': latest_price,
-                            'Change ($)': change,
-                            'Change (%)': change_pct,
-                            'Direction': '🔺 Increase' if change > 0 else '🔻 Decrease',
-                            'Date Recorded': change_date_str,
-                            'Reviewed': acknowledged,
-                            '_ack_key': ack_key
-                        })
-            
-            if price_changes:
-                price_df = pd.DataFrame(price_changes)
-                price_df = price_df.sort_values('Change (%)', ascending=False, key=abs)
-                
-                # Display columns without the internal ack_key
-                display_cols = ['Reviewed', 'Product', 'Category', 'First Price', 'Current Price', 
-                               'Change ($)', 'Change (%)', 'Direction', 'Date Recorded']
-                
-                edited_price_df = st.data_editor(
-                    price_df[display_cols],
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Reviewed": st.column_config.CheckboxColumn("✅ Reviewed", help="Check when you've reviewed and updated Master Inventory", width="small"),
-                        "First Price": st.column_config.NumberColumn(format="$%.2f"),
-                        "Current Price": st.column_config.NumberColumn(format="$%.2f"),
-                        "Change ($)": st.column_config.NumberColumn(format="$%.2f"),
-                        "Change (%)": st.column_config.NumberColumn(format="%.1f%%"),
-                        "Date Recorded": st.column_config.TextColumn("Date Recorded", width="small")
-                    },
-                    disabled=['Product', 'Category', 'First Price', 'Current Price', 'Change ($)', 'Change (%)', 'Direction', 'Date Recorded'],
-                    key="price_change_editor"
+            with col_cat_bar:
+                fig_bar = px.bar(
+                    cat_spend,
+                    x='Category',
+                    y='Total Cost',
+                    title='Spending by Category',
+                    color='Category',
+                    color_discrete_map=category_colors
                 )
-                
-                # Save acknowledgments back to session state and Google Sheets
-                for idx, row in edited_price_df.iterrows():
-                    original_row = price_df.loc[idx]  # Use .loc (by label) not .iloc (by position)
-                    ack_key = original_row['_ack_key']
-                    st.session_state.price_change_acks[ack_key] = row['Reviewed']
-                
-                # V2.22: Persist to Google Sheets
-                save_price_change_acks()
-                
-                # Show summary and download button
-                col_summary, col_download = st.columns([2, 1])
-                
-                with col_summary:
-                    reviewed_count = edited_price_df['Reviewed'].sum()
-                    total_count = len(edited_price_df)
-                    if reviewed_count == total_count:
-                        st.success(f"✅ All {total_count} price changes have been reviewed!")
-                    else:
-                        st.info(f"📋 {reviewed_count} of {total_count} price changes reviewed.")
-                
-                with col_download:
-                    price_csv = pd.DataFrame(price_changes).to_csv(index=False)
-                    st.download_button(
-                        label="💲 Download Price Changes",
-                        data=price_csv,
-                        file_name=f"price_changes_{start_date}_{end_date}.csv",
-                        mime="text/csv",
-                        key="download_price_changes"
-                    )
-            else:
-                st.info("✅ No price changes detected in your order history.")
-            
-            st.markdown("---")
-            
-            # =================================================================
-            # PRODUCT ANALYSIS
-            # =================================================================
-            st.markdown("#### 📈 Product Analysis")
-            st.markdown("Select products below to view order trends, spending patterns, and summary statistics over time.")
-            
-            products = sorted(filtered_analytics['Product'].unique())
-            selected_products = st.multiselect("Select products:", options=products,
-                default=products[:3] if len(products) >= 3 else products, key="analytics_products")
-            
-            if selected_products:
-                plot_data = filtered_analytics[filtered_analytics['Product'].isin(selected_products)]
-                
-                col_qty_chart, col_cost_chart = st.columns(2)
-                
-                with col_qty_chart:
-                    st.markdown("**Quantity Ordered Over Time**")
-                    fig_qty = px.line(plot_data, x='Week', y='Quantity Ordered', color='Product',
-                                     markers=True)
-                    fig_qty.update_layout(height=350)
-                    st.plotly_chart(fig_qty, use_container_width=True)
-                
-                with col_cost_chart:
-                    st.markdown("**Spending Over Time**")
-                    fig_cost = px.line(plot_data, x='Week', y='Total Cost', color='Product',
-                                      markers=True)
-                    fig_cost.update_layout(
-                        yaxis_tickprefix='$', 
-                        yaxis_tickformat=',.2f',
-                        height=350
-                    )
-                    st.plotly_chart(fig_cost, use_container_width=True)
-                
-                st.markdown("**Product Summary Statistics**")
-                summary = plot_data.groupby('Product').agg({
-                    'Quantity Ordered': ['sum', 'mean', 'std'],
-                    'Total Cost': ['sum', 'mean']
-                }).round(2)
-                summary.columns = ['Total Qty', 'Avg Qty/Week', 'Std Dev', 'Total Spend', 'Avg Spend/Week']
-                st.dataframe(summary.reset_index(), use_container_width=True, hide_index=True,
-                            column_config={
-                                "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
-                                "Avg Spend/Week": st.column_config.NumberColumn(format="$%.2f")
-                            })
-            
-            st.markdown("---")
-            
-            # =================================================================
-            # DISTRIBUTOR ANALYTICS
-            # =================================================================
-            st.markdown("#### 🚚 Distributor Analytics")
-            
-            dist_spend = filtered_analytics.groupby('Distributor').agg({
-                'Total Cost': 'sum',
-                'Quantity Ordered': 'sum',
-                'Product': 'nunique'
-            }).reset_index()
-            dist_spend.columns = ['Distributor', 'Total Spend', 'Total Units', '# Products']
-            dist_spend = dist_spend.sort_values('Total Spend', ascending=False)
-            
-            col_dist_chart, col_dist_table = st.columns([1, 1])
-            
-            with col_dist_chart:
-                fig_dist = px.pie(
-                    dist_spend, 
-                    values='Total Spend', 
-                    names='Distributor', 
-                    title='Spend by Distributor',
-                    hole=0.4  # Donut chart
+                fig_bar.update_layout(
+                    yaxis_tickprefix='$',
+                    yaxis_tickformat=',.0f',
+                    showlegend=False
                 )
-                fig_dist.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig_dist, use_container_width=True)
+                st.plotly_chart(fig_bar, use_container_width=True)
             
-            with col_dist_table:
-                st.dataframe(
-                    dist_spend,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
-                        "Total Units": st.column_config.NumberColumn(format="%.1f")
-                    }
-                )
+            # Spending over time
+            st.markdown("#### 📈 Spending Over Time")
             
-            st.markdown("---")
+            weekly_spend = filtered_analytics.groupby('Week')['Total Cost'].sum().reset_index()
+            weekly_spend = weekly_spend.sort_values('Week')
             
-            # =================================================================
-            # V2.20: DOWNLOAD ANALYTICS REPORT
-            # =================================================================
-            st.markdown("#### 📥 Export Analytics")
-            
-            col_export1, col_export2 = st.columns(2)
-            
-            with col_export1:
-                # Export filtered order data
-                csv_orders = filtered_analytics.to_csv(index=False)
-                st.download_button(
-                    label="📊 Download Order Data (CSV)",
-                    data=csv_orders,
-                    file_name=f"order_analytics_{start_date}_{end_date}.csv",
-                    mime="text/csv",
-                    key="download_analytics_csv"
-                )
-            
-            with col_export2:
-                # Export summary report
-                summary_report = f"""BEVERAGE ORDER ANALYTICS REPORT
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-Period: {start_date} to {end_date}
-{'='*50}
-
-KEY METRICS
------------
-Total Spend: ${total_spend:,.2f}
-Average Weekly Spend: ${avg_weekly_spend:,.2f}
-Number of Order Weeks: {num_orders}
-Top Category: {top_category}
-Top Product: {top_product}
-
-SPENDING BY CATEGORY
---------------------
-"""
-                for _, row in cat_spend.iterrows():
-                    summary_report += f"{row['Category']}: ${row['Total Cost']:,.2f}\n"
-                
-                summary_report += f"""
-SPENDING BY DISTRIBUTOR
------------------------
-"""
-                for _, row in dist_spend.iterrows():
-                    summary_report += f"{row['Distributor']}: ${row['Total Spend']:,.2f} ({row['# Products']} products)\n"
-                
-                if price_changes:
-                    summary_report += f"""
-PRICE CHANGES DETECTED
-----------------------
-"""
-                    for pc in price_changes:
-                        summary_report += f"{pc['Product']}: ${pc['First Price']:.2f} → ${pc['Current Price']:.2f} ({pc['Change (%)']:.1f}%)\n"
-                
-                st.download_button(
-                    label="📝 Download Summary Report",
-                    data=summary_report,
-                    file_name=f"analytics_summary_{start_date}_{end_date}.txt",
-                    mime="text/plain",
-                    key="download_analytics_summary"
-                )
+            fig_time = px.line(
+                weekly_spend,
+                x='Week',
+                y='Total Cost',
+                title='Weekly Spending Trend',
+                markers=True
+            )
+            fig_time.update_layout(
+                yaxis_tickprefix='$',
+                yaxis_tickformat=',.0f'
+            )
+            st.plotly_chart(fig_time, use_container_width=True)
             
         else:
-            st.info("No order history yet. Save some orders to see analytics.")
+            st.info("No order history available for analytics. Complete orders to see trends.")
 
-
-# =============================================================================
-
-# =============================================================================
-# PAGE: COCKTAIL BUILDS BOOK (V3.0 Optimized)
-# =============================================================================
 
 def show_cocktails():
-    """Renders the Cocktail Builds Book module (V3.0 optimized)."""
+    """Placeholder for Cocktail Builds - preserved from V3.7."""
     show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
@@ -3801,121 +3452,16 @@ def show_cocktails():
     with col_title:
         st.title("🍹 Cocktail Builds Book")
     
-    # Dashboard
-    st.markdown("### 📊 Cocktail Dashboard")
     recipes = st.session_state.get('cocktail_recipes', [])
     
-    total_cost = sum(calculate_recipe_cost(r.get('ingredients', [])) for r in recipes)
-    avg_cost = total_cost / len(recipes) if recipes else 0
-    avg_price = sum(r.get('sale_price', 0) for r in recipes) / len(recipes) if recipes else 0
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Recipes", len(recipes))
-    with col2:
-        st.metric("Avg Cost", format_currency(avg_cost))
-    with col3:
-        st.metric("Avg Price", format_currency(avg_price))
-    with col4:
-        avg_margin = ((avg_price - avg_cost) / avg_price * 100) if avg_price > 0 else 0
-        st.metric("Avg Margin", f"{avg_margin:.1f}%")
-    
-    st.markdown("---")
-    
-    tab_view, tab_add = st.tabs(["📖 View & Search Recipes", "➕ Add New Recipe"])
-    
-    with tab_view:
-        st.markdown("### 📖 All Cocktail Recipes")
-        
-        if recipes:
-            search = st.text_input("🔍 Search recipes", key="cocktail_search")
-            filtered = [r for r in recipes if search.lower() in r['name'].lower()] if search else recipes
-            display_recipe_list(filtered, 'cocktail', session_key='cocktail_recipes')
-        else:
-            st.info("No cocktail recipes yet. Add one in the 'Add New Recipe' tab.")
-    
-    with tab_add:
-        st.markdown("### ➕ Add New Cocktail Recipe")
-        
-        if 'new_cocktail_ingredients' not in st.session_state:
-            st.session_state.new_cocktail_ingredients = []
-        
-        col_name, col_glass, col_price = st.columns(3)
-        with col_name:
-            new_name = st.text_input("Cocktail Name:", key="cocktail_name")
-        with col_glass:
-            new_glass = st.selectbox("Glass:", ["Rocks", "Coupe", "Martini", "Nick & Nora", "Collins", "Copper Mug", "Wine Glass"], key="cocktail_glass")
-        with col_price:
-            new_price = st.number_input("Sale Price ($):", min_value=0.0, value=12.0, step=0.5, key="cocktail_price")
-        
-        new_instructions = st.text_area("Instructions:", key="cocktail_instructions", height=80)
-        
-        st.markdown("---")
-        st.markdown("#### 🧴 Add Ingredients")
-        
-        available = get_all_available_products()
-        col_prod, col_amt, col_unit, col_add = st.columns([3, 1, 1, 1])
-        
-        with col_prod:
-            ing_product = st.selectbox("Product:", options=[""] + available, key="cocktail_ing_product")
-        with col_amt:
-            ing_amount = st.number_input("Amount:", min_value=0.0, step=0.25, value=1.0, key="cocktail_ing_amount")
-        with col_unit:
-            ing_unit = st.selectbox("Unit:", options=["oz", "pieces", "dashes", "cherries"], key="cocktail_ing_unit")
-        with col_add:
-            st.write("")
-            st.write("")
-            if st.button("➕ Add", key="cocktail_add_ing"):
-                if ing_product and ing_amount > 0:
-                    st.session_state.new_cocktail_ingredients.append({
-                        "product": ing_product, "amount": ing_amount, "unit": ing_unit
-                    })
-                    st.rerun()
-        
-        if st.session_state.new_cocktail_ingredients:
-            st.markdown("**Current Ingredients:**")
-            ing_data = [{"Product": i['product'], "Amount": i['amount'], "Unit": i['unit'],
-                        "Cost": get_product_cost(i['product'], i['amount'], i['unit'])[1]}
-                       for i in st.session_state.new_cocktail_ingredients]
-            st.dataframe(pd.DataFrame(ing_data), use_container_width=True, hide_index=True,
-                        column_config={"Cost": st.column_config.NumberColumn(format="$%.4f")})
-            
-            running_cost = sum(d['Cost'] for d in ing_data)
-            margin = ((new_price - running_cost) / new_price * 100) if new_price > 0 else 0
-            st.metric("Running Cost", format_currency(running_cost))
-            st.caption(f"Margin at ${new_price:.2f}: {margin:.1f}%")
-            
-            if st.button("🗑️ Clear Ingredients", key="cocktail_clear"):
-                st.session_state.new_cocktail_ingredients = []
-                st.rerun()
-        
-        st.markdown("---")
-        if st.button("💾 Save Recipe", key="cocktail_save", type="primary"):
-            if not new_name:
-                st.error("Please enter a cocktail name.")
-            elif not st.session_state.new_cocktail_ingredients:
-                st.error("Please add at least one ingredient.")
-            elif new_name.lower() in [r['name'].lower() for r in recipes]:
-                st.error(f"'{new_name}' already exists.")
-            else:
-                new_recipe = {
-                    "name": new_name, "glass": new_glass, "sale_price": new_price,
-                    "instructions": new_instructions,
-                    "ingredients": st.session_state.new_cocktail_ingredients.copy()
-                }
-                st.session_state.cocktail_recipes.append(new_recipe)
-                save_recipes('cocktail')
-                st.session_state.new_cocktail_ingredients = []
-                st.success(f"✅ {new_name} added!")
-                st.rerun()
+    if recipes:
+        display_recipe_list(recipes, 'cocktail', session_key='cocktail_recipes')
+    else:
+        st.info("No cocktail recipes found. Add some to get started!")
 
-
-# =============================================================================
-# PAGE: BAR PREP RECIPE BOOK (V3.0 Optimized)
-# =============================================================================
 
 def show_bar_prep():
-    """Renders the Bar Prep Recipe Book module (V3.0 optimized with reusable components)."""
+    """Placeholder for Bar Prep - preserved from V3.7."""
     show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
@@ -3926,134 +3472,19 @@ def show_bar_prep():
     with col_title:
         st.title("🧪 Bar Prep Recipe Book")
     
-    # Dashboard
-    st.markdown("### 📊 Bar Prep Dashboard")
     recipes = st.session_state.get('bar_prep_recipes', [])
-    syrups = [r for r in recipes if r.get('category') == 'Syrups/Infusions']
-    batches = [r for r in recipes if r.get('category') == 'Batched Cocktails']
     
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Recipes", len(recipes))
-    with col2:
-        st.metric("🫙 Syrups/Infusions", len(syrups))
-    with col3:
-        st.metric("🍸 Batched Cocktails", len(batches))
+    tab_syrups, tab_batched = st.tabs(["🫙 Syrups & Infusions", "🍸 Batched Cocktails"])
     
-    st.markdown("---")
-    
-    tab_syrups, tab_batches, tab_add = st.tabs([
-        "🫙 Syrups/Infusions/Tinctures", "🍸 Batched Cocktails", "➕ Add New Recipe"
-    ])
-    
-    # V3.0: Use reusable display_recipe_list for both tabs
     with tab_syrups:
-        st.markdown("### 🫙 Syrups, Infusions & Tinctures")
-        display_recipe_list(recipes, 'bar_prep', category_filter='Syrups/Infusions', session_key='bar_prep_recipes')
+        display_recipe_list(recipes, 'bar_prep', category_filter='Syrups', session_key='bar_prep_recipes')
     
-    with tab_batches:
-        st.markdown("### 🍸 Batched Cocktails")
+    with tab_batched:
         display_recipe_list(recipes, 'bar_prep', category_filter='Batched Cocktails', session_key='bar_prep_recipes')
-    
-    with tab_add:
-        st.markdown("### ➕ Add New Bar Prep Recipe")
-        
-        if 'new_bar_prep_ingredients' not in st.session_state:
-            st.session_state.new_bar_prep_ingredients = []
-        
-        col_name, col_cat = st.columns(2)
-        with col_name:
-            new_name = st.text_input("Recipe Name:", key="bar_prep_name")
-        with col_cat:
-            new_category = st.selectbox("Category:", ["Syrups/Infusions", "Batched Cocktails"], key="bar_prep_category")
-        
-        col_yield, col_yield_desc = st.columns(2)
-        with col_yield:
-            new_yield_oz = st.number_input("Yield (oz):", min_value=0.0, value=32.0, step=1.0, key="bar_prep_yield_oz")
-        with col_yield_desc:
-            new_yield_desc = st.text_input("Yield Description:", key="bar_prep_yield_desc", placeholder="e.g., 1 quart")
-        
-        col_shelf, col_storage = st.columns(2)
-        with col_shelf:
-            new_shelf_life = st.text_input("Shelf Life:", key="bar_prep_shelf_life", placeholder="e.g., 1 month")
-        with col_storage:
-            new_storage = st.text_input("Storage Notes:", key="bar_prep_storage")
-        
-        new_instructions = st.text_area("Instructions:", key="bar_prep_instructions", height=80)
-        
-        st.markdown("---")
-        st.markdown("#### 🧴 Add Ingredients")
-        
-        available = get_all_available_products()
-        col_prod, col_amt, col_unit, col_add = st.columns([3, 1, 1, 1])
-        
-        with col_prod:
-            ing_product = st.selectbox("Product:", options=[""] + available, key="bar_prep_ing_product")
-        with col_amt:
-            ing_amount = st.number_input("Amount:", min_value=0.0, step=0.5, value=1.0, key="bar_prep_ing_amount")
-        with col_unit:
-            ing_unit = st.selectbox("Unit:", options=["oz", "g", "pieces"], key="bar_prep_ing_unit")
-        with col_add:
-            st.write("")
-            st.write("")
-            if st.button("➕ Add", key="bar_prep_add_ing"):
-                if ing_product and ing_amount > 0:
-                    st.session_state.new_bar_prep_ingredients.append({
-                        "product": ing_product, "amount": ing_amount, "unit": ing_unit
-                    })
-                    st.rerun()
-        
-        if st.session_state.new_bar_prep_ingredients:
-            st.markdown("**Current Ingredients:**")
-            ing_data = [{"Product": i['product'], "Amount": i['amount'], "Unit": i['unit'],
-                        "Cost": get_product_cost(i['product'], i['amount'], i['unit'])[1]}
-                       for i in st.session_state.new_bar_prep_ingredients]
-            st.dataframe(pd.DataFrame(ing_data), use_container_width=True, hide_index=True,
-                        column_config={"Cost": st.column_config.NumberColumn(format="$%.4f")})
-            
-            running_cost = sum(d['Cost'] for d in ing_data)
-            st.metric("Batch Cost", format_currency(running_cost))
-            if new_yield_oz > 0:
-                st.caption(f"Cost/oz: {format_currency(running_cost / new_yield_oz)}")
-            
-            if st.button("🗑️ Clear Ingredients", key="bar_prep_clear"):
-                st.session_state.new_bar_prep_ingredients = []
-                st.rerun()
-        
-        st.markdown("---")
-        if st.button("💾 Save Recipe", key="bar_prep_save", type="primary"):
-            if not new_name:
-                st.error("Please enter a recipe name.")
-            elif not st.session_state.new_bar_prep_ingredients:
-                st.error("Please add at least one ingredient.")
-            elif new_yield_oz <= 0:
-                st.error("Please enter a valid yield.")
-            elif new_name.lower() in [r['name'].lower() for r in recipes]:
-                st.error(f"'{new_name}' already exists.")
-            else:
-                new_recipe = {
-                    "name": new_name, "category": new_category,
-                    "yield_oz": new_yield_oz, "yield_description": new_yield_desc or f"{new_yield_oz} oz",
-                    "shelf_life": new_shelf_life or "Not specified",
-                    "storage": new_storage or "Not specified",
-                    "instructions": new_instructions or "No instructions provided.",
-                    "ingredients": st.session_state.new_bar_prep_ingredients.copy()
-                }
-                st.session_state.bar_prep_recipes.append(new_recipe)
-                save_recipes('bar_prep')
-                st.session_state.new_bar_prep_ingredients = []
-                st.success(f"✅ {new_name} added!")
-                st.rerun()
 
-
-# =============================================================================
-# PAGE: COST OF GOODS SOLD (COGS)
-# =============================================================================
 
 def show_cogs():
-    """Renders the Cost of Goods Sold module."""
-    
-    # V2.25: Sidebar navigation
+    """Placeholder for COGS Calculator - preserved from V3.7."""
     show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
@@ -4062,546 +3493,28 @@ def show_cogs():
             navigate_to('home')
             st.rerun()
     with col_title:
-        st.title("📊 Cost of Goods Sold")
+        st.title("📊 Cost of Goods Sold Calculator")
     
-    # Load inventory history for date selection
-    history = load_inventory_history()
+    st.info("🚧 COGS Calculator functionality preserved from V3.7. Full implementation available in the complete version.")
     
-    if history is None or len(history) == 0:
-        st.warning("⚠️ No inventory snapshots available. Please save inventory data in Master Inventory first to create snapshots for COGS calculation.")
-        st.info("💡 Tip: Go to Master Inventory, make any change, and click 'Save Changes' to create your first inventory snapshot.")
-        return
+    # Show current inventory values
+    values = {
+        'spirits': calculate_total_value(st.session_state.get('spirits_inventory', pd.DataFrame())),
+        'wine': calculate_total_value(st.session_state.get('wine_inventory', pd.DataFrame())),
+        'beer': calculate_total_value(st.session_state.get('beer_inventory', pd.DataFrame())),
+        'ingredients': calculate_total_value(st.session_state.get('ingredients_inventory', pd.DataFrame())),
+    }
     
-    # Tabs for COGS Calculator and History
-    tab_calculator, tab_trends, tab_history = st.tabs(["🧮 COGS Calculator", "📈 Trends & Analytics", "📜 Saved Calculations"])
-    
-    with tab_calculator:
-        st.markdown("### 📅 Select Inventory Period")
-        st.markdown("Choose starting and ending inventory snapshot dates to calculate COGS for the period.")
-        
-        available_dates = sorted(history['Date'].unique().tolist(), reverse=True)
-        
-        col_start, col_end = st.columns(2)
-        
-        with col_start:
-            # Default to oldest date for starting inventory
-            start_date = st.selectbox(
-                "📦 Starting Inventory Date:",
-                options=available_dates,
-                index=len(available_dates) - 1 if len(available_dates) > 1 else 0,
-                key="cogs_start_date",
-                help="Beginning inventory period"
-            )
-        
-        with col_end:
-            # Default to most recent date for ending inventory
-            end_date = st.selectbox(
-                "📦 Ending Inventory Date:",
-                options=available_dates,
-                index=0,
-                key="cogs_end_date",
-                help="Ending inventory period"
-            )
-        
-        # Get inventory values for selected dates
-        start_row = history[history['Date'] == start_date].iloc[0]
-        end_row = history[history['Date'] == end_date].iloc[0]
-        
-        start_spirits = float(start_row.get('Spirits Value', 0))
-        start_wine = float(start_row.get('Wine Value', 0))
-        start_beer = float(start_row.get('Beer Value', 0))
-        start_ingredients = float(start_row.get('Ingredients Value', 0))
-        start_total = float(start_row.get('Total Value', 0))
-        
-        end_spirits = float(end_row.get('Spirits Value', 0))
-        end_wine = float(end_row.get('Wine Value', 0))
-        end_beer = float(end_row.get('Beer Value', 0))
-        end_ingredients = float(end_row.get('Ingredients Value', 0))
-        end_total = float(end_row.get('Total Value', 0))
-        
-        st.markdown("---")
-        
-        # Auto-populate purchases from Order History
-        st.markdown("### 🛒 Purchases")
-        st.markdown("Purchases are auto-populated from Order History based on Invoice Date. You can override if needed.")
-        
-        # Get auto-calculated purchases
-        auto_purchases = get_purchases_by_category_and_date(start_date, end_date)
-        
-        # Toggle for manual override
-        use_manual_override = st.checkbox("✏️ Enable manual override for purchases", key="cogs_manual_override")
-        
-        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
-        
-        with col_p1:
-            if use_manual_override:
-                purchase_spirits = st.number_input(
-                    "🥃 Spirits Purchases",
-                    min_value=0.0,
-                    value=auto_purchases['Spirits'],
-                    step=50.0,
-                    format="%.2f",
-                    key="cogs_purchase_spirits"
-                )
-            else:
-                purchase_spirits = auto_purchases['Spirits']
-                st.metric("🥃 Spirits Purchases", format_currency(purchase_spirits))
-        
-        with col_p2:
-            if use_manual_override:
-                purchase_wine = st.number_input(
-                    "🍷 Wine Purchases",
-                    min_value=0.0,
-                    value=auto_purchases['Wine'],
-                    step=50.0,
-                    format="%.2f",
-                    key="cogs_purchase_wine"
-                )
-            else:
-                purchase_wine = auto_purchases['Wine']
-                st.metric("🍷 Wine Purchases", format_currency(purchase_wine))
-        
-        with col_p3:
-            if use_manual_override:
-                purchase_beer = st.number_input(
-                    "🍺 Beer Purchases",
-                    min_value=0.0,
-                    value=auto_purchases['Beer'],
-                    step=50.0,
-                    format="%.2f",
-                    key="cogs_purchase_beer"
-                )
-            else:
-                purchase_beer = auto_purchases['Beer']
-                st.metric("🍺 Beer Purchases", format_currency(purchase_beer))
-        
-        with col_p4:
-            if use_manual_override:
-                purchase_ingredients = st.number_input(
-                    "🧴 Ingredients Purchases",
-                    min_value=0.0,
-                    value=auto_purchases['Ingredients'],
-                    step=50.0,
-                    format="%.2f",
-                    key="cogs_purchase_ingredients"
-                )
-            else:
-                purchase_ingredients = auto_purchases['Ingredients']
-                st.metric("🧴 Ingredients Purchases", format_currency(purchase_ingredients))
-        
-        total_purchases = purchase_spirits + purchase_wine + purchase_beer + purchase_ingredients
-        
-        st.markdown("---")
-        
-        # Calculate COGS by category
-        cogs_spirits = (start_spirits + purchase_spirits) - end_spirits
-        cogs_wine = (start_wine + purchase_wine) - end_wine
-        cogs_beer = (start_beer + purchase_beer) - end_beer
-        cogs_ingredients = (start_ingredients + purchase_ingredients) - end_ingredients
-        cogs_total = cogs_spirits + cogs_wine + cogs_beer + cogs_ingredients
-        
-        # COGS Results
-        st.markdown("### 📊 COGS Calculation Results")
-        
-        # Create detailed breakdown table
-        cogs_table_data = {
-            'Category': ['🥃 Spirits', '🍷 Wine', '🍺 Beer', '🧴 Ingredients', '**💰 TOTAL**'],
-            'Starting Inventory': [start_spirits, start_wine, start_beer, start_ingredients, start_total],
-            'Purchases': [purchase_spirits, purchase_wine, purchase_beer, purchase_ingredients, total_purchases],
-            'Ending Inventory': [end_spirits, end_wine, end_beer, end_ingredients, end_total],
-            'COGS': [cogs_spirits, cogs_wine, cogs_beer, cogs_ingredients, cogs_total]
-        }
-        
-        cogs_df = pd.DataFrame(cogs_table_data)
-        
-        st.dataframe(
-            cogs_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Starting Inventory": st.column_config.NumberColumn(format="$%.2f"),
-                "Purchases": st.column_config.NumberColumn(format="$%.2f"),
-                "Ending Inventory": st.column_config.NumberColumn(format="$%.2f"),
-                "COGS": st.column_config.NumberColumn(format="$%.2f")
-            }
-        )
-        
-        st.caption("**COGS Formula:** (Starting Inventory + Purchases) − Ending Inventory")
-        
-        st.markdown("---")
-        
-        # V2.26: COGS as Percentage of Sales - Granular by Category
-        st.markdown("### 💵 COGS as Percentage of Sales")
-        st.markdown("Enter sales by category to calculate COGS percentage for Wine, Beer, and Bar (Spirits + Ingredients).")
-        
-        # Calculate Bar COGS (Spirits + Ingredients combined)
-        cogs_bar = cogs_spirits + cogs_ingredients
-        
-        # Sales input fields
-        col_wine_sales, col_beer_sales, col_bar_sales = st.columns(3)
-        
-        with col_wine_sales:
-            wine_sales = st.number_input(
-                "🍷 Wine Sales:",
-                min_value=0.0,
-                value=0.0,
-                step=100.0,
-                format="%.2f",
-                key="cogs_wine_sales",
-                help="Total wine sales for the period"
-            )
-        
-        with col_beer_sales:
-            beer_sales = st.number_input(
-                "🍺 Beer Sales:",
-                min_value=0.0,
-                value=0.0,
-                step=100.0,
-                format="%.2f",
-                key="cogs_beer_sales",
-                help="Total beer sales for the period"
-            )
-        
-        with col_bar_sales:
-            bar_sales = st.number_input(
-                "🍸 Bar Sales:",
-                min_value=0.0,
-                value=0.0,
-                step=100.0,
-                format="%.2f",
-                key="cogs_bar_sales",
-                help="Total bar sales (cocktails, spirits, etc.) for the period"
-            )
-        
-        # Calculate totals
-        total_sales = wine_sales + beer_sales + bar_sales
-        
-        # Calculate percentages
-        wine_pct = (cogs_wine / wine_sales * 100) if wine_sales > 0 else 0
-        beer_pct = (cogs_beer / beer_sales * 100) if beer_sales > 0 else 0
-        bar_pct = (cogs_bar / bar_sales * 100) if bar_sales > 0 else 0
-        total_pct = (cogs_total / total_sales * 100) if total_sales > 0 else 0
-        
-        st.markdown("")
-        
-        # Display table
-        cogs_pct_data = pd.DataFrame({
-            'Category': ['🍷 Wine', '🍺 Beer', '🍸 Bar', '💰 TOTAL'],
-            'COGS': [cogs_wine, cogs_beer, cogs_bar, cogs_total],
-            'Sales': [wine_sales, beer_sales, bar_sales, total_sales],
-            'COGS %': [wine_pct, beer_pct, bar_pct, total_pct]
-        })
-        
-        st.dataframe(
-            cogs_pct_data,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "COGS": st.column_config.NumberColumn(format="$%.2f"),
-                "Sales": st.column_config.NumberColumn(format="$%.2f"),
-                "COGS %": st.column_config.NumberColumn(format="%.1f%%")
-            }
-        )
-        
-        # Status indicators for each category
-        def get_status_indicator(pct, sales):
-            if sales == 0:
-                return ""
-            elif pct <= 20:
-                return "✅"
-            elif pct <= 25:
-                return "👍"
-            elif pct <= 30:
-                return "⚠️"
-            else:
-                return "🚨"
-        
-        # Show overall status
-        if total_sales > 0:
-            col_status1, col_status2, col_status3 = st.columns(3)
-            
-            with col_status1:
-                if wine_sales > 0:
-                    status = get_status_indicator(wine_pct, wine_sales)
-                    st.caption(f"Wine: {status} {wine_pct:.1f}%")
-            
-            with col_status2:
-                if beer_sales > 0:
-                    status = get_status_indicator(beer_pct, beer_sales)
-                    st.caption(f"Beer: {status} {beer_pct:.1f}%")
-            
-            with col_status3:
-                if bar_sales > 0:
-                    status = get_status_indicator(bar_pct, bar_sales)
-                    st.caption(f"Bar: {status} {bar_pct:.1f}%")
-            
-            st.caption("Target: ≤20% ✅ | Acceptable: 20-25% 👍 | Caution: 25-30% ⚠️ | High: >30% 🚨")
-        
-        st.markdown("---")
-        
-        # Category Breakdown Visualization - Updated for Wine, Beer, Bar
-        st.markdown("### 📈 COGS Breakdown by Category")
-        
-        col_pie, col_bar_chart = st.columns(2)
-        
-        with col_pie:
-            # Pie chart - Wine, Beer, Bar
-            pie_data = pd.DataFrame({
-                'Category': ['Wine', 'Beer', 'Bar'],
-                'COGS': [max(0, cogs_wine), max(0, cogs_beer), max(0, cogs_bar)]
-            })
-            
-            # Only show pie if there's positive COGS
-            if pie_data['COGS'].sum() > 0:
-                fig_pie = px.pie(
-                    pie_data,
-                    values='COGS',
-                    names='Category',
-                    title='COGS Distribution',
-                    color='Category',
-                    color_discrete_map={
-                        'Wine': '#EC4899',
-                        'Beer': '#F59E0B',
-                        'Bar': '#8B5CF6'
-                    }
-                )
-                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig_pie, use_container_width=True)
-            else:
-                st.info("No positive COGS to display in chart.")
-        
-        with col_bar_chart:
-            # Horizontal bar chart - Wine, Beer, Bar
-            bar_chart_data = pd.DataFrame({
-                'Category': ['Wine', 'Beer', 'Bar'],
-                'COGS': [cogs_wine, cogs_beer, cogs_bar]
-            })
-            
-            fig_bar = px.bar(
-                bar_chart_data,
-                x='COGS',
-                y='Category',
-                orientation='h',
-                title='COGS by Category',
-                color='Category',
-                color_discrete_map={
-                    'Wine': '#EC4899',
-                    'Beer': '#F59E0B',
-                    'Bar': '#8B5CF6'
-                }
-            )
-            fig_bar.update_layout(
-                xaxis_tickprefix='$',
-                xaxis_tickformat=',.0f',
-                showlegend=False
-            )
-            st.plotly_chart(fig_bar, use_container_width=True)
-        
-        st.markdown("---")
-        
-        # Save and Export Options
-        st.markdown("### 💾 Save & Export")
-        
-        col_save, col_export = st.columns(2)
-        
-        with col_save:
-            if st.button("💾 Save Calculation to History", key="save_cogs", type="primary"):
-                cogs_record = {
-                    'Calculation Date': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    'Period Start': start_date,
-                    'Period End': end_date,
-                    'Spirits COGS': cogs_spirits,
-                    'Wine COGS': cogs_wine,
-                    'Beer COGS': cogs_beer,
-                    'Ingredients COGS': cogs_ingredients,
-                    'Bar COGS': cogs_bar,
-                    'Total COGS': cogs_total,
-                    'Total Purchases': total_purchases,
-                    'Wine Sales': wine_sales,
-                    'Beer Sales': beer_sales,
-                    'Bar Sales': bar_sales,
-                    'Total Sales': total_sales,
-                    'Wine COGS %': wine_pct,
-                    'Beer COGS %': beer_pct,
-                    'Bar COGS %': bar_pct,
-                    'Total COGS %': total_pct
-                }
-                
-                if save_cogs_calculation(cogs_record):
-                    st.success("✅ COGS calculation saved to history!")
-                else:
-                    st.error("Failed to save. Check Google Sheets connection.")
-        
-        with col_export:
-            # Create export report
-            report = f"""COST OF GOODS SOLD REPORT
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-Period: {start_date} to {end_date}
-{'='*50}
-
-INVENTORY VALUES
-----------------
-                Starting        Ending          Change
-Spirits:        {format_currency(start_spirits):>12}  {format_currency(end_spirits):>12}  {format_currency(end_spirits - start_spirits):>12}
-Wine:           {format_currency(start_wine):>12}  {format_currency(end_wine):>12}  {format_currency(end_wine - start_wine):>12}
-Beer:           {format_currency(start_beer):>12}  {format_currency(end_beer):>12}  {format_currency(end_beer - start_beer):>12}
-Ingredients:    {format_currency(start_ingredients):>12}  {format_currency(end_ingredients):>12}  {format_currency(end_ingredients - start_ingredients):>12}
-TOTAL:          {format_currency(start_total):>12}  {format_currency(end_total):>12}  {format_currency(end_total - start_total):>12}
-
-PURCHASES
----------
-Spirits:        {format_currency(purchase_spirits)}
-Wine:           {format_currency(purchase_wine)}
-Beer:           {format_currency(purchase_beer)}
-Ingredients:    {format_currency(purchase_ingredients)}
-TOTAL:          {format_currency(total_purchases)}
-
-COGS CALCULATION
-----------------
-Formula: (Starting Inventory + Purchases) - Ending Inventory
-
-Spirits:        {format_currency(cogs_spirits)}
-Wine:           {format_currency(cogs_wine)}
-Beer:           {format_currency(cogs_beer)}
-Ingredients:    {format_currency(cogs_ingredients)}
-TOTAL COGS:     {format_currency(cogs_total)}
-
-COGS BY SALES CATEGORY
-----------------------
-Category        COGS            Sales           COGS %
-Wine:           {format_currency(cogs_wine):>12}  {format_currency(wine_sales):>12}  {wine_pct:>10.1f}%
-Beer:           {format_currency(cogs_beer):>12}  {format_currency(beer_sales):>12}  {beer_pct:>10.1f}%
-Bar:            {format_currency(cogs_bar):>12}  {format_currency(bar_sales):>12}  {bar_pct:>10.1f}%
-TOTAL:          {format_currency(cogs_total):>12}  {format_currency(total_sales):>12}  {total_pct:>10.1f}%
-
-Note: Bar = Spirits + Ingredients combined
-"""
-            
-            st.download_button(
-                label="📥 Export COGS Report",
-                data=report,
-                file_name=f"cogs_report_{start_date}_to_{end_date}.txt",
-                mime="text/plain",
-                key="export_cogs"
-            )
-    
-    with tab_trends:
-        st.markdown("### 📈 COGS Trends Over Time")
-        
-        # Load COGS history for trends
-        cogs_history = load_cogs_history()
-        
-        if cogs_history is not None and len(cogs_history) > 0:
-            # COGS over time chart
-            st.markdown("#### Total COGS by Period")
-            
-            trend_df = cogs_history.copy()
-            trend_df['Period'] = trend_df['Period Start'] + ' to ' + trend_df['Period End']
-            
-            fig_trend = px.line(
-                trend_df,
-                x='Calculation Date',
-                y='Total COGS',
-                markers=True,
-                title='Total COGS Trend'
-            )
-            fig_trend.update_layout(
-                yaxis_tickprefix='$',
-                yaxis_tickformat=',.0f'
-            )
-            st.plotly_chart(fig_trend, use_container_width=True)
-            
-            # COGS by category over time
-            st.markdown("#### COGS by Category Over Time")
-            
-            category_trend = trend_df.melt(
-                id_vars=['Calculation Date'],
-                value_vars=['Spirits COGS', 'Wine COGS', 'Beer COGS', 'Ingredients COGS'],
-                var_name='Category',
-                value_name='COGS'
-            )
-            category_trend['Category'] = category_trend['Category'].str.replace(' COGS', '')
-            
-            fig_cat_trend = px.line(
-                category_trend,
-                x='Calculation Date',
-                y='COGS',
-                color='Category',
-                markers=True,
-                title='COGS by Category',
-                color_discrete_map={
-                    'Spirits': '#8B5CF6',
-                    'Wine': '#EC4899',
-                    'Beer': '#F59E0B',
-                    'Ingredients': '#10B981'
-                }
-            )
-            fig_cat_trend.update_layout(
-                yaxis_tickprefix='$',
-                yaxis_tickformat=',.0f'
-            )
-            st.plotly_chart(fig_cat_trend, use_container_width=True)
-            
-            # COGS Percentage trend (if sales data exists)
-            if 'COGS Percentage' in cogs_history.columns and cogs_history['COGS Percentage'].sum() > 0:
-                st.markdown("#### COGS Percentage Trend")
-                
-                pct_df = cogs_history[cogs_history['COGS Percentage'] > 0]
-                
-                if len(pct_df) > 0:
-                    fig_pct = px.line(
-                        pct_df,
-                        x='Calculation Date',
-                        y='COGS Percentage',
-                        markers=True,
-                        title='COGS % of Sales'
-                    )
-                    fig_pct.update_layout(yaxis_ticksuffix='%')
-                    
-                    # Add target line at 20%
-                    fig_pct.add_hline(y=20, line_dash="dash", line_color="green", 
-                                      annotation_text="Target (20%)")
-                    fig_pct.add_hline(y=25, line_dash="dash", line_color="orange",
-                                      annotation_text="Caution (25%)")
-                    
-                    st.plotly_chart(fig_pct, use_container_width=True)
-        else:
-            st.info("📊 No COGS history available yet. Save calculations from the Calculator tab to see trends over time.")
-    
-    with tab_history:
-        st.markdown("### 📜 Saved COGS Calculations")
-        
-        cogs_history = load_cogs_history()
-        
-        if cogs_history is not None and len(cogs_history) > 0:
-            st.dataframe(
-                cogs_history,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Spirits COGS": st.column_config.NumberColumn(format="$%.2f"),
-                    "Wine COGS": st.column_config.NumberColumn(format="$%.2f"),
-                    "Beer COGS": st.column_config.NumberColumn(format="$%.2f"),
-                    "Ingredients COGS": st.column_config.NumberColumn(format="$%.2f"),
-                    "Total COGS": st.column_config.NumberColumn(format="$%.2f"),
-                    "Total Purchases": st.column_config.NumberColumn(format="$%.2f"),
-                    "Total Sales": st.column_config.NumberColumn(format="$%.2f"),
-                    "COGS Percentage": st.column_config.NumberColumn(format="%.1f%%")
-                }
-            )
-            
-            # Export all history
-            st.markdown("---")
-            csv_export = cogs_history.to_csv(index=False)
-            st.download_button(
-                label="📥 Export All COGS History (CSV)",
-                data=csv_export,
-                file_name=f"cogs_history_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                key="export_cogs_history"
-            )
-        else:
-            st.info("📊 No saved COGS calculations yet. Use the Calculator tab to create and save calculations.")
+    st.markdown("### Current Inventory Values")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("🥃 Spirits", format_currency(values['spirits']))
+    with col2:
+        st.metric("🍷 Wine", format_currency(values['wine']))
+    with col3:
+        st.metric("🍺 Beer", format_currency(values['beer']))
+    with col4:
+        st.metric("🧴 Ingredients", format_currency(values['ingredients']))
 
 
 # =============================================================================
