@@ -45,7 +45,7 @@ CLIENT_CONFIG = {
     # -------------------------------------------------------------------------
     # Restaurant Information
     # -------------------------------------------------------------------------
-    "restaurant_name": "Canter Inn",
+    "restaurant_name": "Test Restaurant",
     "restaurant_tagline": "Manage your inventory, build orders, track cost of goods sold, and store all of your recipes.",
     
     # -------------------------------------------------------------------------
