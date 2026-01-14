@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP V3.6.test
+# BEVERAGE MANAGEMENT APP V3.7
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -58,6 +58,11 @@
 #           - Calculated fields update on any interaction without clicking Save
 #           - Updated CSV upload instructions and processing for new location columns
 #           - Updated sample spirits data with location columns
+#   V3.7 - Split display UX for all inventory categories
+#           - Applied split display (Inputs + Calculated Fields) to Wine, Beer, Ingredients
+#           - All categories now have location columns: Upstairs Bar, Main Bar, Storage
+#           - All categories calculate Total Inventory from location columns
+#           - Updated CSV instructions, processors, and sample data for all categories
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -77,7 +82,7 @@ from typing import Optional, Dict, List, Any, Tuple
 # =============================================================================
 
 st.set_page_config(
-    page_title="Beverage Management App V3.6.test",
+    page_title="Beverage Management App V3.7",
     page_icon="🍸",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -755,66 +760,75 @@ def get_sample_spirits():
 @st.cache_data
 def get_sample_wines():
     """Returns sample wine inventory data (cached)."""
+    # V3.7: Updated with location columns (Upstairs Bar, Main Bar, Storage)
     data = [
         {"Product": "Mauzac Nature, 2022, Domaine Plageoles, Gaillac, France", 
          "Type": "Bubbles", "Cost": 22.0, "Size (oz.)": 25.3, "Margin": 35, 
-         "Inventory": 18.0, "Distributor": "Chromatic"},
+         "Upstairs Bar": 2.0, "Main Bar": 4.0, "Storage": 12.0, "Distributor": "Chromatic", "Order Notes": ""},
         {"Product": "Savagnin, 2022, Domaine de la Pinte, 'Sav'Or' Vin de France (Jura)", 
          "Type": "Rosé/Orange", "Cost": 29.0, "Size (oz.)": 25.3, "Margin": 37, 
-         "Inventory": 5.0, "Distributor": "Chromatic"},
+         "Upstairs Bar": 1.0, "Main Bar": 2.0, "Storage": 2.0, "Distributor": "Chromatic", "Order Notes": ""},
         {"Product": "Sémillon, 2015, Forlorn Hope, 'Nacré', Napa Valley, CA", 
          "Type": "White", "Cost": 17.0, "Size (oz.)": 25.3, "Margin": 33, 
-         "Inventory": 2.0, "Distributor": "Chromatic"},
+         "Upstairs Bar": 0.0, "Main Bar": 1.0, "Storage": 1.0, "Distributor": "Chromatic", "Order Notes": ""},
         {"Product": "Chardonnay, 2023, Jean Dauvissat, Chablis, France", 
          "Type": "White", "Cost": 31.5, "Size (oz.)": 25.3, "Margin": 35, 
-         "Inventory": 6.0, "Distributor": "Vino Veritas"},
+         "Upstairs Bar": 1.0, "Main Bar": 2.0, "Storage": 3.0, "Distributor": "Vino Veritas", "Order Notes": ""},
         {"Product": "Pinot Noir, 2021, Domaine de la Côte, Sta. Rita Hills, CA", 
          "Type": "Red", "Cost": 55.0, "Size (oz.)": 25.3, "Margin": 34, 
-         "Inventory": 3.0, "Distributor": "Vino Veritas"},
+         "Upstairs Bar": 0.0, "Main Bar": 1.0, "Storage": 2.0, "Distributor": "Vino Veritas", "Order Notes": ""},
         {"Product": "Nebbiolo, 2019, Cantina Massara, Barolo, Piedmont, Italy", 
          "Type": "Red", "Cost": 31.0, "Size (oz.)": 25.3, "Margin": 32, 
-         "Inventory": 4.0, "Distributor": "Vino Veritas"},
+         "Upstairs Bar": 1.0, "Main Bar": 1.0, "Storage": 2.0, "Distributor": "Vino Veritas", "Order Notes": ""},
     ]
     df = pd.DataFrame(data)
+    # V3.7: Calculate Total Inventory from location columns
+    df["Total Inventory"] = df["Upstairs Bar"] + df["Main Bar"] + df["Storage"]
     # Calculated fields (non-editable)
     df["Bottle Price"] = df.apply(
         lambda row: math.ceil(row["Cost"] / (row["Margin"] / 100)) if row["Margin"] > 0 else 0, axis=1)
-    df["Value"] = df["Cost"] * df["Inventory"]
+    # V3.7: Value uses Total Inventory
+    df["Value"] = df["Cost"] * df["Total Inventory"]
     df["BTG"] = df["Cost"].apply(lambda x: math.ceil(x / 4))
     df["Suggested Retail"] = df["Cost"].apply(lambda x: math.ceil(x * 1.44))
     return df[["Product", "Type", "Cost", "Size (oz.)", "Margin", "Bottle Price", 
-               "Inventory", "Value", "Distributor", "BTG", "Suggested Retail"]]
+               "Upstairs Bar", "Main Bar", "Storage", "Total Inventory",
+               "Value", "Distributor", "Order Notes", "BTG", "Suggested Retail"]]
 
 
 @st.cache_data
 def get_sample_beers():
     """Returns sample beer inventory data (cached)."""
+    # V3.7: Updated with location columns (Upstairs Bar, Main Bar, Storage)
     data = [
         {"Product": "New Glarus Staghorn Oktoberfest", "Type": "Can", 
          "Cost per Keg/Case": 26.40, "Size": 24.0, "UoM": "cans", 
-         "Margin": 21, "Inventory": 1.0, 
+         "Margin": 21, "Upstairs Bar": 0.0, "Main Bar": 0.5, "Storage": 0.5,
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "New Glarus Moon Man", "Type": "Can", 
          "Cost per Keg/Case": 26.40, "Size": 24.0, "UoM": "cans", 
-         "Margin": 21, "Inventory": 2.0, 
+         "Margin": 21, "Upstairs Bar": 0.5, "Main Bar": 0.5, "Storage": 1.0,
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "Coors Light", "Type": "Can", 
          "Cost per Keg/Case": 24.51, "Size": 30.0, "UoM": "cans", 
-         "Margin": 19, "Inventory": 1.0, 
+         "Margin": 19, "Upstairs Bar": 0.0, "Main Bar": 0.5, "Storage": 0.5,
          "Distributor": "Frank Beer", "Order Notes": ""},
         {"Product": "Hop Haus Yard Work IPA", "Type": "Sixtel", 
          "Cost per Keg/Case": 75.00, "Size": 661.0, "UoM": "oz", 
-         "Margin": 22, "Inventory": 1.0, 
+         "Margin": 22, "Upstairs Bar": 0.0, "Main Bar": 1.0, "Storage": 0.0,
          "Distributor": "GB Beer", "Order Notes": ""},
         {"Product": "High Life", "Type": "Bottle", 
          "Cost per Keg/Case": 21.15, "Size": 24.0, "UoM": "bottles", 
-         "Margin": 18, "Inventory": 2.0, 
+         "Margin": 18, "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5,
          "Distributor": "Frank Beer", "Order Notes": ""},
     ]
     df = pd.DataFrame(data)
+    # V3.7: Calculate Total Inventory from location columns
+    df["Total Inventory"] = df["Upstairs Bar"] + df["Main Bar"] + df["Storage"]
     # Calculated fields (non-editable)
     df["Cost/Unit"] = df["Cost per Keg/Case"] / df["Size"]
-    df["Value"] = df["Cost per Keg/Case"] * df["Inventory"]
+    # V3.7: Value uses Total Inventory
+    df["Value"] = df["Cost per Keg/Case"] * df["Total Inventory"]
     # V3.5: Menu Price - different formula for cans/bottles vs kegs
     def calc_menu_price(row):
         cost_unit = row["Cost/Unit"]
@@ -822,52 +836,67 @@ def get_sample_beers():
         if margin <= 0:
             return 0
         if row["Type"] in ["Can", "Bottle"]:
-            # For cans/bottles: Cost/Unit divided by margin, rounded to nearest dollar
             return round(cost_unit / (margin / 100))
         elif row["Type"] in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
-            # For kegs: Cost/Unit * 16 (pint pricing) divided by margin, rounded to nearest dollar
             return round((cost_unit * 16) / (margin / 100))
         return 0
     df["Menu Price"] = df.apply(calc_menu_price, axis=1)
     return df[["Product", "Type", "Cost per Keg/Case", "Size", "UoM", 
-               "Cost/Unit", "Margin", "Menu Price", "Inventory", "Value", 
-               "Distributor", "Order Notes"]]
+               "Cost/Unit", "Margin", "Menu Price", "Upstairs Bar", "Main Bar", "Storage",
+               "Total Inventory", "Value", "Distributor", "Order Notes"]]
 
 
 @st.cache_data
 def get_sample_ingredients():
     """Returns sample ingredient inventory data (cached)."""
+    # V3.7: Updated with location columns (Upstairs Bar, Main Bar, Storage)
     data = [
         {"Product": "Amaretto Cherries", "Cost": 15.00, "Size/Yield": 80.0, 
-         "UoM": "cherries", "Distributor": "Left Bank", "Order Notes": ""},
+         "UoM": "cherries", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5,
+         "Distributor": "Left Bank", "Order Notes": ""},
         {"Product": "Olives", "Cost": 29.63, "Size/Yield": 300.0, 
-         "UoM": "pieces", "Distributor": "US Foods", "Order Notes": ""},
+         "UoM": "pieces", "Upstairs Bar": 0.0, "Main Bar": 1.0, "Storage": 1.0,
+         "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Natalie's Lime Juice", "Cost": 8.34, "Size/Yield": 32.0, 
-         "UoM": "oz", "Distributor": "US Foods", "Order Notes": ""},
+         "UoM": "oz", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 2.0,
+         "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Natalie's Lemon Juice", "Cost": 8.34, "Size/Yield": 32.0, 
-         "UoM": "oz", "Distributor": "US Foods", "Order Notes": ""},
+         "UoM": "oz", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 1.5,
+         "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Agave Nectar", "Cost": 17.56, "Size/Yield": 64.0, 
-         "UoM": "oz", "Distributor": "US Foods", "Order Notes": ""},
+         "UoM": "oz", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 1.0,
+         "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Q Ginger Beer", "Cost": 0.00, "Size/Yield": 7.5, 
-         "UoM": "oz", "Distributor": "Breakthru", "Order Notes": "Free"},
+         "UoM": "oz", "Upstairs Bar": 0.0, "Main Bar": 2.0, "Storage": 4.0,
+         "Distributor": "Breakthru", "Order Notes": "Free"},
         {"Product": "Q Club Soda", "Cost": 1.04, "Size/Yield": 7.5, 
-         "UoM": "oz", "Distributor": "Breakthru", "Order Notes": "3cs mix"},
+         "UoM": "oz", "Upstairs Bar": 0.0, "Main Bar": 2.0, "Storage": 4.0,
+         "Distributor": "Breakthru", "Order Notes": "3cs mix"},
         {"Product": "Heavy Cream", "Cost": 9.59, "Size/Yield": 64.0, 
-         "UoM": "oz", "Distributor": "US Foods", "Order Notes": ""},
+         "UoM": "oz", "Upstairs Bar": 0.0, "Main Bar": 1.0, "Storage": 1.0,
+         "Distributor": "US Foods", "Order Notes": ""},
         {"Product": "Simple Syrup (House)", "Cost": 5.00, "Size/Yield": 32.0, 
-         "UoM": "oz", "Distributor": "House Made", "Order Notes": ""},
+         "UoM": "oz", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 1.0,
+         "Distributor": "House Made", "Order Notes": ""},
         {"Product": "Demerara Syrup (House)", "Cost": 8.00, "Size/Yield": 32.0, 
-         "UoM": "oz", "Distributor": "House Made", "Order Notes": ""},
+         "UoM": "oz", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.5,
+         "Distributor": "House Made", "Order Notes": ""},
         {"Product": "Orange Peel", "Cost": 0.50, "Size/Yield": 10.0, 
-         "UoM": "pieces", "Distributor": "House Made", "Order Notes": ""},
+         "UoM": "pieces", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.0,
+         "Distributor": "House Made", "Order Notes": ""},
         {"Product": "Lemon Peel", "Cost": 0.50, "Size/Yield": 10.0, 
-         "UoM": "pieces", "Distributor": "House Made", "Order Notes": ""},
+         "UoM": "pieces", "Upstairs Bar": 0.5, "Main Bar": 1.0, "Storage": 0.0,
+         "Distributor": "House Made", "Order Notes": ""},
         {"Product": "Luxardo Cherry", "Cost": 25.00, "Size/Yield": 50.0, 
-         "UoM": "cherries", "Distributor": "Breakthru", "Order Notes": ""},
+         "UoM": "cherries", "Upstairs Bar": 0.0, "Main Bar": 1.0, "Storage": 1.0,
+         "Distributor": "Breakthru", "Order Notes": ""},
     ]
     df = pd.DataFrame(data)
+    # V3.7: Calculate Total Inventory from location columns
+    df["Total Inventory"] = df["Upstairs Bar"] + df["Main Bar"] + df["Storage"]
     df["Cost/Unit"] = df["Cost"] / df["Size/Yield"]
     return df[["Product", "Cost", "Size/Yield", "UoM", "Cost/Unit", 
+               "Upstairs Bar", "Main Bar", "Storage", "Total Inventory",
                "Distributor", "Order Notes"]]
 
 
@@ -1313,12 +1342,24 @@ def process_uploaded_wine(df: pd.DataFrame) -> pd.DataFrame:
         for col in ['Size (oz.)', 'Inventory']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        # V3.7: Handle location columns (Upstairs Bar, Main Bar, Storage)
+        for col in ['Upstairs Bar', 'Main Bar', 'Storage']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            else:
+                df[col] = 0.0
+        
+        # V3.7: Calculate Total Inventory from location columns
+        df['Total Inventory'] = df['Upstairs Bar'] + df['Main Bar'] + df['Storage']
+        
         # V3.5: Recalculate all calculated fields with correct formulas
         if 'Cost' in df.columns and 'Margin' in df.columns:
             df['Bottle Price'] = df.apply(
                 lambda row: math.ceil(row['Cost'] / (row['Margin'] / 100)) if row['Margin'] > 0 else 0, axis=1)
-        if 'Cost' in df.columns and 'Inventory' in df.columns:
-            df['Value'] = round(df['Cost'] * df['Inventory'], 2)
+        # V3.7: Value uses Total Inventory
+        if 'Cost' in df.columns and 'Total Inventory' in df.columns:
+            df['Value'] = round(df['Cost'] * df['Total Inventory'], 2)
         if 'Cost' in df.columns:
             df['BTG'] = df['Cost'].apply(lambda x: math.ceil(x / 4))
             df['Suggested Retail'] = df['Cost'].apply(lambda x: math.ceil(x * 1.44))
@@ -1339,12 +1380,24 @@ def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
         for col in ['Size', 'Inventory']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        # V3.7: Handle location columns (Upstairs Bar, Main Bar, Storage)
+        for col in ['Upstairs Bar', 'Main Bar', 'Storage']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            else:
+                df[col] = 0.0
+        
+        # V3.7: Calculate Total Inventory from location columns
+        df['Total Inventory'] = df['Upstairs Bar'] + df['Main Bar'] + df['Storage']
+        
         # V3.5: Recalculate all calculated fields
         if 'Cost per Keg/Case' in df.columns and 'Size' in df.columns:
             df['Cost/Unit'] = df.apply(
                 lambda row: round(row['Cost per Keg/Case'] / row['Size'], 2) if row['Size'] > 0 else 0, axis=1)
-        if 'Cost per Keg/Case' in df.columns and 'Inventory' in df.columns:
-            df['Value'] = round(df['Cost per Keg/Case'] * df['Inventory'], 2)
+        # V3.7: Value uses Total Inventory
+        if 'Cost per Keg/Case' in df.columns and 'Total Inventory' in df.columns:
+            df['Value'] = round(df['Cost per Keg/Case'] * df['Total Inventory'], 2)
         # V3.5: Menu Price - different formula for cans/bottles vs kegs
         if 'Cost/Unit' in df.columns and 'Margin' in df.columns and 'Type' in df.columns:
             def calc_menu_price(row):
@@ -1372,6 +1425,17 @@ def process_uploaded_ingredients(df: pd.DataFrame) -> pd.DataFrame:
             df = clean_currency_column(df, col)
         if 'Size/Yield' in df.columns:
             df['Size/Yield'] = pd.to_numeric(df['Size/Yield'], errors='coerce').fillna(0)
+        
+        # V3.7: Handle location columns (Upstairs Bar, Main Bar, Storage)
+        for col in ['Upstairs Bar', 'Main Bar', 'Storage']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            else:
+                df[col] = 0.0
+        
+        # V3.7: Calculate Total Inventory from location columns
+        df['Total Inventory'] = df['Upstairs Bar'] + df['Main Bar'] + df['Storage']
+        
         if 'Cost' in df.columns and 'Size/Yield' in df.columns:
             df['Cost/Unit'] = df.apply(
                 lambda row: round(row['Cost'] / row['Size/Yield'], 2) if row['Size/Yield'] > 0 else 0, axis=1)
@@ -1567,12 +1631,16 @@ def show_inventory():
             - `Cost` - Bottle cost
             - `Size (oz.)` - Bottle size in ounces
             - `Margin` - Target margin percentage (e.g., 35 for 35%)
-            - `Inventory` - Current stock count
+            - `Upstairs Bar` - Inventory at upstairs bar location (decimal values OK)
+            - `Main Bar` - Inventory at main bar location (decimal values OK)
+            - `Storage` - Inventory in storage (decimal values OK)
             - `Distributor` - Supplier name
+            - `Order Notes` - Optional notes
             
             **Auto-Calculated (do not include):**
+            - `Total Inventory` = Upstairs Bar + Main Bar + Storage
             - `Bottle Price` = Cost ÷ (Margin/100), rounded up
-            - `Value` = Cost × Inventory
+            - `Value` = Cost × Total Inventory
             - `BTG` = Cost ÷ 4, rounded up
             - `Suggested Retail` = Cost × 1.44, rounded up
             """)
@@ -1585,15 +1653,18 @@ def show_inventory():
             - `Size` - Units per case (cans/bottles) or oz per keg (661 for Sixtel, 992 for Quarter Barrel, 1984 for Half Barrel)
             - `UoM` - Unit of measure (cans, bottles, oz)
             - `Margin` - Target margin percentage (e.g., 20 for 20%)
-            - `Inventory` - Current stock count
+            - `Upstairs Bar` - Inventory at upstairs bar location (decimal values OK)
+            - `Main Bar` - Inventory at main bar location (decimal values OK)
+            - `Storage` - Inventory in storage (decimal values OK)
             - `Distributor` - Supplier name
             - `Order Notes` - Optional notes
             
             **Auto-Calculated (do not include):**
+            - `Total Inventory` = Upstairs Bar + Main Bar + Storage
             - `Cost/Unit` = Cost per Keg/Case ÷ Size
             - `Menu Price` = For Cans/Bottles: Cost/Unit ÷ (Margin/100), rounded
             - `Menu Price` = For Kegs: (Cost/Unit × 16) ÷ (Margin/100), rounded (pint pricing)
-            - `Value` = Cost per Keg/Case × Inventory
+            - `Value` = Cost per Keg/Case × Total Inventory
             """)
         elif upload_category == "Ingredients":
             st.markdown("""
@@ -1602,10 +1673,14 @@ def show_inventory():
             - `Cost` - Purchase cost
             - `Size/Yield` - Quantity per purchase
             - `UoM` - Unit of measure (oz, pieces, cherries, etc.)
+            - `Upstairs Bar` - Inventory at upstairs bar location (decimal values OK)
+            - `Main Bar` - Inventory at main bar location (decimal values OK)
+            - `Storage` - Inventory in storage (decimal values OK)
             - `Distributor` - Supplier name
             - `Order Notes` - Optional notes
             
             **Auto-Calculated (do not include):**
+            - `Total Inventory` = Upstairs Bar + Main Bar + Storage
             - `Cost/Unit` = Cost ÷ Size/Yield
             """)
         
@@ -1798,12 +1873,420 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         st.rerun()
 
 
+# =============================================================================
+# V3.7: SPLIT DISPLAY FOR WINE (Real-time calculated fields)
+# =============================================================================
+
+def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
+    """
+    V3.7: Renders wine inventory with split display approach.
+    - Inputs (editable fields) on top
+    - Calculated fields in separate read-only display below
+    """
+    if df is None or len(df) == 0:
+        st.info("No wine inventory data.")
+        return
+    
+    st.markdown("#### Search & Filter Wine")
+    filter_cols = st.columns([2] + [1] * len(filter_columns))
+    
+    with filter_cols[0]:
+        search_term = st.text_input("🔍 Search", key="search_wine", placeholder="Type to search...")
+    
+    column_filters = {}
+    for i, col_name in enumerate(filter_columns):
+        with filter_cols[i + 1]:
+            if col_name in df.columns:
+                unique_values = df[col_name].dropna().unique().tolist()
+                selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_wine_{col_name}")
+                if selected:
+                    column_filters[col_name] = selected
+    
+    filtered_df = filter_dataframe(df, search_term, column_filters)
+    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # V3.7: Add location columns if they don't exist
+    for col in ["Upstairs Bar", "Main Bar", "Storage"]:
+        if col not in filtered_df.columns:
+            filtered_df[col] = 0.0
+        if col not in st.session_state.wine_inventory.columns:
+            st.session_state.wine_inventory[col] = 0.0
+    
+    # Define editable vs calculated columns
+    editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin", "Upstairs Bar", "Main Bar", "Storage", "Distributor", "Order Notes"]
+    calculated_cols = ["Total Inventory", "Bottle Price", "Value", "BTG", "Suggested Retail"]
+    
+    # Filter to only columns that exist
+    editable_cols = [c for c in editable_cols if c in filtered_df.columns]
+    
+    st.markdown("#### ✏️ Inputs")
+    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    edited_df = st.data_editor(
+        filtered_df[editable_cols].copy(),
+        use_container_width=True,
+        num_rows="dynamic",
+        key="editor_wine_split",
+        column_config={
+            "Cost": st.column_config.NumberColumn(format="$%.2f"),
+            "Size (oz.)": st.column_config.NumberColumn(format="%.1f"),
+            "Margin": st.column_config.NumberColumn(format="%.0f%%"),
+            "Upstairs Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+            "Main Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+            "Storage": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+        }
+    )
+    
+    # Calculate computed columns
+    calc_df = edited_df.copy()
+    
+    calc_df["Total Inventory"] = (
+        calc_df["Upstairs Bar"].fillna(0) + 
+        calc_df["Main Bar"].fillna(0) + 
+        calc_df["Storage"].fillna(0)
+    )
+    
+    if "Cost" in calc_df.columns and "Margin" in calc_df.columns:
+        calc_df["Bottle Price"] = calc_df.apply(
+            lambda r: math.ceil(r['Cost'] / (r['Margin'] / 100)) if r['Margin'] > 0 else 0, axis=1)
+    
+    if "Cost" in calc_df.columns and "Total Inventory" in calc_df.columns:
+        calc_df["Value"] = round(calc_df["Cost"] * calc_df["Total Inventory"], 2)
+    
+    if "Cost" in calc_df.columns:
+        calc_df["BTG"] = calc_df["Cost"].apply(lambda x: math.ceil(x / 4))
+        calc_df["Suggested Retail"] = calc_df["Cost"].apply(lambda x: math.ceil(x * 1.44))
+    
+    # Display calculated columns
+    st.markdown("#### 📊 Calculated Fields (Live Preview)")
+    st.caption("These values update automatically based on your edits above.")
+    
+    display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
+    
+    st.dataframe(
+        calc_df[display_calc_cols],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
+            "Bottle Price": st.column_config.NumberColumn(format="$%.0f"),
+            "Value": st.column_config.NumberColumn(format="$%.2f"),
+            "BTG": st.column_config.NumberColumn(format="$%.0f"),
+            "Suggested Retail": st.column_config.NumberColumn(format="$%.0f"),
+        }
+    )
+    
+    if "Value" in calc_df.columns:
+        total_value = calc_df["Value"].sum()
+        st.metric("💰 Total Inventory Value", format_currency(total_value))
+    
+    if st.button("💾 Save Changes", key="save_wine_split", type="primary"):
+        full_df = calc_df.copy()
+        updated_inventory = st.session_state.wine_inventory.copy()
+        
+        for col in ["Upstairs Bar", "Main Bar", "Storage", "Total Inventory"]:
+            if col not in updated_inventory.columns:
+                updated_inventory[col] = 0.0
+        
+        for idx, row in full_df.iterrows():
+            product_name = row['Product']
+            mask = updated_inventory['Product'] == product_name
+            if mask.any():
+                for col in full_df.columns:
+                    if col in updated_inventory.columns:
+                        updated_inventory.loc[mask, col] = row[col]
+        
+        existing_products = updated_inventory['Product'].tolist()
+        for idx, row in full_df.iterrows():
+            if row['Product'] not in existing_products:
+                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
+        
+        st.session_state.wine_inventory = updated_inventory
+        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+        save_all_inventory_data()
+        st.success("✅ Changes saved!")
+        st.rerun()
+
+
+# =============================================================================
+# V3.7: SPLIT DISPLAY FOR BEER (Real-time calculated fields)
+# =============================================================================
+
+def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
+    """
+    V3.7: Renders beer inventory with split display approach.
+    - Inputs (editable fields) on top
+    - Calculated fields in separate read-only display below
+    """
+    if df is None or len(df) == 0:
+        st.info("No beer inventory data.")
+        return
+    
+    st.markdown("#### Search & Filter Beer")
+    filter_cols = st.columns([2] + [1] * len(filter_columns))
+    
+    with filter_cols[0]:
+        search_term = st.text_input("🔍 Search", key="search_beer", placeholder="Type to search...")
+    
+    column_filters = {}
+    for i, col_name in enumerate(filter_columns):
+        with filter_cols[i + 1]:
+            if col_name in df.columns:
+                unique_values = df[col_name].dropna().unique().tolist()
+                selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_beer_{col_name}")
+                if selected:
+                    column_filters[col_name] = selected
+    
+    filtered_df = filter_dataframe(df, search_term, column_filters)
+    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # V3.7: Add location columns if they don't exist
+    for col in ["Upstairs Bar", "Main Bar", "Storage"]:
+        if col not in filtered_df.columns:
+            filtered_df[col] = 0.0
+        if col not in st.session_state.beer_inventory.columns:
+            st.session_state.beer_inventory[col] = 0.0
+    
+    # Define editable vs calculated columns
+    editable_cols = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", "Margin", "Upstairs Bar", "Main Bar", "Storage", "Distributor", "Order Notes"]
+    calculated_cols = ["Total Inventory", "Cost/Unit", "Menu Price", "Value"]
+    
+    # Filter to only columns that exist
+    editable_cols = [c for c in editable_cols if c in filtered_df.columns]
+    
+    st.markdown("#### ✏️ Inputs")
+    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    edited_df = st.data_editor(
+        filtered_df[editable_cols].copy(),
+        use_container_width=True,
+        num_rows="dynamic",
+        key="editor_beer_split",
+        column_config={
+            "Cost per Keg/Case": st.column_config.NumberColumn(format="$%.2f"),
+            "Size": st.column_config.NumberColumn(format="%.1f"),
+            "Margin": st.column_config.NumberColumn(format="%.0f%%"),
+            "Upstairs Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+            "Main Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+            "Storage": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+        }
+    )
+    
+    # Calculate computed columns
+    calc_df = edited_df.copy()
+    
+    calc_df["Total Inventory"] = (
+        calc_df["Upstairs Bar"].fillna(0) + 
+        calc_df["Main Bar"].fillna(0) + 
+        calc_df["Storage"].fillna(0)
+    )
+    
+    if "Cost per Keg/Case" in calc_df.columns and "Size" in calc_df.columns:
+        calc_df["Cost/Unit"] = calc_df.apply(
+            lambda r: round(r['Cost per Keg/Case'] / r['Size'], 2) if r['Size'] > 0 else 0, axis=1)
+    
+    # Menu Price calculation
+    if "Cost/Unit" in calc_df.columns and "Margin" in calc_df.columns and "Type" in calc_df.columns:
+        def calc_menu_price(row):
+            cost_unit = row["Cost/Unit"]
+            margin = row["Margin"]
+            if margin <= 0:
+                return 0
+            if row["Type"] in ["Can", "Bottle"]:
+                return round(cost_unit / (margin / 100))
+            elif row["Type"] in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
+                return round((cost_unit * 16) / (margin / 100))
+            return 0
+        calc_df["Menu Price"] = calc_df.apply(calc_menu_price, axis=1)
+    
+    if "Cost per Keg/Case" in calc_df.columns and "Total Inventory" in calc_df.columns:
+        calc_df["Value"] = round(calc_df["Cost per Keg/Case"] * calc_df["Total Inventory"], 2)
+    
+    # Display calculated columns
+    st.markdown("#### 📊 Calculated Fields (Live Preview)")
+    st.caption("These values update automatically based on your edits above.")
+    
+    display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
+    
+    st.dataframe(
+        calc_df[display_calc_cols],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
+            "Cost/Unit": st.column_config.NumberColumn(format="$%.2f"),
+            "Menu Price": st.column_config.NumberColumn(format="$%.0f"),
+            "Value": st.column_config.NumberColumn(format="$%.2f"),
+        }
+    )
+    
+    if "Value" in calc_df.columns:
+        total_value = calc_df["Value"].sum()
+        st.metric("💰 Total Inventory Value", format_currency(total_value))
+    
+    if st.button("💾 Save Changes", key="save_beer_split", type="primary"):
+        full_df = calc_df.copy()
+        updated_inventory = st.session_state.beer_inventory.copy()
+        
+        for col in ["Upstairs Bar", "Main Bar", "Storage", "Total Inventory"]:
+            if col not in updated_inventory.columns:
+                updated_inventory[col] = 0.0
+        
+        for idx, row in full_df.iterrows():
+            product_name = row['Product']
+            mask = updated_inventory['Product'] == product_name
+            if mask.any():
+                for col in full_df.columns:
+                    if col in updated_inventory.columns:
+                        updated_inventory.loc[mask, col] = row[col]
+        
+        existing_products = updated_inventory['Product'].tolist()
+        for idx, row in full_df.iterrows():
+            if row['Product'] not in existing_products:
+                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
+        
+        st.session_state.beer_inventory = updated_inventory
+        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+        save_all_inventory_data()
+        st.success("✅ Changes saved!")
+        st.rerun()
+
+
+# =============================================================================
+# V3.7: SPLIT DISPLAY FOR INGREDIENTS (Real-time calculated fields)
+# =============================================================================
+
+def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
+    """
+    V3.7: Renders ingredients inventory with split display approach.
+    - Inputs (editable fields) on top
+    - Calculated fields in separate read-only display below
+    """
+    if df is None or len(df) == 0:
+        st.info("No ingredients inventory data.")
+        return
+    
+    st.markdown("#### Search & Filter Ingredients")
+    filter_cols = st.columns([2] + [1] * len(filter_columns))
+    
+    with filter_cols[0]:
+        search_term = st.text_input("🔍 Search", key="search_ingredients", placeholder="Type to search...")
+    
+    column_filters = {}
+    for i, col_name in enumerate(filter_columns):
+        with filter_cols[i + 1]:
+            if col_name in df.columns:
+                unique_values = df[col_name].dropna().unique().tolist()
+                selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_ingredients_{col_name}")
+                if selected:
+                    column_filters[col_name] = selected
+    
+    filtered_df = filter_dataframe(df, search_term, column_filters)
+    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # V3.7: Add location columns if they don't exist
+    for col in ["Upstairs Bar", "Main Bar", "Storage"]:
+        if col not in filtered_df.columns:
+            filtered_df[col] = 0.0
+        if col not in st.session_state.ingredients_inventory.columns:
+            st.session_state.ingredients_inventory[col] = 0.0
+    
+    # Define editable vs calculated columns
+    editable_cols = ["Product", "Cost", "Size/Yield", "UoM", "Upstairs Bar", "Main Bar", "Storage", "Distributor", "Order Notes"]
+    calculated_cols = ["Total Inventory", "Cost/Unit"]
+    
+    # Filter to only columns that exist
+    editable_cols = [c for c in editable_cols if c in filtered_df.columns]
+    
+    st.markdown("#### ✏️ Inputs")
+    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    edited_df = st.data_editor(
+        filtered_df[editable_cols].copy(),
+        use_container_width=True,
+        num_rows="dynamic",
+        key="editor_ingredients_split",
+        column_config={
+            "Cost": st.column_config.NumberColumn(format="$%.2f"),
+            "Size/Yield": st.column_config.NumberColumn(format="%.1f"),
+            "Upstairs Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+            "Main Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+            "Storage": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+        }
+    )
+    
+    # Calculate computed columns
+    calc_df = edited_df.copy()
+    
+    calc_df["Total Inventory"] = (
+        calc_df["Upstairs Bar"].fillna(0) + 
+        calc_df["Main Bar"].fillna(0) + 
+        calc_df["Storage"].fillna(0)
+    )
+    
+    if "Cost" in calc_df.columns and "Size/Yield" in calc_df.columns:
+        calc_df["Cost/Unit"] = calc_df.apply(
+            lambda r: round(r['Cost'] / r['Size/Yield'], 2) if r['Size/Yield'] > 0 else 0, axis=1)
+    
+    # Display calculated columns
+    st.markdown("#### 📊 Calculated Fields (Live Preview)")
+    st.caption("These values update automatically based on your edits above.")
+    
+    display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
+    
+    st.dataframe(
+        calc_df[display_calc_cols],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
+            "Cost/Unit": st.column_config.NumberColumn(format="$%.4f"),
+        }
+    )
+    
+    if st.button("💾 Save Changes", key="save_ingredients_split", type="primary"):
+        full_df = calc_df.copy()
+        updated_inventory = st.session_state.ingredients_inventory.copy()
+        
+        for col in ["Upstairs Bar", "Main Bar", "Storage", "Total Inventory"]:
+            if col not in updated_inventory.columns:
+                updated_inventory[col] = 0.0
+        
+        for idx, row in full_df.iterrows():
+            product_name = row['Product']
+            mask = updated_inventory['Product'] == product_name
+            if mask.any():
+                for col in full_df.columns:
+                    if col in updated_inventory.columns:
+                        updated_inventory.loc[mask, col] = row[col]
+        
+        existing_products = updated_inventory['Product'].tolist()
+        for idx, row in full_df.iterrows():
+            if row['Product'] not in existing_products:
+                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
+        
+        st.session_state.ingredients_inventory = updated_inventory
+        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+        save_all_inventory_data()
+        st.success("✅ Changes saved!")
+        st.rerun()
+
+
 def show_inventory_tab(df: pd.DataFrame, category: str, filter_columns: list, display_name: str):
     """Renders an inventory tab with search, filter, and editing."""
     
-    # V3.6.test: Use split display for spirits
+    # V3.7: Use split display for all categories
     if category == "spirits":
         show_spirits_inventory_split(df, filter_columns)
+        return
+    elif category == "wine":
+        show_wine_inventory_split(df, filter_columns)
+        return
+    elif category == "beer":
+        show_beer_inventory_split(df, filter_columns)
+        return
+    elif category == "ingredients":
+        show_ingredients_inventory_split(df, filter_columns)
         return
     
     if df is None or len(df) == 0:
