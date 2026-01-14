@@ -63,6 +63,7 @@
 #           - All categories now have location columns: Upstairs Bar, Main Bar, Storage
 #           - All categories calculate Total Inventory from location columns
 #           - Updated CSV instructions, processors, and sample data for all categories
+#           - Highlighted inventory columns with 📍 emoji and tooltips for better UX
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -1777,9 +1778,10 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Size (oz.)": st.column_config.NumberColumn(format="%.1f"),
             "Margin": st.column_config.NumberColumn(format="%.0f%%"),
-            "Upstairs Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
-            "Main Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
-            "Storage": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+            # V3.7: Highlighted inventory columns for better UX
+            "Upstairs Bar": st.column_config.NumberColumn("📍 Upstairs Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at upstairs bar"),
+            "Main Bar": st.column_config.NumberColumn("📍 Main Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at main bar"),
+            "Storage": st.column_config.NumberColumn("📍 Storage", format="%.1f", min_value=0.0, step=0.5, help="Inventory in storage"),
         }
     )
     
@@ -1931,9 +1933,10 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Size (oz.)": st.column_config.NumberColumn(format="%.1f"),
             "Margin": st.column_config.NumberColumn(format="%.0f%%"),
-            "Upstairs Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
-            "Main Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
-            "Storage": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+            # V3.7: Highlighted inventory columns for better UX
+            "Upstairs Bar": st.column_config.NumberColumn("📍 Upstairs Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at upstairs bar"),
+            "Main Bar": st.column_config.NumberColumn("📍 Main Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at main bar"),
+            "Storage": st.column_config.NumberColumn("📍 Storage", format="%.1f", min_value=0.0, step=0.5, help="Inventory in storage"),
         }
     )
     
@@ -2066,9 +2069,10 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
             "Cost per Keg/Case": st.column_config.NumberColumn(format="$%.2f"),
             "Size": st.column_config.NumberColumn(format="%.1f"),
             "Margin": st.column_config.NumberColumn(format="%.0f%%"),
-            "Upstairs Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
-            "Main Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
-            "Storage": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+            # V3.7: Highlighted inventory columns for better UX
+            "Upstairs Bar": st.column_config.NumberColumn("📍 Upstairs Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at upstairs bar"),
+            "Main Bar": st.column_config.NumberColumn("📍 Main Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at main bar"),
+            "Storage": st.column_config.NumberColumn("📍 Storage", format="%.1f", min_value=0.0, step=0.5, help="Inventory in storage"),
         }
     )
     
@@ -2209,9 +2213,10 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Size/Yield": st.column_config.NumberColumn(format="%.1f"),
-            "Upstairs Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
-            "Main Bar": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
-            "Storage": st.column_config.NumberColumn(format="%.1f", min_value=0.0, step=0.5),
+            # V3.7: Highlighted inventory columns for better UX
+            "Upstairs Bar": st.column_config.NumberColumn("📍 Upstairs Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at upstairs bar"),
+            "Main Bar": st.column_config.NumberColumn("📍 Main Bar", format="%.1f", min_value=0.0, step=0.5, help="Inventory at main bar"),
+            "Storage": st.column_config.NumberColumn("📍 Storage", format="%.1f", min_value=0.0, step=0.5, help="Inventory in storage"),
         }
     )
     
