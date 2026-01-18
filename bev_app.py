@@ -1513,8 +1513,11 @@ def show_csv_upload_section():
         try:
             new_data = pd.read_csv(uploaded_file)
             
+            # Strip whitespace from column names
+            new_data.columns = [col.strip() for col in new_data.columns]
+            
             # Validate required columns
-            uploaded_columns = [col.strip() for col in new_data.columns.tolist()]
+            uploaded_columns = new_data.columns.tolist()
             required = required_columns[upload_category]
             missing_columns = [col for col in required if col not in uploaded_columns]
             
@@ -1638,7 +1641,11 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
     st.caption("These values update automatically based on your edits above.")
     
-    display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
+    # Build display columns, only include Product if it exists
+    display_calc_cols = []
+    if "Product" in calc_df.columns:
+        display_calc_cols.append("Product")
+    display_calc_cols.extend([c for c in calculated_cols if c in calc_df.columns])
     
     st.dataframe(
         calc_df[display_calc_cols],
@@ -1775,7 +1782,11 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
     st.caption("These values update automatically based on your edits above.")
     
-    display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
+    # Build display columns, only include Product if it exists
+    display_calc_cols = []
+    if "Product" in calc_df.columns:
+        display_calc_cols.append("Product")
+    display_calc_cols.extend([c for c in calculated_cols if c in calc_df.columns])
     
     st.dataframe(
         calc_df[display_calc_cols],
@@ -1918,7 +1929,11 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
     st.caption("These values update automatically based on your edits above.")
     
-    display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
+    # Build display columns, only include Product if it exists
+    display_calc_cols = []
+    if "Product" in calc_df.columns:
+        display_calc_cols.append("Product")
+    display_calc_cols.extend([c for c in calculated_cols if c in calc_df.columns])
     
     st.dataframe(
         calc_df[display_calc_cols],
@@ -2042,7 +2057,11 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
     st.caption("These values update automatically based on your edits above.")
     
-    display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
+    # Build display columns, only include Product if it exists
+    display_calc_cols = []
+    if "Product" in calc_df.columns:
+        display_calc_cols.append("Product")
+    display_calc_cols.extend([c for c in calculated_cols if c in calc_df.columns])
     
     st.dataframe(
         calc_df[display_calc_cols],
