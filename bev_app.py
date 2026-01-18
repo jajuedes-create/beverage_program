@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V1
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V1.2
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -12,6 +12,18 @@
 #   V1.0 - V3.7: Development versions (see previous files for detailed history)
 #   BETA 1.0 - CLIENT CONFIGURATION SYSTEM (Production-Ready Template)
 #   bb_V1 - Butterbird initial deployment (clean slate, no sample data)
+#   bb_V1.1 - CSV upload improvements:
+#           - Added column validation with missing column error messages
+#           - Case-insensitive column name matching and normalization
+#           - Added debugging warnings for missing columns in display functions
+#           - Fixed Product column check in calculated fields display
+#   bb_V1.2 - Recipe management functionality:
+#           - Added "Add New Recipe" tab to Cocktail Builds Book
+#           - Added "Add New Recipe" tab to Bar Prep Recipe Book
+#           - Cocktail form: name, glass, sale price, up to 8 ingredients, instructions
+#           - Bar Prep form: name, category, yield, shelf life, storage, up to 10 ingredients, instructions
+#           - Duplicate recipe name validation
+#           - Auto-save to Google Sheets on recipe creation
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -3250,7 +3262,7 @@ def show_ordering():
 
 
 def show_cocktails():
-    """Placeholder for Cocktail Builds - preserved from V3.7."""
+    """Cocktail Builds Book with view and add recipe functionality."""
     show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
@@ -3263,14 +3275,105 @@ def show_cocktails():
     
     recipes = st.session_state.get('cocktail_recipes', [])
     
-    if recipes:
-        display_recipe_list(recipes, 'cocktail', session_key='cocktail_recipes')
-    else:
-        st.info("No cocktail recipes found. Add some to get started!")
+    tab_view, tab_add = st.tabs(["📖 View Recipes", "➕ Add New Recipe"])
+    
+    with tab_view:
+        if recipes:
+            display_recipe_list(recipes, 'cocktail', session_key='cocktail_recipes')
+        else:
+            st.info("No cocktail recipes found. Add one in the 'Add New Recipe' tab to get started!")
+    
+    with tab_add:
+        st.markdown("### Create New Cocktail Recipe")
+        
+        # Get available products for ingredient selection
+        available_products = get_all_available_products()
+        
+        if not available_products:
+            st.warning("⚠️ No products found in Master Inventory. Add spirits and ingredients to the Master Inventory first to build recipes.")
+        
+        with st.form("add_cocktail_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                recipe_name = st.text_input("Recipe Name *", placeholder="e.g., Old Fashioned")
+                glass_type = st.selectbox("Glass Type", ["Rocks", "Coupe", "Highball", "Collins", "Nick & Nora", "Martini", "Wine", "Flute", "Mug", "Copper Mug", "Tiki", "Other"])
+            
+            with col2:
+                sale_price = st.number_input("Menu Sale Price ($) *", min_value=0.0, step=0.50, value=14.00)
+            
+            st.markdown("#### Ingredients")
+            st.caption("Add up to 8 ingredients. Leave unused rows blank.")
+            
+            ingredients_data = []
+            
+            # Create 8 ingredient rows
+            for i in range(8):
+                col_prod, col_amt, col_unit = st.columns([3, 1, 1])
+                with col_prod:
+                    product = st.selectbox(
+                        f"Ingredient {i+1}",
+                        options=[""] + available_products,
+                        key=f"cocktail_ing_prod_{i}",
+                        label_visibility="collapsed" if i > 0 else "visible"
+                    )
+                with col_amt:
+                    amount = st.number_input(
+                        "Amount",
+                        min_value=0.0,
+                        step=0.25,
+                        value=0.0,
+                        key=f"cocktail_ing_amt_{i}",
+                        label_visibility="collapsed" if i > 0 else "visible"
+                    )
+                with col_unit:
+                    unit = st.selectbox(
+                        "Unit",
+                        options=["oz", "dashes", "barspoon", "drops", "rinse", "each", "ml"],
+                        key=f"cocktail_ing_unit_{i}",
+                        label_visibility="collapsed" if i > 0 else "visible"
+                    )
+                
+                if product and amount > 0:
+                    ingredients_data.append({"product": product, "amount": amount, "unit": unit})
+            
+            st.markdown("#### Instructions")
+            instructions = st.text_area("Build/Preparation Instructions", placeholder="e.g., Stir with ice, strain into rocks glass with large ice cube. Express orange peel.", height=100)
+            
+            submitted = st.form_submit_button("💾 Save Recipe", type="primary", use_container_width=True)
+            
+            if submitted:
+                if not recipe_name:
+                    st.error("❌ Recipe name is required.")
+                elif not ingredients_data:
+                    st.error("❌ At least one ingredient is required.")
+                elif sale_price <= 0:
+                    st.error("❌ Sale price must be greater than $0.")
+                else:
+                    # Check for duplicate name
+                    existing_names = [r['name'].lower() for r in recipes]
+                    if recipe_name.lower() in existing_names:
+                        st.error(f"❌ A recipe named '{recipe_name}' already exists.")
+                    else:
+                        new_recipe = {
+                            "name": recipe_name,
+                            "glass": glass_type,
+                            "sale_price": sale_price,
+                            "ingredients": ingredients_data,
+                            "instructions": instructions
+                        }
+                        
+                        if 'cocktail_recipes' not in st.session_state:
+                            st.session_state.cocktail_recipes = []
+                        
+                        st.session_state.cocktail_recipes.append(new_recipe)
+                        save_recipes('cocktail')
+                        st.success(f"✅ '{recipe_name}' added successfully!")
+                        st.rerun()
 
 
 def show_bar_prep():
-    """Placeholder for Bar Prep - preserved from V3.7."""
+    """Bar Prep Recipe Book with view and add recipe functionality."""
     show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
@@ -3283,13 +3386,116 @@ def show_bar_prep():
     
     recipes = st.session_state.get('bar_prep_recipes', [])
     
-    tab_syrups, tab_batched = st.tabs(["🫙 Syrups & Infusions", "🍸 Batched Cocktails"])
+    tab_syrups, tab_batched, tab_add = st.tabs(["🫙 Syrups & Infusions", "🍸 Batched Cocktails", "➕ Add New Recipe"])
     
     with tab_syrups:
-        display_recipe_list(recipes, 'bar_prep', category_filter='Syrups', session_key='bar_prep_recipes')
+        syrups = [r for r in recipes if r.get('category') == 'Syrups']
+        if syrups:
+            display_recipe_list(recipes, 'bar_prep', category_filter='Syrups', session_key='bar_prep_recipes')
+        else:
+            st.info("No syrup recipes found. Add one in the 'Add New Recipe' tab to get started!")
     
     with tab_batched:
-        display_recipe_list(recipes, 'bar_prep', category_filter='Batched Cocktails', session_key='bar_prep_recipes')
+        batched = [r for r in recipes if r.get('category') == 'Batched Cocktails']
+        if batched:
+            display_recipe_list(recipes, 'bar_prep', category_filter='Batched Cocktails', session_key='bar_prep_recipes')
+        else:
+            st.info("No batched cocktail recipes found. Add one in the 'Add New Recipe' tab to get started!")
+    
+    with tab_add:
+        st.markdown("### Create New Bar Prep Recipe")
+        
+        # Get available products for ingredient selection
+        available_products = get_all_available_products()
+        
+        if not available_products:
+            st.warning("⚠️ No products found in Master Inventory. Add spirits and ingredients to the Master Inventory first to build recipes.")
+        
+        with st.form("add_bar_prep_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                recipe_name = st.text_input("Recipe Name *", placeholder="e.g., Simple Syrup")
+                category = st.selectbox("Category *", ["Syrups", "Batched Cocktails"])
+                yield_oz = st.number_input("Yield (oz) *", min_value=1.0, step=1.0, value=32.0)
+            
+            with col2:
+                yield_description = st.text_input("Yield Description", placeholder="e.g., 1 quart, ~22 cocktails")
+                shelf_life = st.text_input("Shelf Life", placeholder="e.g., 2-3 weeks refrigerated")
+                storage = st.text_input("Storage Instructions", placeholder="e.g., Refrigerate in sealed container")
+            
+            st.markdown("#### Ingredients")
+            st.caption("Add up to 10 ingredients. Leave unused rows blank.")
+            
+            ingredients_data = []
+            
+            # Create 10 ingredient rows for bar prep (batches often have more ingredients)
+            for i in range(10):
+                col_prod, col_amt, col_unit = st.columns([3, 1, 1])
+                with col_prod:
+                    # For bar prep, allow custom ingredient names (for things like sugar, water, etc.)
+                    product = st.text_input(
+                        f"Ingredient {i+1}",
+                        placeholder="Product name or select from inventory",
+                        key=f"barprep_ing_prod_{i}",
+                        label_visibility="collapsed" if i > 0 else "visible"
+                    )
+                with col_amt:
+                    amount = st.number_input(
+                        "Amount",
+                        min_value=0.0,
+                        step=0.5,
+                        value=0.0,
+                        key=f"barprep_ing_amt_{i}",
+                        label_visibility="collapsed" if i > 0 else "visible"
+                    )
+                with col_unit:
+                    unit = st.selectbox(
+                        "Unit",
+                        options=["oz", "cups", "ml", "each", "lbs", "grams", "dashes", "barspoon"],
+                        key=f"barprep_ing_unit_{i}",
+                        label_visibility="collapsed" if i > 0 else "visible"
+                    )
+                
+                if product and amount > 0:
+                    ingredients_data.append({"product": product, "amount": amount, "unit": unit})
+            
+            st.markdown("#### Instructions")
+            instructions = st.text_area("Preparation Instructions", placeholder="e.g., Combine equal parts sugar and hot water. Stir until dissolved. Cool before use.", height=100)
+            
+            submitted = st.form_submit_button("💾 Save Recipe", type="primary", use_container_width=True)
+            
+            if submitted:
+                if not recipe_name:
+                    st.error("❌ Recipe name is required.")
+                elif not ingredients_data:
+                    st.error("❌ At least one ingredient is required.")
+                elif yield_oz <= 0:
+                    st.error("❌ Yield must be greater than 0 oz.")
+                else:
+                    # Check for duplicate name
+                    existing_names = [r['name'].lower() for r in recipes]
+                    if recipe_name.lower() in existing_names:
+                        st.error(f"❌ A recipe named '{recipe_name}' already exists.")
+                    else:
+                        new_recipe = {
+                            "name": recipe_name,
+                            "category": category,
+                            "yield_oz": yield_oz,
+                            "yield_description": yield_description,
+                            "shelf_life": shelf_life,
+                            "storage": storage,
+                            "ingredients": ingredients_data,
+                            "instructions": instructions
+                        }
+                        
+                        if 'bar_prep_recipes' not in st.session_state:
+                            st.session_state.bar_prep_recipes = []
+                        
+                        st.session_state.bar_prep_recipes.append(new_recipe)
+                        save_recipes('bar_prep')
+                        st.success(f"✅ '{recipe_name}' added successfully!")
+                        st.rerun()
 
 
 def show_cogs():
