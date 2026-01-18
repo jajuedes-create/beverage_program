@@ -1516,9 +1516,25 @@ def show_csv_upload_section():
             # Strip whitespace from column names
             new_data.columns = [col.strip() for col in new_data.columns]
             
-            # Validate required columns
-            uploaded_columns = new_data.columns.tolist()
+            # Create case-insensitive column mapping for normalization
+            # This allows "product" to match "Product", etc.
             required = required_columns[upload_category]
+            uploaded_columns = new_data.columns.tolist()
+            
+            # Build a mapping of lowercase -> expected case
+            column_mapping = {}
+            for req_col in required:
+                for up_col in uploaded_columns:
+                    if up_col.lower() == req_col.lower() and up_col != req_col:
+                        column_mapping[up_col] = req_col
+            
+            # Rename columns to match expected case
+            if column_mapping:
+                new_data = new_data.rename(columns=column_mapping)
+                uploaded_columns = new_data.columns.tolist()
+                st.info(f"ℹ️ Normalized column names: {', '.join([f'{k} → {v}' for k, v in column_mapping.items()])}")
+            
+            # Validate required columns
             missing_columns = [col for col in required if col not in uploaded_columns]
             
             if missing_columns:
@@ -1591,8 +1607,17 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Use", "Distributor", "Order Notes"]
     calculated_cols = ["Total Inventory", "Cost/Oz", "Neat Price", "Value", "Suggested Retail"]
     
-    # Filter to only columns that exist
+    # Filter to only columns that exist and warn about missing ones
+    missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
+    if missing_cols:
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
+        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+    
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
+    
+    if not editable_cols:
+        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        return
     
     st.markdown("#### ✏️ Inputs")
     st.caption("Edit values below. Calculated fields will update automatically in the preview.")
@@ -1738,7 +1763,17 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"]
     calculated_cols = ["Total Inventory", "Bottle Price", "Value", "BTG", "Suggested Retail"]
     
+    # Filter to only columns that exist and warn about missing ones
+    missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
+    if missing_cols:
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
+        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+    
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
+    
+    if not editable_cols:
+        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        return
     
     st.markdown("#### ✏️ Inputs")
     st.caption("Edit values below. Calculated fields will update automatically in the preview.")
@@ -1875,7 +1910,17 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     editable_cols = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"]
     calculated_cols = ["Total Inventory", "Cost/Unit", "Menu Price", "Value"]
     
+    # Filter to only columns that exist and warn about missing ones
+    missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
+    if missing_cols:
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
+        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+    
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
+    
+    if not editable_cols:
+        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        return
     
     st.markdown("#### ✏️ Inputs")
     st.caption("Edit values below. Calculated fields will update automatically in the preview.")
@@ -2021,7 +2066,17 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     editable_cols = ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"]
     calculated_cols = ["Total Inventory", "Cost/Unit"]
     
+    # Filter to only columns that exist and warn about missing ones
+    missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
+    if missing_cols:
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
+        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+    
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
+    
+    if not editable_cols:
+        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        return
     
     st.markdown("#### ✏️ Inputs")
     st.caption("Edit values below. Calculated fields will update automatically in the preview.")
