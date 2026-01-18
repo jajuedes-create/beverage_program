@@ -1465,13 +1465,21 @@ def show_inventory():
 
 
 def show_csv_upload_section():
-    """Shows the CSV upload section with instructions."""
+    """Shows the CSV upload section with instructions and column validation."""
     loc1 = get_location_1()
     loc2 = get_location_2()
     loc3 = get_location_3()
     
     st.markdown("Upload a CSV file to replace inventory data for any category.")
     upload_category = st.selectbox("Select category:", ["Spirits", "Wine", "Beer", "Ingredients"], key="upload_category")
+    
+    # Required columns for each category (used for validation)
+    required_columns = {
+        "Spirits": ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Use", "Distributor", "Order Notes"],
+        "Wine": ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"],
+        "Beer": ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"],
+        "Ingredients": ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"],
+    }
     
     # CSV Upload Instructions
     instructions = {
@@ -1504,23 +1512,37 @@ def show_csv_upload_section():
     if uploaded_file is not None:
         try:
             new_data = pd.read_csv(uploaded_file)
-            st.dataframe(new_data.head(), use_container_width=True)
             
-            if st.button("✅ Import Data", key="confirm_upload"):
-                processors = {
-                    "Spirits": (process_uploaded_spirits, 'spirits_inventory'),
-                    "Wine": (process_uploaded_wine, 'wine_inventory'),
-                    "Beer": (process_uploaded_beer, 'beer_inventory'),
-                    "Ingredients": (process_uploaded_ingredients, 'ingredients_inventory'),
-                }
-                func, key = processors[upload_category]
-                st.session_state[key] = func(new_data)
-                st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-                save_all_inventory_data()
-                st.success(f"✅ {upload_category} inventory uploaded!")
-                st.rerun()
+            # Validate required columns
+            uploaded_columns = [col.strip() for col in new_data.columns.tolist()]
+            required = required_columns[upload_category]
+            missing_columns = [col for col in required if col not in uploaded_columns]
+            
+            if missing_columns:
+                st.error(f"❌ **Missing required columns:** {', '.join(missing_columns)}")
+                st.warning("Please update your CSV file to include all required columns and try again.")
+                st.markdown("**Your file contains these columns:**")
+                st.code(", ".join(uploaded_columns))
+            else:
+                st.success("✅ All required columns found!")
+                st.dataframe(new_data.head(), use_container_width=True)
+                
+                if st.button("✅ Import Data", key="confirm_upload"):
+                    processors = {
+                        "Spirits": (process_uploaded_spirits, 'spirits_inventory'),
+                        "Wine": (process_uploaded_wine, 'wine_inventory'),
+                        "Beer": (process_uploaded_beer, 'beer_inventory'),
+                        "Ingredients": (process_uploaded_ingredients, 'ingredients_inventory'),
+                    }
+                    func, key = processors[upload_category]
+                    st.session_state[key] = func(new_data)
+                    st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+                    save_all_inventory_data()
+                    st.success(f"✅ {upload_category} inventory uploaded!")
+                    st.rerun()
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"❌ **Error reading CSV file:** {e}")
+            st.warning("Please check that your file is a valid CSV format and try again.")
 
 
 # =============================================================================
