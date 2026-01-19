@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V1.3
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V1.4
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -27,6 +27,11 @@
 #   bb_V1.3 - Bar Prep ingredient selection update:
 #           - Changed Bar Prep ingredients from text input to dropdown selector
 #           - Ingredients now selected from Master Inventory (same as Cocktail Builds)
+#   bb_V1.4 - CSV upload UX improvement:
+#           - Moved CSV upload into each inventory tab (Spirits, Wine, Beer, Ingredients)
+#           - Each tab now shows only its category-specific upload instructions
+#           - Removed confusing category dropdown from upload section
+#           - Unique button keys per category to prevent conflicts
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -1462,31 +1467,30 @@ def show_inventory():
     
     with tab_spirits:
         show_spirits_inventory_split(st.session_state.get('spirits_inventory', pd.DataFrame()), ["Type", "Distributor", "Use"])
+        with st.expander("📤 Upload Spirits Inventory (CSV)", expanded=False):
+            show_csv_upload_section("Spirits")
     
     with tab_wine:
         show_wine_inventory_split(st.session_state.get('wine_inventory', pd.DataFrame()), ["Type", "Distributor"])
+        with st.expander("📤 Upload Wine Inventory (CSV)", expanded=False):
+            show_csv_upload_section("Wine")
     
     with tab_beer:
         show_beer_inventory_split(st.session_state.get('beer_inventory', pd.DataFrame()), ["Type", "Distributor"])
+        with st.expander("📤 Upload Beer Inventory (CSV)", expanded=False):
+            show_csv_upload_section("Beer")
     
     with tab_ingredients:
         show_ingredients_inventory_split(st.session_state.get('ingredients_inventory', pd.DataFrame()), ["Distributor"])
-    
-    st.markdown("---")
-    
-    # CSV Upload
-    with st.expander("📤 Upload Inventory Data (CSV)", expanded=False):
-        show_csv_upload_section()
+        with st.expander("📤 Upload Ingredients Inventory (CSV)", expanded=False):
+            show_csv_upload_section("Ingredients")
 
 
-def show_csv_upload_section():
-    """Shows the CSV upload section with instructions and column validation."""
+def show_csv_upload_section(upload_category: str):
+    """Shows the CSV upload section with instructions and column validation for a specific category."""
     loc1 = get_location_1()
     loc2 = get_location_2()
     loc3 = get_location_3()
-    
-    st.markdown("Upload a CSV file to replace inventory data for any category.")
-    upload_category = st.selectbox("Select category:", ["Spirits", "Wine", "Beer", "Ingredients"], key="upload_category")
     
     # Required columns for each category (used for validation)
     required_columns = {
@@ -1561,7 +1565,7 @@ def show_csv_upload_section():
                 st.success("✅ All required columns found!")
                 st.dataframe(new_data.head(), use_container_width=True)
                 
-                if st.button("✅ Import Data", key="confirm_upload"):
+                if st.button("✅ Import Data", key=f"confirm_upload_{upload_category.lower()}"):
                     processors = {
                         "Spirits": (process_uploaded_spirits, 'spirits_inventory'),
                         "Wine": (process_uploaded_wine, 'wine_inventory'),
