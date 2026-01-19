@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V1.4
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V1.5
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -32,6 +32,12 @@
 #           - Each tab now shows only its category-specific upload instructions
 #           - Removed confusing category dropdown from upload section
 #           - Unique button keys per category to prevent conflicts
+#   bb_V1.5 - Google Sheets data type handling:
+#           - Added numeric conversion for all calculation columns
+#           - Handles currency-formatted strings ($25.00) from Google Sheets
+#           - Handles percentage-formatted strings from Google Sheets
+#           - Prevents division errors when data contains non-numeric values
+#           - Applied fix to Spirits, Wine, Beer, and Ingredients inventory displays
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -1660,6 +1666,16 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     # Calculate computed columns from edited data
     calc_df = edited_df.copy()
     
+    # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
+    numeric_cols = ["Cost", "Size (oz.)", "Margin", loc1, loc2, loc3]
+    for col in numeric_cols:
+        if col in calc_df.columns:
+            # Remove currency symbols and convert to numeric
+            calc_df[col] = pd.to_numeric(
+                calc_df[col].astype(str).str.replace(r'[$,%]', '', regex=True).str.strip(),
+                errors='coerce'
+            ).fillna(0)
+    
     # Total Inventory = sum of all locations
     calc_df["Total Inventory"] = (
         calc_df[loc1].fillna(0) + 
@@ -1679,7 +1695,7 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         calc_df["Value"] = round(calc_df["Cost"] * calc_df["Total Inventory"], 2)
     
     if "Cost" in calc_df.columns:
-        calc_df["Suggested Retail"] = calc_df["Cost"].apply(lambda x: math.ceil(x * 1.44))
+        calc_df["Suggested Retail"] = calc_df["Cost"].apply(lambda x: math.ceil(x * 1.44) if pd.notna(x) and x > 0 else 0)
     
     # Display calculated columns in read-only table
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
@@ -1815,6 +1831,16 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     # Calculate computed columns
     calc_df = edited_df.copy()
     
+    # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
+    numeric_cols = ["Cost", "Size (oz.)", "Margin", loc1, loc2, loc3]
+    for col in numeric_cols:
+        if col in calc_df.columns:
+            # Remove currency symbols and convert to numeric
+            calc_df[col] = pd.to_numeric(
+                calc_df[col].astype(str).str.replace(r'[$,%]', '', regex=True).str.strip(),
+                errors='coerce'
+            ).fillna(0)
+    
     calc_df["Total Inventory"] = (
         calc_df[loc1].fillna(0) + 
         calc_df[loc2].fillna(0) + 
@@ -1829,8 +1855,8 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
         calc_df["Value"] = round(calc_df["Cost"] * calc_df["Total Inventory"], 2)
     
     if "Cost" in calc_df.columns:
-        calc_df["BTG"] = calc_df["Cost"].apply(lambda x: math.ceil(x / 4))
-        calc_df["Suggested Retail"] = calc_df["Cost"].apply(lambda x: math.ceil(x * 1.44))
+        calc_df["BTG"] = calc_df["Cost"].apply(lambda x: math.ceil(x / 4) if pd.notna(x) and x > 0 else 0)
+        calc_df["Suggested Retail"] = calc_df["Cost"].apply(lambda x: math.ceil(x * 1.44) if pd.notna(x) and x > 0 else 0)
     
     # Display calculated columns
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
@@ -1961,6 +1987,16 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     
     # Calculate computed columns
     calc_df = edited_df.copy()
+    
+    # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
+    numeric_cols = ["Cost per Keg/Case", "Size", "Margin", loc1, loc2, loc3]
+    for col in numeric_cols:
+        if col in calc_df.columns:
+            # Remove currency symbols and convert to numeric
+            calc_df[col] = pd.to_numeric(
+                calc_df[col].astype(str).str.replace(r'[$,%]', '', regex=True).str.strip(),
+                errors='coerce'
+            ).fillna(0)
     
     calc_df["Total Inventory"] = (
         calc_df[loc1].fillna(0) + 
@@ -2116,6 +2152,16 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     
     # Calculate computed columns
     calc_df = edited_df.copy()
+    
+    # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
+    numeric_cols = ["Cost", "Size/Yield", loc1, loc2, loc3]
+    for col in numeric_cols:
+        if col in calc_df.columns:
+            # Remove currency symbols and convert to numeric
+            calc_df[col] = pd.to_numeric(
+                calc_df[col].astype(str).str.replace(r'[$,%]', '', regex=True).str.strip(),
+                errors='coerce'
+            ).fillna(0)
     
     calc_df["Total Inventory"] = (
         calc_df[loc1].fillna(0) + 
