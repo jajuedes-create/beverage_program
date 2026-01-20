@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.3
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.4
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -84,6 +84,13 @@
 #           - Clean login screen with branding
 #           - If no password configured, app remains open access
 #           - Uses try/except for robust secrets access
+#   bb_V2.4 - Auto-sync Syrups to Ingredients inventory:
+#           - New syrup recipes automatically added to Ingredients inventory
+#           - Calculates total batch cost from recipe ingredients
+#           - Sets Cost = total batch cost, Size/Yield = recipe yield, UoM = oz
+#           - Distributor set to "House-made", Order Notes = "Bar Prep Recipe"
+#           - Sync button to add existing syrups that weren't auto-added
+#           - Syrups remain in Ingredients until manually deleted
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -831,6 +838,90 @@ def calculate_recipe_cost(ingredients: list) -> float:
     """Calculates total cost for a recipe's ingredients."""
     return sum(get_product_cost(ing['product'], ing['amount'], ing.get('unit', 'oz'))[1] 
                for ing in ingredients)
+
+
+def add_syrup_to_ingredients(recipe: dict) -> bool:
+    """
+    Adds a Syrup/Infusion recipe to the Ingredients inventory.
+    
+    Args:
+        recipe: Dictionary with recipe data including 'name', 'yield_oz', 'ingredients'
+    
+    Returns:
+        True if added successfully, False if already exists
+    """
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
+    recipe_name = recipe.get('name', '')
+    yield_oz = recipe.get('yield_oz', 0)
+    ingredients_list = recipe.get('ingredients', [])
+    
+    if not recipe_name or yield_oz <= 0:
+        return False
+    
+    # Calculate total batch cost from ingredients
+    total_cost = calculate_recipe_cost(ingredients_list)
+    
+    # Initialize ingredients inventory if needed
+    if 'ingredients_inventory' not in st.session_state:
+        st.session_state.ingredients_inventory = get_sample_ingredients()
+    
+    ingredients_df = st.session_state.ingredients_inventory
+    
+    # Check if product already exists (case-insensitive)
+    if len(ingredients_df) > 0 and 'Product' in ingredients_df.columns:
+        existing = ingredients_df[ingredients_df['Product'].str.lower().str.strip() == recipe_name.lower().strip()]
+        if len(existing) > 0:
+            # Already exists, don't add duplicate
+            return False
+    
+    # Create new ingredient row
+    new_row = {
+        'Product': recipe_name,
+        'Cost': round(total_cost, 2),
+        'Size/Yield': yield_oz,
+        'UoM': 'oz',
+        'Cost/Unit': round(total_cost / yield_oz, 4) if yield_oz > 0 else 0,
+        loc1: 0.0,
+        loc2: 0.0,
+        loc3: 0.0,
+        'Total Inventory': 0.0,
+        'Distributor': 'House-made',
+        'Order Notes': 'Bar Prep Recipe'
+    }
+    
+    # Add to ingredients inventory
+    new_df = pd.DataFrame([new_row])
+    st.session_state.ingredients_inventory = pd.concat([ingredients_df, new_df], ignore_index=True)
+    
+    # Save to Google Sheets
+    save_all_inventory_data()
+    
+    return True
+
+
+def sync_syrups_to_ingredients() -> Tuple[int, int]:
+    """
+    Syncs all existing Syrup recipes to Ingredients inventory.
+    
+    Returns:
+        Tuple of (added_count, skipped_count)
+    """
+    recipes = st.session_state.get('bar_prep_recipes', [])
+    syrups = [r for r in recipes if r.get('category') == 'Syrups']
+    
+    added = 0
+    skipped = 0
+    
+    for recipe in syrups:
+        if add_syrup_to_ingredients(recipe):
+            added += 1
+        else:
+            skipped += 1
+    
+    return (added, skipped)
 
 
 def get_all_available_products() -> list:
@@ -3771,6 +3862,20 @@ def show_bar_prep():
     with tab_syrups:
         syrups = [r for r in recipes if r.get('category') == 'Syrups']
         if syrups:
+            # Sync button for existing recipes
+            with st.expander("🔄 Sync Syrups to Ingredients Inventory", expanded=False):
+                st.caption("This will add any syrup recipes that aren't already in your Ingredients inventory.")
+                if st.button("Sync All Syrups to Ingredients", key="sync_syrups_btn"):
+                    added, skipped = sync_syrups_to_ingredients()
+                    if added > 0:
+                        st.success(f"✅ Added {added} syrup(s) to Ingredients inventory!")
+                    if skipped > 0:
+                        st.info(f"ℹ️ {skipped} syrup(s) already exist in Ingredients and were skipped.")
+                    if added == 0 and skipped == 0:
+                        st.info("No syrups to sync.")
+                    if added > 0:
+                        st.rerun()
+            
             display_recipe_list(recipes, 'bar_prep', category_filter='Syrups', session_key='bar_prep_recipes')
         else:
             st.info("No syrup recipes found. Add one in the 'Add New Recipe' tab to get started!")
@@ -3915,13 +4020,21 @@ def show_bar_prep():
                     st.session_state.bar_prep_recipes.append(new_recipe)
                     save_recipes('bar_prep')
                     
+                    # If this is a Syrup recipe, add it to Ingredients inventory
+                    added_to_inventory = False
+                    if category == "Syrups":
+                        added_to_inventory = add_syrup_to_ingredients(new_recipe)
+                    
                     # Reset form
                     st.session_state.barprep_ingredient_count = 1
                     for key in list(st.session_state.keys()):
                         if key.startswith("barprep_ing_") or key in ["barprep_recipe_name", "barprep_instructions", "barprep_yield_desc", "barprep_shelf_life", "barprep_storage"]:
                             del st.session_state[key]
                     
-                    st.success(f"✅ '{recipe_name}' added successfully!")
+                    if added_to_inventory:
+                        st.success(f"✅ '{recipe_name}' added successfully and synced to Ingredients inventory!")
+                    else:
+                        st.success(f"✅ '{recipe_name}' added successfully!")
                     st.rerun()
 
 
