@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.4
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.5
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -91,6 +91,15 @@
 #           - Distributor set to "House-made", Order Notes = "Bar Prep Recipe"
 #           - Sync button to add existing syrups that weren't auto-added
 #           - Syrups remain in Ingredients until manually deleted
+#   bb_V2.5 - Batch scaling for Bar Prep recipes:
+#           - Added scaling controls at top of each expanded recipe
+#           - Preset buttons: ½×, 1×, 2×, 3×, 4×
+#           - Custom multiplier input (0.1 to 20×, step 0.25)
+#           - Scales ingredient amounts and total yield
+#           - Shows scaled batch cost with indicator
+#           - Cost/oz remains constant (doesn't change with scale)
+#           - Instructions, shelf life, storage unchanged
+#           - Scaling is temporary/display only - never saves over base recipe
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -1218,44 +1227,129 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
     """
     Reusable recipe card display for both Cocktails and Bar Prep.
     """
-    # Calculate costs
-    total_cost = calculate_recipe_cost(recipe.get('ingredients', []))
+    # Calculate base costs
+    base_cost = calculate_recipe_cost(recipe.get('ingredients', []))
     
     # Create a safe key from recipe name
     safe_name = recipe['name'].replace(' ', '_').replace('/', '_').replace("'", "")
     
     if recipe_type == 'bar_prep':
         yield_oz = recipe.get('yield_oz', 32)
-        cost_per_oz = total_cost / yield_oz if yield_oz > 0 else 0
-        header = f"**{recipe['name']}** | Yield: {recipe.get('yield_description', '')} | Batch: {format_currency(total_cost)} | Cost/oz: {format_currency(cost_per_oz)}"
+        cost_per_oz = base_cost / yield_oz if yield_oz > 0 else 0
+        header = f"**{recipe['name']}** | Yield: {recipe.get('yield_description', '')} | Batch: {format_currency(base_cost)} | Cost/oz: {format_currency(cost_per_oz)}"
     else:
         sale_price = recipe.get('sale_price', 0)
-        margin = ((sale_price - total_cost) / sale_price * 100) if sale_price > 0 else 0
-        header = f"**{recipe['name']}** | Cost: {format_currency(total_cost)} | Price: {format_currency(sale_price)} | Margin: {margin:.1f}%"
+        margin = ((sale_price - base_cost) / sale_price * 100) if sale_price > 0 else 0
+        header = f"**{recipe['name']}** | Cost: {format_currency(base_cost)} | Price: {format_currency(sale_price)} | Margin: {margin:.1f}%"
     
     with st.expander(header, expanded=False):
+        # Batch scaling for bar_prep recipes
+        if recipe_type == 'bar_prep':
+            st.markdown("#### 📏 Batch Scaling")
+            scale_col1, scale_col2, scale_col3 = st.columns([2, 1, 1])
+            
+            with scale_col1:
+                # Preset buttons
+                preset_cols = st.columns(5)
+                scale_key = f"scale_{recipe_type}_{safe_name}_{idx}"
+                
+                # Initialize scale in session state if not exists
+                if scale_key not in st.session_state:
+                    st.session_state[scale_key] = 1.0
+                
+                with preset_cols[0]:
+                    if st.button("½×", key=f"half_{safe_name}_{idx}", help="Half batch"):
+                        st.session_state[scale_key] = 0.5
+                        st.rerun()
+                with preset_cols[1]:
+                    if st.button("1×", key=f"single_{safe_name}_{idx}", help="Standard batch"):
+                        st.session_state[scale_key] = 1.0
+                        st.rerun()
+                with preset_cols[2]:
+                    if st.button("2×", key=f"double_{safe_name}_{idx}", help="Double batch"):
+                        st.session_state[scale_key] = 2.0
+                        st.rerun()
+                with preset_cols[3]:
+                    if st.button("3×", key=f"triple_{safe_name}_{idx}", help="Triple batch"):
+                        st.session_state[scale_key] = 3.0
+                        st.rerun()
+                with preset_cols[4]:
+                    if st.button("4×", key=f"quad_{safe_name}_{idx}", help="Quadruple batch"):
+                        st.session_state[scale_key] = 4.0
+                        st.rerun()
+            
+            with scale_col2:
+                custom_scale = st.number_input(
+                    "Custom",
+                    min_value=0.1,
+                    max_value=20.0,
+                    value=st.session_state[scale_key],
+                    step=0.25,
+                    key=f"custom_scale_{safe_name}_{idx}",
+                    help="Enter custom multiplier"
+                )
+                if custom_scale != st.session_state[scale_key]:
+                    st.session_state[scale_key] = custom_scale
+                    st.rerun()
+            
+            with scale_col3:
+                current_scale = st.session_state[scale_key]
+                if current_scale != 1.0:
+                    st.markdown(f"**Scaling: {current_scale}×**")
+                else:
+                    st.markdown("**Standard Batch**")
+            
+            # Get the current scale factor
+            scale_factor = st.session_state[scale_key]
+            
+            # Calculate scaled values
+            scaled_cost = base_cost * scale_factor
+            scaled_yield = yield_oz * scale_factor
+            cost_per_oz = base_cost / yield_oz if yield_oz > 0 else 0  # Cost/oz stays same regardless of scale
+            
+            st.markdown("---")
+        else:
+            scale_factor = 1.0
+            scaled_cost = base_cost
+        
         col_info, col_cost = st.columns([2, 1])
         
         with col_info:
             if recipe_type == 'bar_prep':
-                st.markdown(f"**Yield:** {recipe.get('yield_description', '')} ({recipe.get('yield_oz', 0)} oz)")
+                # Show scaled yield
+                base_yield_desc = recipe.get('yield_description', '')
+                if scale_factor != 1.0:
+                    st.markdown(f"**Yield:** {scaled_yield:.1f} oz *(scaled from {yield_oz} oz)*")
+                else:
+                    st.markdown(f"**Yield:** {base_yield_desc} ({yield_oz} oz)")
                 st.markdown(f"**Shelf Life:** {recipe.get('shelf_life', 'N/A')}")
                 st.markdown(f"**Storage:** {recipe.get('storage', 'N/A')}")
             else:
                 st.markdown(f"**Glass:** {recipe.get('glass', 'N/A')}")
                 st.markdown(f"**Sale Price:** {format_currency(recipe.get('sale_price', 0))}")
             
-            # Ingredients table
+            # Ingredients table (scaled for bar_prep)
             st.markdown("**Ingredients:**")
             ing_data = []
             for ing in recipe.get('ingredients', []):
-                _, ing_cost = get_product_cost(ing['product'], ing['amount'], ing.get('unit', 'oz'))
-                ing_data.append({
-                    "Ingredient": ing['product'],
-                    "Amount": ing['amount'],
-                    "Unit": ing.get('unit', 'oz'),
-                    "Cost": ing_cost
-                })
+                base_amount = ing['amount']
+                scaled_amount = base_amount * scale_factor
+                _, ing_cost = get_product_cost(ing['product'], scaled_amount, ing.get('unit', 'oz'))
+                
+                if recipe_type == 'bar_prep' and scale_factor != 1.0:
+                    ing_data.append({
+                        "Ingredient": ing['product'],
+                        "Amount": f"{scaled_amount:.2f}",
+                        "Unit": ing.get('unit', 'oz'),
+                        "Cost": ing_cost
+                    })
+                else:
+                    ing_data.append({
+                        "Ingredient": ing['product'],
+                        "Amount": base_amount,
+                        "Unit": ing.get('unit', 'oz'),
+                        "Cost": ing_cost
+                    })
             
             if ing_data:
                 st.dataframe(
@@ -1271,12 +1365,17 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
         
         with col_cost:
             st.markdown("#### 💰 Costing")
-            st.metric("Total Cost", format_currency(total_cost))
             
             if recipe_type == 'bar_prep':
+                if scale_factor != 1.0:
+                    st.metric("Scaled Batch Cost", format_currency(scaled_cost), delta=f"{scale_factor}× batch")
+                    st.caption(f"Base batch: {format_currency(base_cost)}")
+                else:
+                    st.metric("Batch Cost", format_currency(base_cost))
                 st.metric("Cost/oz", format_currency(cost_per_oz))
                 st.metric("Cost/quart", format_currency(cost_per_oz * 32))
             else:
+                st.metric("Total Cost", format_currency(base_cost))
                 st.metric("Sale Price", format_currency(recipe.get('sale_price', 0)))
                 st.metric("Margin", f"{margin:.1f}%")
         
