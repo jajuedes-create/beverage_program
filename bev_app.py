@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V1.8
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.0
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -55,6 +55,16 @@
 #           - Neat Pour = (2 * Cost/Oz) / Target Margin (renamed from Neat Price)
 #           - Double = (3 * Cost/Oz) / Target Margin
 #           - Final calculated field order: Product, Cost/Oz, Shot, Single, Neat Pour, Double, Total Inventory, Value
+#   bb_V1.9 - Beer inventory field updates:
+#           - Renamed "Margin" to "Target Margin"
+#           - Moved Target Margin to right of Storage, left of Distributor
+#           - New Input field order: Product, Type, Cost per Keg/Case, Size, UoM,
+#             [loc1], [loc2], [loc3], Target Margin, Distributor, Order Notes
+#   bb_V2.0 - Beer calculated fields updates:
+#           - Reordered Calculated Fields: Product, Cost/Unit, Menu Price, Total Inventory, Value
+#           - Fixed Menu Price calculation:
+#             * Half Barrel, Quarter Barrel, Sixtel: (16 * Cost/Unit) / Target Margin
+#             * Case: Cost/Unit / Target Margin
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -929,8 +939,8 @@ def get_sample_beers():
     loc3 = get_location_3()
     
     columns = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", 
-               "Cost/Unit", "Margin", "Menu Price", loc1, loc2, loc3,
-               "Total Inventory", "Value", "Distributor", "Order Notes"]
+               loc1, loc2, loc3, "Target Margin", "Distributor", "Order Notes",
+               "Total Inventory", "Cost/Unit", "Menu Price", "Value"]
     return pd.DataFrame(columns=columns)
 
 
@@ -1277,8 +1287,8 @@ def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         for col in ['Cost per Keg/Case', 'Cost/Unit', 'Menu Price', 'Value']:
             df = clean_currency_column(df, col)
-        if 'Margin' in df.columns:
-            df = clean_percentage_column(df, 'Margin')
+        if 'Target Margin' in df.columns:
+            df = clean_percentage_column(df, 'Target Margin')
         for col in ['Size', 'Inventory']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -1301,16 +1311,18 @@ def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
             df['Value'] = round(df['Cost per Keg/Case'] * df['Total Inventory'], 2)
         
         # Menu Price calculation
-        if 'Cost/Unit' in df.columns and 'Margin' in df.columns and 'Type' in df.columns:
+        if 'Cost/Unit' in df.columns and 'Target Margin' in df.columns and 'Type' in df.columns:
             def calc_menu_price(row):
                 cost_unit = row.get("Cost/Unit", 0)
-                margin = row.get("Margin", 0)
+                margin = row.get("Target Margin", 0)
                 if margin <= 0:
                     return 0
-                if row.get("Type", "") in ["Can", "Bottle"]:
-                    return round(cost_unit / (margin / 100))
-                elif row.get("Type", "") in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
+                if row.get("Type", "") in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
+                    # For kegs: (16 * Cost/Unit) / Target Margin
                     return round((cost_unit * 16) / (margin / 100))
+                elif row.get("Type", "") == "Case":
+                    # For cases: Cost/Unit / Target Margin
+                    return round(cost_unit / (margin / 100))
                 return 0
             df['Menu Price'] = df.apply(calc_menu_price, axis=1)
         return df
@@ -1529,7 +1541,7 @@ def show_csv_upload_section(upload_category: str):
     required_columns = {
         "Spirits": ["Product", "Type", "Bottle Cost", "Size (oz.)", loc1, loc2, loc3, "Target Margin", "Use", "Distributor", "Order Notes"],
         "Wine": ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"],
-        "Beer": ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"],
+        "Beer": ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", loc1, loc2, loc3, "Target Margin", "Distributor", "Order Notes"],
         "Ingredients": ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"],
     }
     
@@ -1546,9 +1558,9 @@ def show_csv_upload_section(upload_category: str):
 **Calculated columns (auto-generated):** Total Inventory, Bottle Price, Value, BTG, Suggested Retail
 """,
         "Beer": f"""
-**Required columns:** Product, Type, Cost per Keg/Case, Size, UoM, Margin, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
+**Required columns:** Product, Type, Cost per Keg/Case, Size, UoM, {loc1}, {loc2}, {loc3}, Target Margin, Distributor, Order Notes
 
-**Calculated columns (auto-generated):** Total Inventory, Cost/Unit, Menu Price, Value
+**Calculated columns (auto-generated):** Cost/Unit, Menu Price, Total Inventory, Value
 """,
         "Ingredients": f"""
 **Required columns:** Product, Cost, Size/Yield, UoM, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
@@ -1993,8 +2005,8 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
         if col not in st.session_state.beer_inventory.columns:
             st.session_state.beer_inventory[col] = 0.0
     
-    editable_cols = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"]
-    calculated_cols = ["Total Inventory", "Cost/Unit", "Menu Price", "Value"]
+    editable_cols = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", loc1, loc2, loc3, "Target Margin", "Distributor", "Order Notes"]
+    calculated_cols = ["Cost/Unit", "Menu Price", "Total Inventory", "Value"]
     
     # Filter to only columns that exist and warn about missing ones
     missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
@@ -2019,10 +2031,10 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
         column_config={
             "Cost per Keg/Case": st.column_config.NumberColumn(format="$%.2f"),
             "Size": st.column_config.NumberColumn(format="%.1f"),
-            "Margin": st.column_config.NumberColumn(format="%.0f%%"),
             loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
             loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
             loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
+            "Target Margin": st.column_config.NumberColumn(format="%.0f%%"),
         }
     )
     
@@ -2030,7 +2042,7 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     calc_df = edited_df.copy()
     
     # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
-    numeric_cols = ["Cost per Keg/Case", "Size", "Margin", loc1, loc2, loc3]
+    numeric_cols = ["Cost per Keg/Case", "Size", loc1, loc2, loc3, "Target Margin"]
     for col in numeric_cols:
         if col in calc_df.columns:
             # Remove currency symbols and convert to numeric
@@ -2050,16 +2062,18 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
             lambda r: round(r['Cost per Keg/Case'] / r['Size'], 2) if r['Size'] > 0 else 0, axis=1)
     
     # Menu Price calculation
-    if "Cost/Unit" in calc_df.columns and "Margin" in calc_df.columns and "Type" in calc_df.columns:
+    if "Cost/Unit" in calc_df.columns and "Target Margin" in calc_df.columns and "Type" in calc_df.columns:
         def calc_menu_price(row):
             cost_unit = row["Cost/Unit"]
-            margin = row["Margin"]
+            margin = row["Target Margin"]
             if margin <= 0:
                 return 0
-            if row["Type"] in ["Can", "Bottle"]:
-                return round(cost_unit / (margin / 100))
-            elif row["Type"] in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
+            if row["Type"] in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
+                # For kegs: (16 * Cost/Unit) / Target Margin
                 return round((cost_unit * 16) / (margin / 100))
+            elif row["Type"] == "Case":
+                # For cases: Cost/Unit / Target Margin
+                return round(cost_unit / (margin / 100))
             return 0
         calc_df["Menu Price"] = calc_df.apply(calc_menu_price, axis=1)
     
@@ -2081,9 +2095,9 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
             "Cost/Unit": st.column_config.NumberColumn(format="$%.2f"),
             "Menu Price": st.column_config.NumberColumn(format="$%.0f"),
+            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
             "Value": st.column_config.NumberColumn(format="$%.2f"),
         }
     )
