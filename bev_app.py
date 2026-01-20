@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.2
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.3
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -78,6 +78,11 @@
 #           - Both forms now start with 1 ingredient row and allow adding/removing as needed
 #           - Added trash button to remove individual ingredients
 #           - Form resets after successful recipe save
+#   bb_V2.3 - Password protection:
+#           - Added optional password gate before app access
+#           - Password stored securely in secrets.toml (app_password)
+#           - Clean login screen with branding
+#           - If no password configured, app remains open access
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -3957,8 +3962,82 @@ def show_cogs():
 # MAIN ROUTING LOGIC
 # =============================================================================
 
+def check_password():
+    """Returns True if the user has entered the correct password."""
+    
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state.get("password_input") == st.secrets.get("app_password", ""):
+            st.session_state["password_correct"] = True
+            del st.session_state["password_input"]  # Don't store the password
+        else:
+            st.session_state["password_correct"] = False
+
+    # Check if password is configured in secrets
+    if "app_password" not in st.secrets or st.secrets["app_password"] == "":
+        # No password configured, allow access
+        return True
+    
+    # First run or password not yet correct
+    if "password_correct" not in st.session_state:
+        st.markdown(
+            """
+            <style>
+            .password-container {
+                max-width: 400px;
+                margin: 100px auto;
+                padding: 40px;
+                background: white;
+                border-radius: 10px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("## 🍸 Butterbird")
+            st.markdown("#### Beverage Management System")
+            st.markdown("---")
+            st.text_input(
+                "Enter Password", 
+                type="password", 
+                key="password_input",
+                on_change=password_entered
+            )
+            st.button("Login", on_click=password_entered, type="primary", use_container_width=True)
+        return False
+    
+    # Password was entered but incorrect
+    elif not st.session_state["password_correct"]:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("## 🍸 Butterbird")
+            st.markdown("#### Beverage Management System")
+            st.markdown("---")
+            st.text_input(
+                "Enter Password", 
+                type="password", 
+                key="password_input",
+                on_change=password_entered
+            )
+            st.button("Login", on_click=password_entered, type="primary", use_container_width=True)
+            st.error("😕 Incorrect password. Please try again.")
+        return False
+    
+    # Password correct
+    return True
+
+
 def main():
     """Main application entry point."""
+    
+    # Check password before allowing access
+    if not check_password():
+        return
+    
     init_session_state()
     
     page_handlers = {
