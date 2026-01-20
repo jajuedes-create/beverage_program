@@ -83,6 +83,7 @@
 #           - Password stored securely in secrets.toml (app_password)
 #           - Clean login screen with branding
 #           - If no password configured, app remains open access
+#           - Uses try/except for robust secrets access
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -3965,19 +3966,25 @@ def show_cogs():
 def check_password():
     """Returns True if the user has entered the correct password."""
     
-    def password_entered():
-        """Checks whether a password entered by the user is correct."""
-        if st.session_state.get("password_input") == st.secrets.get("app_password", ""):
-            st.session_state["password_correct"] = True
-            del st.session_state["password_input"]  # Don't store the password
-        else:
-            st.session_state["password_correct"] = False
-
     # Check if password is configured in secrets
-    if "app_password" not in st.secrets or st.secrets["app_password"] == "":
+    try:
+        app_password = st.secrets["app_password"]
+        if not app_password or app_password == "":
+            # Password is empty, allow access
+            return True
+    except (KeyError, FileNotFoundError):
         # No password configured, allow access
         return True
     
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state.get("password_input") == app_password:
+            st.session_state["password_correct"] = True
+            if "password_input" in st.session_state:
+                del st.session_state["password_input"]  # Don't store the password
+        else:
+            st.session_state["password_correct"] = False
+
     # First run or password not yet correct
     if "password_correct" not in st.session_state:
         st.markdown(
