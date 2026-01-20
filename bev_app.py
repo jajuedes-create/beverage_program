@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V1.5
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V1.8
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients)
@@ -38,6 +38,23 @@
 #           - Handles percentage-formatted strings from Google Sheets
 #           - Prevents division errors when data contains non-numeric values
 #           - Applied fix to Spirits, Wine, Beer, and Ingredients inventory displays
+#   bb_V1.6 - Spirits inventory field updates:
+#           - Renamed "Cost" to "Bottle Cost"
+#           - Renamed "Margin" to "Target Margin"
+#           - Reordered Input fields: Product, Type, Bottle Cost, Size (oz.), 
+#             [loc1], [loc2], [loc3], Target Margin, Use, Distributor, Order Notes
+#           - Updated CSV upload instructions and validation
+#           - Updated all calculation formulas to use new column names
+#   bb_V1.7 - Spirits calculated fields updates:
+#           - Reordered Calculated Fields: Product, Cost/Oz, Neat Price, Total Inventory, Value
+#           - Removed "Suggested Retail" from calculated fields
+#   bb_V1.8 - Spirits pour pricing calculations:
+#           - Added new calculated fields: Shot, Single, Neat Pour, Double
+#           - Shot = (1 * Cost/Oz) / Target Margin
+#           - Single = (1.5 * Cost/Oz) / Target Margin
+#           - Neat Pour = (2 * Cost/Oz) / Target Margin (renamed from Neat Price)
+#           - Double = (3 * Cost/Oz) / Target Margin
+#           - Final calculated field order: Product, Cost/Oz, Shot, Single, Neat Pour, Double, Total Inventory, Value
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -886,8 +903,8 @@ def get_sample_spirits():
     loc2 = get_location_2()
     loc3 = get_location_3()
     
-    columns = ["Product", "Type", "Cost", "Size (oz.)", "Margin", "Cost/Oz", "Neat Price",
-               loc1, loc2, loc3, "Total Inventory", "Value", "Use", "Distributor", "Order Notes", "Suggested Retail"]
+    columns = ["Product", "Type", "Bottle Cost", "Size (oz.)", loc1, loc2, loc3, "Target Margin", 
+               "Use", "Distributor", "Order Notes", "Cost/Oz", "Shot", "Single", "Neat Pour", "Double", "Total Inventory", "Value"]
     return pd.DataFrame(columns=columns)
 
 
@@ -1164,10 +1181,10 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
     
     try:
         df = df.copy()
-        for col in ['Cost', 'Cost/Oz', 'Neat Price', 'Suggested Retail', 'Value']:
+        for col in ['Bottle Cost', 'Cost/Oz', 'Shot', 'Single', 'Neat Pour', 'Double', 'Value']:
             df = clean_currency_column(df, col)
-        if 'Margin' in df.columns:
-            df = clean_percentage_column(df, 'Margin')
+        if 'Target Margin' in df.columns:
+            df = clean_percentage_column(df, 'Target Margin')
         for col in ['Size (oz.)', 'Inventory']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -1183,16 +1200,26 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
         df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
         
         # Recalculate all calculated fields
-        if 'Cost' in df.columns and 'Size (oz.)' in df.columns:
+        if 'Bottle Cost' in df.columns and 'Size (oz.)' in df.columns:
             df['Cost/Oz'] = df.apply(
-                lambda row: round(row['Cost'] / row['Size (oz.)'], 2) if row['Size (oz.)'] > 0 else 0, axis=1)
-        if 'Cost' in df.columns and 'Size (oz.)' in df.columns and 'Margin' in df.columns:
-            df['Neat Price'] = df.apply(
-                lambda row: math.ceil(((row['Cost'] / row['Size (oz.)']) * 2) / (row['Margin'] / 100)) if row['Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
-        if 'Cost' in df.columns and 'Total Inventory' in df.columns:
-            df['Value'] = round(df['Cost'] * df['Total Inventory'], 2)
-        if 'Cost' in df.columns:
-            df['Suggested Retail'] = df['Cost'].apply(lambda x: math.ceil(x * 1.44))
+                lambda row: round(row['Bottle Cost'] / row['Size (oz.)'], 2) if row['Size (oz.)'] > 0 else 0, axis=1)
+        
+        if 'Bottle Cost' in df.columns and 'Size (oz.)' in df.columns and 'Target Margin' in df.columns:
+            # Shot = (1 * Cost/Oz) / Target Margin
+            df['Shot'] = df.apply(
+                lambda row: math.ceil((1 * (row['Bottle Cost'] / row['Size (oz.)'])) / (row['Target Margin'] / 100)) if row['Target Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
+            # Single = (1.5 * Cost/Oz) / Target Margin
+            df['Single'] = df.apply(
+                lambda row: math.ceil((1.5 * (row['Bottle Cost'] / row['Size (oz.)'])) / (row['Target Margin'] / 100)) if row['Target Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
+            # Neat Pour = (2 * Cost/Oz) / Target Margin
+            df['Neat Pour'] = df.apply(
+                lambda row: math.ceil((2 * (row['Bottle Cost'] / row['Size (oz.)'])) / (row['Target Margin'] / 100)) if row['Target Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
+            # Double = (3 * Cost/Oz) / Target Margin
+            df['Double'] = df.apply(
+                lambda row: math.ceil((3 * (row['Bottle Cost'] / row['Size (oz.)'])) / (row['Target Margin'] / 100)) if row['Target Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
+        
+        if 'Bottle Cost' in df.columns and 'Total Inventory' in df.columns:
+            df['Value'] = round(df['Bottle Cost'] * df['Total Inventory'], 2)
         return df
     except Exception as e:
         st.error(f"Error processing spirits data: {e}")
@@ -1500,7 +1527,7 @@ def show_csv_upload_section(upload_category: str):
     
     # Required columns for each category (used for validation)
     required_columns = {
-        "Spirits": ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Use", "Distributor", "Order Notes"],
+        "Spirits": ["Product", "Type", "Bottle Cost", "Size (oz.)", loc1, loc2, loc3, "Target Margin", "Use", "Distributor", "Order Notes"],
         "Wine": ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"],
         "Beer": ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"],
         "Ingredients": ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"],
@@ -1509,9 +1536,9 @@ def show_csv_upload_section(upload_category: str):
     # CSV Upload Instructions
     instructions = {
         "Spirits": f"""
-**Required columns:** Product, Type, Cost, Size (oz.), Margin, {loc1}, {loc2}, {loc3}, Use, Distributor, Order Notes
+**Required columns:** Product, Type, Bottle Cost, Size (oz.), {loc1}, {loc2}, {loc3}, Target Margin, Use, Distributor, Order Notes
 
-**Calculated columns (auto-generated):** Total Inventory, Cost/Oz, Neat Price, Value, Suggested Retail
+**Calculated columns (auto-generated):** Cost/Oz, Shot, Single, Neat Pour, Double, Total Inventory, Value
 """,
         "Wine": f"""
 **Required columns:** Product, Type, Cost, Size (oz.), Margin, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
@@ -1629,8 +1656,8 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
             st.session_state.spirits_inventory[col] = 0.0
     
     # Define editable vs calculated columns
-    editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Use", "Distributor", "Order Notes"]
-    calculated_cols = ["Total Inventory", "Cost/Oz", "Neat Price", "Value", "Suggested Retail"]
+    editable_cols = ["Product", "Type", "Bottle Cost", "Size (oz.)", loc1, loc2, loc3, "Target Margin", "Use", "Distributor", "Order Notes"]
+    calculated_cols = ["Cost/Oz", "Shot", "Single", "Neat Pour", "Double", "Total Inventory", "Value"]
     
     # Filter to only columns that exist and warn about missing ones
     missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
@@ -1654,9 +1681,9 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         num_rows="dynamic",
         key="editor_spirits_split",
         column_config={
-            "Cost": st.column_config.NumberColumn(format="$%.2f"),
+            "Bottle Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Size (oz.)": st.column_config.NumberColumn(format="%.1f"),
-            "Margin": st.column_config.NumberColumn(format="%.0f%%"),
+            "Target Margin": st.column_config.NumberColumn(format="%.0f%%"),
             loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
             loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
             loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
@@ -1667,7 +1694,7 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     calc_df = edited_df.copy()
     
     # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
-    numeric_cols = ["Cost", "Size (oz.)", "Margin", loc1, loc2, loc3]
+    numeric_cols = ["Bottle Cost", "Size (oz.)", "Target Margin", loc1, loc2, loc3]
     for col in numeric_cols:
         if col in calc_df.columns:
             # Remove currency symbols and convert to numeric
@@ -1683,19 +1710,31 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         calc_df[loc3].fillna(0)
     )
     
-    if "Cost" in calc_df.columns and "Size (oz.)" in calc_df.columns:
+    # Cost/Oz calculation
+    if "Bottle Cost" in calc_df.columns and "Size (oz.)" in calc_df.columns:
         calc_df["Cost/Oz"] = calc_df.apply(
-            lambda r: round(r['Cost'] / r['Size (oz.)'], 2) if r['Size (oz.)'] > 0 else 0, axis=1)
+            lambda r: round(r['Bottle Cost'] / r['Size (oz.)'], 2) if r['Size (oz.)'] > 0 else 0, axis=1)
     
-    if "Cost" in calc_df.columns and "Size (oz.)" in calc_df.columns and "Margin" in calc_df.columns:
-        calc_df["Neat Price"] = calc_df.apply(
-            lambda r: math.ceil(((r['Cost'] / r['Size (oz.)']) * 2) / (r['Margin'] / 100)) if r['Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
+    # Pour price calculations based on Cost/Oz and Target Margin
+    if "Bottle Cost" in calc_df.columns and "Size (oz.)" in calc_df.columns and "Target Margin" in calc_df.columns:
+        # Shot = (1 * Cost/Oz) / Target Margin
+        calc_df["Shot"] = calc_df.apply(
+            lambda r: math.ceil((1 * (r['Bottle Cost'] / r['Size (oz.)'])) / (r['Target Margin'] / 100)) if r['Target Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
+        
+        # Single = (1.5 * Cost/Oz) / Target Margin
+        calc_df["Single"] = calc_df.apply(
+            lambda r: math.ceil((1.5 * (r['Bottle Cost'] / r['Size (oz.)'])) / (r['Target Margin'] / 100)) if r['Target Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
+        
+        # Neat Pour = (2 * Cost/Oz) / Target Margin
+        calc_df["Neat Pour"] = calc_df.apply(
+            lambda r: math.ceil((2 * (r['Bottle Cost'] / r['Size (oz.)'])) / (r['Target Margin'] / 100)) if r['Target Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
+        
+        # Double = (3 * Cost/Oz) / Target Margin
+        calc_df["Double"] = calc_df.apply(
+            lambda r: math.ceil((3 * (r['Bottle Cost'] / r['Size (oz.)'])) / (r['Target Margin'] / 100)) if r['Target Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
     
-    if "Cost" in calc_df.columns and "Total Inventory" in calc_df.columns:
-        calc_df["Value"] = round(calc_df["Cost"] * calc_df["Total Inventory"], 2)
-    
-    if "Cost" in calc_df.columns:
-        calc_df["Suggested Retail"] = calc_df["Cost"].apply(lambda x: math.ceil(x * 1.44) if pd.notna(x) and x > 0 else 0)
+    if "Bottle Cost" in calc_df.columns and "Total Inventory" in calc_df.columns:
+        calc_df["Value"] = round(calc_df["Bottle Cost"] * calc_df["Total Inventory"], 2)
     
     # Display calculated columns in read-only table
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
@@ -1712,11 +1751,13 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
             "Cost/Oz": st.column_config.NumberColumn(format="$%.2f"),
-            "Neat Price": st.column_config.NumberColumn(format="$%.0f"),
+            "Shot": st.column_config.NumberColumn(format="$%.0f"),
+            "Single": st.column_config.NumberColumn(format="$%.0f"),
+            "Neat Pour": st.column_config.NumberColumn(format="$%.0f"),
+            "Double": st.column_config.NumberColumn(format="$%.0f"),
+            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
             "Value": st.column_config.NumberColumn(format="$%.2f"),
-            "Suggested Retail": st.column_config.NumberColumn(format="$%.0f"),
         }
     )
     
