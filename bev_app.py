@@ -1,8 +1,8 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.0
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.1
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
-#   - Master Inventory (Spirits, Wine, Beer, Ingredients)
+#   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
 #   - Weekly Order Builder
 #   - Cocktail Builds Book
 #   - Cost of Goods Sold (COGS) Calculator
@@ -65,6 +65,13 @@
 #           - Fixed Menu Price calculation:
 #             * Half Barrel, Quarter Barrel, Sixtel: (16 * Cost/Unit) / Target Margin
 #             * Case: Cost/Unit / Target Margin
+#   bb_V2.1 - Added N/A Beverages inventory category:
+#           - New tab in Master Inventory module for non-alcoholic beverages
+#           - Same structure as Ingredients: Product, Cost, Size/Yield, UoM, locations, Distributor, Order Notes
+#           - Calculated fields: Total Inventory, Cost/Unit
+#           - Full Google Sheets integration (load/save)
+#           - CSV upload support with validation
+#           - Added to inventory dashboard metrics (6 columns now)
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -180,6 +187,7 @@ CLIENT_CONFIG = {
         "wine_inventory": "wine_inventory",
         "beer_inventory": "beer_inventory",
         "ingredients_inventory": "ingredients_inventory",
+        "na_beverages_inventory": "na_beverages_inventory",
         "weekly_inventory": "weekly_inventory",
         "order_history": "order_history",
         "pending_order": "pending_order",
@@ -432,6 +440,7 @@ def save_all_inventory_data():
         ('wine_inventory', get_sheet_name('wine_inventory')),
         ('beer_inventory', get_sheet_name('beer_inventory')),
         ('ingredients_inventory', get_sheet_name('ingredients_inventory')),
+        ('na_beverages_inventory', get_sheet_name('na_beverages_inventory')),
         ('weekly_inventory', get_sheet_name('weekly_inventory')),
         ('order_history', get_sheet_name('order_history')),
     ]
@@ -501,6 +510,7 @@ def save_inventory_snapshot():
         'wine': calculate_total_value(st.session_state.get('wine_inventory', pd.DataFrame())),
         'beer': calculate_total_value(st.session_state.get('beer_inventory', pd.DataFrame())),
         'ingredients': calculate_total_value(st.session_state.get('ingredients_inventory', pd.DataFrame())),
+        'na_beverages': calculate_total_value(st.session_state.get('na_beverages_inventory', pd.DataFrame())),
     }
     values['total'] = sum(values.values())
     
@@ -510,6 +520,7 @@ def save_inventory_snapshot():
         'Wine Value': values['wine'],
         'Beer Value': values['beer'],
         'Ingredients Value': values['ingredients'],
+        'N/A Beverages Value': values['na_beverages'],
         'Total Value': values['total']
     }
     
@@ -958,6 +969,19 @@ def get_sample_ingredients():
 
 
 @st.cache_data
+def get_sample_na_beverages():
+    """Returns empty N/A beverages inventory DataFrame with proper columns."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
+    columns = ["Product", "Cost", "Size/Yield", "UoM", "Cost/Unit", 
+               loc1, loc2, loc3, "Total Inventory",
+               "Distributor", "Order Notes"]
+    return pd.DataFrame(columns=columns)
+
+
+@st.cache_data
 def get_sample_weekly_inventory():
     """Returns empty weekly inventory DataFrame with proper columns."""
     loc1 = get_location_1()
@@ -1007,6 +1031,7 @@ def init_session_state():
         'wine_inventory': (get_sheet_name('wine_inventory'), get_sample_wines),
         'beer_inventory': (get_sheet_name('beer_inventory'), get_sample_beers),
         'ingredients_inventory': (get_sheet_name('ingredients_inventory'), get_sample_ingredients),
+        'na_beverages_inventory': (get_sheet_name('na_beverages_inventory'), get_sample_na_beverages),
         'weekly_inventory': (get_sheet_name('weekly_inventory'), get_sample_weekly_inventory),
         'order_history': (get_sheet_name('order_history'), get_sample_order_history),
     }
@@ -1363,6 +1388,38 @@ def process_uploaded_ingredients(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
 
+def process_uploaded_na_beverages(df: pd.DataFrame) -> pd.DataFrame:
+    """Processes an uploaded N/A Beverages inventory CSV."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
+    try:
+        df = df.copy()
+        for col in ['Cost', 'Cost/Unit']:
+            df = clean_currency_column(df, col)
+        if 'Size/Yield' in df.columns:
+            df['Size/Yield'] = pd.to_numeric(df['Size/Yield'], errors='coerce').fillna(0)
+        
+        # Handle location columns
+        for col in [loc1, loc2, loc3]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            else:
+                df[col] = 0.0
+        
+        # Calculate Total Inventory from location columns
+        df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
+        
+        if 'Cost' in df.columns and 'Size/Yield' in df.columns:
+            df['Cost/Unit'] = df.apply(
+                lambda row: round(row['Cost'] / row['Size/Yield'], 2) if row['Size/Yield'] > 0 else 0, axis=1)
+        return df
+    except Exception as e:
+        st.error(f"Error processing N/A beverages data: {e}")
+        return df
+
+
 # =============================================================================
 # PAGE: HOME (with Feature Toggles)
 # =============================================================================
@@ -1493,13 +1550,14 @@ def show_inventory():
         'wine': calculate_total_value(st.session_state.get('wine_inventory', pd.DataFrame())),
         'beer': calculate_total_value(st.session_state.get('beer_inventory', pd.DataFrame())),
         'ingredients': calculate_total_value(st.session_state.get('ingredients_inventory', pd.DataFrame())),
+        'na_beverages': calculate_total_value(st.session_state.get('na_beverages_inventory', pd.DataFrame())),
     }
     total = sum(values.values())
     
-    cols = st.columns(5)
+    cols = st.columns(6)
     labels = [('🥃 Spirits', values['spirits']), ('🍷 Wine', values['wine']), 
               ('🍺 Beer', values['beer']), ('🧴 Ingredients', values['ingredients']),
-              ('💰 Total', total)]
+              ('🥤 N/A Bev', values['na_beverages']), ('💰 Total', total)]
     for col, (label, val) in zip(cols, labels):
         with col:
             st.metric(label=label, value=format_currency(val))
@@ -1508,7 +1566,7 @@ def show_inventory():
     st.markdown("---")
     
     # Tabs
-    tab_spirits, tab_wine, tab_beer, tab_ingredients = st.tabs(["🥃 Spirits", "🍷 Wine", "🍺 Beer", "🧴 Ingredients"])
+    tab_spirits, tab_wine, tab_beer, tab_ingredients, tab_na_beverages = st.tabs(["🥃 Spirits", "🍷 Wine", "🍺 Beer", "🧴 Ingredients", "🥤 N/A Beverages"])
     
     with tab_spirits:
         show_spirits_inventory_split(st.session_state.get('spirits_inventory', pd.DataFrame()), ["Type", "Distributor", "Use"])
@@ -1529,6 +1587,11 @@ def show_inventory():
         show_ingredients_inventory_split(st.session_state.get('ingredients_inventory', pd.DataFrame()), ["Distributor"])
         with st.expander("📤 Upload Ingredients Inventory (CSV)", expanded=False):
             show_csv_upload_section("Ingredients")
+    
+    with tab_na_beverages:
+        show_na_beverages_inventory_split(st.session_state.get('na_beverages_inventory', pd.DataFrame()), ["Distributor"])
+        with st.expander("📤 Upload N/A Beverages Inventory (CSV)", expanded=False):
+            show_csv_upload_section("N/A Beverages")
 
 
 def show_csv_upload_section(upload_category: str):
@@ -1543,6 +1606,7 @@ def show_csv_upload_section(upload_category: str):
         "Wine": ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"],
         "Beer": ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", loc1, loc2, loc3, "Target Margin", "Distributor", "Order Notes"],
         "Ingredients": ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"],
+        "N/A Beverages": ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"],
     }
     
     # CSV Upload Instructions
@@ -1563,6 +1627,11 @@ def show_csv_upload_section(upload_category: str):
 **Calculated columns (auto-generated):** Cost/Unit, Menu Price, Total Inventory, Value
 """,
         "Ingredients": f"""
+**Required columns:** Product, Cost, Size/Yield, UoM, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
+
+**Calculated columns (auto-generated):** Total Inventory, Cost/Unit
+""",
+        "N/A Beverages": f"""
 **Required columns:** Product, Cost, Size/Yield, UoM, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
 
 **Calculated columns (auto-generated):** Total Inventory, Cost/Unit
@@ -1610,12 +1679,13 @@ def show_csv_upload_section(upload_category: str):
                 st.success("✅ All required columns found!")
                 st.dataframe(new_data.head(), use_container_width=True)
                 
-                if st.button("✅ Import Data", key=f"confirm_upload_{upload_category.lower()}"):
+                if st.button("✅ Import Data", key=f"confirm_upload_{upload_category.lower().replace('/', '_')}"):
                     processors = {
                         "Spirits": (process_uploaded_spirits, 'spirits_inventory'),
                         "Wine": (process_uploaded_wine, 'wine_inventory'),
                         "Beer": (process_uploaded_beer, 'beer_inventory'),
                         "Ingredients": (process_uploaded_ingredients, 'ingredients_inventory'),
+                        "N/A Beverages": (process_uploaded_na_beverages, 'na_beverages_inventory'),
                     }
                     func, key = processors[upload_category]
                     st.session_state[key] = func(new_data)
@@ -2270,6 +2340,148 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
                 updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
         
         st.session_state.ingredients_inventory = updated_inventory
+        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+        save_all_inventory_data()
+        st.success("✅ Changes saved!")
+        st.rerun()
+
+
+# =============================================================================
+# SPLIT DISPLAY FOR N/A BEVERAGES - Using CLIENT_CONFIG locations
+# =============================================================================
+
+def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
+    """Renders N/A beverages inventory with split display approach."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
+    if df is None or len(df) == 0:
+        st.info("No N/A beverages inventory data.")
+        return
+    
+    st.markdown("#### Search & Filter N/A Beverages")
+    filter_cols = st.columns([2] + [1] * len(filter_columns))
+    
+    with filter_cols[0]:
+        search_term = st.text_input("🔍 Search", key="search_na_beverages", placeholder="Type to search...")
+    
+    column_filters = {}
+    for i, col_name in enumerate(filter_columns):
+        with filter_cols[i + 1]:
+            if col_name in df.columns:
+                unique_values = df[col_name].dropna().unique().tolist()
+                selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_na_beverages_{col_name}")
+                if selected:
+                    column_filters[col_name] = selected
+    
+    filtered_df = filter_dataframe(df, search_term, column_filters)
+    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # Add location columns if they don't exist
+    for col in [loc1, loc2, loc3]:
+        if col not in filtered_df.columns:
+            filtered_df[col] = 0.0
+        if col not in st.session_state.na_beverages_inventory.columns:
+            st.session_state.na_beverages_inventory[col] = 0.0
+    
+    editable_cols = ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"]
+    calculated_cols = ["Total Inventory", "Cost/Unit"]
+    
+    # Filter to only columns that exist and warn about missing ones
+    missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
+    if missing_cols:
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
+        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+    
+    editable_cols = [c for c in editable_cols if c in filtered_df.columns]
+    
+    if not editable_cols:
+        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        return
+    
+    st.markdown("#### ✏️ Inputs")
+    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    edited_df = st.data_editor(
+        filtered_df[editable_cols].copy(),
+        use_container_width=True,
+        num_rows="dynamic",
+        key="editor_na_beverages_split",
+        column_config={
+            "Cost": st.column_config.NumberColumn(format="$%.2f"),
+            "Size/Yield": st.column_config.NumberColumn(format="%.1f"),
+            loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
+            loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
+            loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
+        }
+    )
+    
+    # Calculate computed columns
+    calc_df = edited_df.copy()
+    
+    # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
+    numeric_cols = ["Cost", "Size/Yield", loc1, loc2, loc3]
+    for col in numeric_cols:
+        if col in calc_df.columns:
+            # Remove currency symbols and convert to numeric
+            calc_df[col] = pd.to_numeric(
+                calc_df[col].astype(str).str.replace(r'[$,%]', '', regex=True).str.strip(),
+                errors='coerce'
+            ).fillna(0)
+    
+    calc_df["Total Inventory"] = (
+        calc_df[loc1].fillna(0) + 
+        calc_df[loc2].fillna(0) + 
+        calc_df[loc3].fillna(0)
+    )
+    
+    if "Cost" in calc_df.columns and "Size/Yield" in calc_df.columns:
+        calc_df["Cost/Unit"] = calc_df.apply(
+            lambda r: round(r['Cost'] / r['Size/Yield'], 4) if r['Size/Yield'] > 0 else 0, axis=1)
+    
+    # Display calculated columns
+    st.markdown("#### 📊 Calculated Fields (Live Preview)")
+    st.caption("These values update automatically based on your edits above.")
+    
+    # Build display columns, only include Product if it exists
+    display_calc_cols = []
+    if "Product" in calc_df.columns:
+        display_calc_cols.append("Product")
+    display_calc_cols.extend([c for c in calculated_cols if c in calc_df.columns])
+    
+    st.dataframe(
+        calc_df[display_calc_cols],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
+            "Cost/Unit": st.column_config.NumberColumn(format="$%.4f"),
+        }
+    )
+    
+    if st.button("💾 Save Changes", key="save_na_beverages_split", type="primary"):
+        full_df = calc_df.copy()
+        updated_inventory = st.session_state.na_beverages_inventory.copy()
+        
+        for col in [loc1, loc2, loc3, "Total Inventory"]:
+            if col not in updated_inventory.columns:
+                updated_inventory[col] = 0.0
+        
+        for idx, row in full_df.iterrows():
+            product_name = row['Product']
+            mask = updated_inventory['Product'] == product_name
+            if mask.any():
+                for col in full_df.columns:
+                    if col in updated_inventory.columns:
+                        updated_inventory.loc[mask, col] = row[col]
+        
+        existing_products = updated_inventory['Product'].tolist()
+        for idx, row in full_df.iterrows():
+            if row['Product'] not in existing_products:
+                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
+        
+        st.session_state.na_beverages_inventory = updated_inventory
         st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
         save_all_inventory_data()
         st.success("✅ Changes saved!")
