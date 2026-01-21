@@ -117,7 +117,8 @@
 #   bb_V2.9 - Ingredients and N/A Beverages display updates:
 #           - Calculated fields reordered: Product, Cost/Unit, Total Inventory, Value
 #           - Added Value field (Cost × Total Inventory) with total at bottom
-#           - Removed index from Input tables (hide_index=True)
+#           - Removed index from all Input tables using reset_index(drop=True)
+#           - Applied to: Spirits, Wine, Beer, Ingredients, N/A Beverages
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -1979,7 +1980,7 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     
     # Show only editable columns in the data editor
     edited_df = st.data_editor(
-        filtered_df[editable_cols].copy(),
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
         num_rows="dynamic",
         key="editor_spirits_split",
@@ -2137,7 +2138,7 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     st.caption("Edit values below. Calculated fields will update automatically in the preview.")
     
     edited_df = st.data_editor(
-        filtered_df[editable_cols].copy(),
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
         num_rows="dynamic",
         key="editor_wine_split",
@@ -2275,7 +2276,7 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     st.caption("Edit values below. Calculated fields will update automatically in the preview.")
     
     edited_df = st.data_editor(
-        filtered_df[editable_cols].copy(),
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
         num_rows="dynamic",
         key="editor_beer_split",
@@ -2424,10 +2425,9 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     st.caption("Edit values below. Calculated fields will update automatically in the preview.")
     
     edited_df = st.data_editor(
-        filtered_df[editable_cols].copy(),
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
         num_rows="dynamic",
-        hide_index=True,
         key="editor_ingredients_split",
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -2557,10 +2557,9 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
     st.caption("Edit values below. Calculated fields will update automatically in the preview.")
     
     edited_df = st.data_editor(
-        filtered_df[editable_cols].copy(),
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
         num_rows="dynamic",
-        hide_index=True,
         key="editor_na_beverages_split",
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
