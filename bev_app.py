@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.9
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.10
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -119,6 +119,12 @@
 #           - Added Value field (Cost × Total Inventory) with total at bottom
 #           - Removed index from all Input tables using reset_index(drop=True)
 #           - Applied to: Spirits, Wine, Beer, Ingredients, N/A Beverages
+#   bb_V2.10 - Recipe editing functionality:
+#           - Added Edit button to recipe cards (Cocktails and Bar Prep)
+#           - Full edit form with pre-populated values
+#           - Dynamic ingredient editing (add/remove ingredients)
+#           - Cancel button to return to view mode without saving
+#           - Duplicate name checking (excludes current recipe being edited)
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -1401,8 +1407,14 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
         
         if on_delete:
             st.markdown("---")
-            if st.button("🗑️ Delete Recipe", key=f"delete_{recipe_type}_{safe_name}"):
-                on_delete(recipe['name'])
+            col_edit, col_delete = st.columns(2)
+            with col_edit:
+                if st.button("✏️ Edit Recipe", key=f"edit_{recipe_type}_{safe_name}"):
+                    st.session_state[f'editing_{recipe_type}'] = recipe['name']
+                    st.rerun()
+            with col_delete:
+                if st.button("🗑️ Delete Recipe", key=f"delete_{recipe_type}_{safe_name}"):
+                    on_delete(recipe['name'])
 
 
 def display_recipe_list(recipes: list, recipe_type: str, category_filter: str = None, session_key: str = None):
@@ -3725,7 +3737,7 @@ def show_ordering():
 
 
 def show_cocktails():
-    """Cocktail Builds Book with view and add recipe functionality."""
+    """Cocktail Builds Book with view, add, and edit recipe functionality."""
     show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
@@ -3737,36 +3749,58 @@ def show_cocktails():
         st.title("🍹 Cocktail Builds Book")
     
     recipes = st.session_state.get('cocktail_recipes', [])
+    available_products = get_all_available_products()
     
-    tab_view, tab_add = st.tabs(["📖 View Recipes", "➕ Add New Recipe"])
+    # Check if we're in edit mode
+    editing_recipe_name = st.session_state.get('editing_cocktail', None)
+    editing_recipe = None
+    if editing_recipe_name:
+        editing_recipe = next((r for r in recipes if r['name'] == editing_recipe_name), None)
+        if not editing_recipe:
+            # Recipe not found, clear edit mode
+            del st.session_state['editing_cocktail']
+            editing_recipe_name = None
     
-    with tab_view:
-        if recipes:
-            display_recipe_list(recipes, 'cocktail', session_key='cocktail_recipes')
-        else:
-            st.info("No cocktail recipes found. Add one in the 'Add New Recipe' tab to get started!")
-    
-    with tab_add:
-        st.markdown("### Create New Cocktail Recipe")
+    # Show edit form if editing
+    if editing_recipe:
+        st.markdown(f"### ✏️ Editing: {editing_recipe['name']}")
         
-        # Get available products for ingredient selection
-        available_products = get_all_available_products()
+        # Cancel button
+        if st.button("← Cancel Edit", key="cancel_cocktail_edit"):
+            del st.session_state['editing_cocktail']
+            # Clear edit form state
+            for key in list(st.session_state.keys()):
+                if key.startswith("edit_cocktail_"):
+                    del st.session_state[key]
+            st.rerun()
         
-        if not available_products:
-            st.warning("⚠️ No products found in Master Inventory. Add spirits and ingredients to the Master Inventory first to build recipes.")
+        st.markdown("---")
         
-        # Initialize session state for dynamic ingredients if not exists
-        if 'cocktail_ingredient_count' not in st.session_state:
-            st.session_state.cocktail_ingredient_count = 1
+        # Initialize edit form state if not exists
+        edit_prefix = "edit_cocktail_"
+        if f"{edit_prefix}initialized" not in st.session_state:
+            st.session_state[f"{edit_prefix}ingredient_count"] = len(editing_recipe.get('ingredients', []))
+            if st.session_state[f"{edit_prefix}ingredient_count"] == 0:
+                st.session_state[f"{edit_prefix}ingredient_count"] = 1
+            # Pre-populate ingredients
+            for i, ing in enumerate(editing_recipe.get('ingredients', [])):
+                st.session_state[f"{edit_prefix}ing_prod_{i}"] = ing.get('product', '')
+                st.session_state[f"{edit_prefix}ing_amt_{i}"] = ing.get('amount', 0.0)
+                st.session_state[f"{edit_prefix}ing_unit_{i}"] = ing.get('unit', 'oz')
+            st.session_state[f"{edit_prefix}initialized"] = True
         
         col1, col2 = st.columns(2)
         
+        glass_options = ["Rocks", "Coupe", "Highball", "Collins", "Nick & Nora", "Martini", "Wine", "Flute", "Mug", "Copper Mug", "Tiki", "Other"]
+        current_glass = editing_recipe.get('glass', 'Rocks')
+        glass_index = glass_options.index(current_glass) if current_glass in glass_options else 0
+        
         with col1:
-            recipe_name = st.text_input("Recipe Name *", placeholder="e.g., Old Fashioned", key="cocktail_recipe_name")
-            glass_type = st.selectbox("Glass Type", ["Rocks", "Coupe", "Highball", "Collins", "Nick & Nora", "Martini", "Wine", "Flute", "Mug", "Copper Mug", "Tiki", "Other"], key="cocktail_glass_type")
+            recipe_name = st.text_input("Recipe Name *", value=editing_recipe.get('name', ''), key=f"{edit_prefix}name")
+            glass_type = st.selectbox("Glass Type", glass_options, index=glass_index, key=f"{edit_prefix}glass")
         
         with col2:
-            sale_price = st.number_input("Menu Sale Price ($) *", min_value=0.0, step=0.50, value=14.00, key="cocktail_sale_price")
+            sale_price = st.number_input("Menu Sale Price ($) *", min_value=0.0, step=0.50, value=float(editing_recipe.get('sale_price', 14.0)), key=f"{edit_prefix}price")
         
         st.markdown("#### Ingredients")
         
@@ -3781,69 +3815,62 @@ def show_cocktails():
         with col_remove:
             st.caption("")
         
+        unit_options = ["oz", "dashes", "barspoon", "drops", "rinse", "each", "ml"]
+        
         # Dynamic ingredient rows
         ingredients_to_remove = []
-        for i in range(st.session_state.cocktail_ingredient_count):
+        for i in range(st.session_state[f"{edit_prefix}ingredient_count"]):
             col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+            
+            # Get current values or defaults
+            current_prod = st.session_state.get(f"{edit_prefix}ing_prod_{i}", "")
+            current_amt = st.session_state.get(f"{edit_prefix}ing_amt_{i}", 0.0)
+            current_unit = st.session_state.get(f"{edit_prefix}ing_unit_{i}", "oz")
+            
+            prod_options = [""] + available_products
+            prod_index = prod_options.index(current_prod) if current_prod in prod_options else 0
+            unit_index = unit_options.index(current_unit) if current_unit in unit_options else 0
+            
             with col_prod:
-                st.selectbox(
-                    f"Product {i+1}",
-                    options=[""] + available_products,
-                    key=f"cocktail_ing_prod_{i}",
-                    label_visibility="collapsed"
-                )
+                st.selectbox(f"Product {i+1}", options=prod_options, index=prod_index, key=f"{edit_prefix}ing_prod_{i}", label_visibility="collapsed")
             with col_amt:
-                st.number_input(
-                    f"Amount {i+1}",
-                    min_value=0.0,
-                    step=0.25,
-                    value=0.0,
-                    key=f"cocktail_ing_amt_{i}",
-                    label_visibility="collapsed"
-                )
+                st.number_input(f"Amount {i+1}", min_value=0.0, step=0.25, value=float(current_amt), key=f"{edit_prefix}ing_amt_{i}", label_visibility="collapsed")
             with col_unit:
-                st.selectbox(
-                    f"Unit {i+1}",
-                    options=["oz", "dashes", "barspoon", "drops", "rinse", "each", "ml"],
-                    key=f"cocktail_ing_unit_{i}",
-                    label_visibility="collapsed"
-                )
+                st.selectbox(f"Unit {i+1}", options=unit_options, index=unit_index, key=f"{edit_prefix}ing_unit_{i}", label_visibility="collapsed")
             with col_remove:
-                if st.session_state.cocktail_ingredient_count > 1:
-                    if st.button("🗑️", key=f"cocktail_remove_ing_{i}", help="Remove ingredient"):
+                if st.session_state[f"{edit_prefix}ingredient_count"] > 1:
+                    if st.button("🗑️", key=f"{edit_prefix}remove_ing_{i}", help="Remove ingredient"):
                         ingredients_to_remove.append(i)
         
         # Handle ingredient removal
         if ingredients_to_remove:
-            # Shift ingredients up to fill gaps
             for remove_idx in sorted(ingredients_to_remove, reverse=True):
-                for j in range(remove_idx, st.session_state.cocktail_ingredient_count - 1):
-                    # Copy values from j+1 to j
-                    if f"cocktail_ing_prod_{j+1}" in st.session_state:
-                        st.session_state[f"cocktail_ing_prod_{j}"] = st.session_state[f"cocktail_ing_prod_{j+1}"]
-                        st.session_state[f"cocktail_ing_amt_{j}"] = st.session_state[f"cocktail_ing_amt_{j+1}"]
-                        st.session_state[f"cocktail_ing_unit_{j}"] = st.session_state[f"cocktail_ing_unit_{j+1}"]
-                st.session_state.cocktail_ingredient_count -= 1
+                for j in range(remove_idx, st.session_state[f"{edit_prefix}ingredient_count"] - 1):
+                    if f"{edit_prefix}ing_prod_{j+1}" in st.session_state:
+                        st.session_state[f"{edit_prefix}ing_prod_{j}"] = st.session_state[f"{edit_prefix}ing_prod_{j+1}"]
+                        st.session_state[f"{edit_prefix}ing_amt_{j}"] = st.session_state[f"{edit_prefix}ing_amt_{j+1}"]
+                        st.session_state[f"{edit_prefix}ing_unit_{j}"] = st.session_state[f"{edit_prefix}ing_unit_{j+1}"]
+                st.session_state[f"{edit_prefix}ingredient_count"] -= 1
             st.rerun()
         
         # Add ingredient button
-        if st.button("➕ Add Ingredient", key="cocktail_add_ingredient"):
-            st.session_state.cocktail_ingredient_count += 1
+        if st.button("➕ Add Ingredient", key=f"{edit_prefix}add_ingredient"):
+            st.session_state[f"{edit_prefix}ingredient_count"] += 1
             st.rerun()
         
         st.markdown("#### Instructions")
-        instructions = st.text_area("Build/Preparation Instructions", placeholder="e.g., Stir with ice, strain into rocks glass with large ice cube. Express orange peel.", height=100, key="cocktail_instructions")
+        instructions = st.text_area("Build/Preparation Instructions", value=editing_recipe.get('instructions', ''), height=100, key=f"{edit_prefix}instructions")
         
         st.markdown("---")
         
         # Save button
-        if st.button("💾 Save Recipe", type="primary", use_container_width=True, key="cocktail_save_btn"):
+        if st.button("💾 Save Changes", type="primary", use_container_width=True, key=f"{edit_prefix}save_btn"):
             # Collect ingredient data
             ingredients_data = []
-            for i in range(st.session_state.cocktail_ingredient_count):
-                product = st.session_state.get(f"cocktail_ing_prod_{i}", "")
-                amount = st.session_state.get(f"cocktail_ing_amt_{i}", 0.0)
-                unit = st.session_state.get(f"cocktail_ing_unit_{i}", "oz")
+            for i in range(st.session_state[f"{edit_prefix}ingredient_count"]):
+                product = st.session_state.get(f"{edit_prefix}ing_prod_{i}", "")
+                amount = st.session_state.get(f"{edit_prefix}ing_amt_{i}", 0.0)
+                unit = st.session_state.get(f"{edit_prefix}ing_unit_{i}", "oz")
                 if product and amount > 0:
                     ingredients_data.append({"product": product, "amount": amount, "unit": unit})
             
@@ -3854,37 +3881,178 @@ def show_cocktails():
             elif sale_price <= 0:
                 st.error("❌ Sale price must be greater than $0.")
             else:
-                # Check for duplicate name
-                existing_names = [r['name'].lower() for r in recipes]
-                if recipe_name.lower() in existing_names:
+                # Check for duplicate name (excluding current recipe)
+                other_names = [r['name'].lower() for r in recipes if r['name'] != editing_recipe_name]
+                if recipe_name.lower() in other_names:
                     st.error(f"❌ A recipe named '{recipe_name}' already exists.")
                 else:
-                    new_recipe = {
-                        "name": recipe_name,
-                        "glass": glass_type,
-                        "sale_price": sale_price,
-                        "ingredients": ingredients_data,
-                        "instructions": instructions
-                    }
+                    # Update the recipe
+                    for r in st.session_state.cocktail_recipes:
+                        if r['name'] == editing_recipe_name:
+                            r['name'] = recipe_name
+                            r['glass'] = glass_type
+                            r['sale_price'] = sale_price
+                            r['ingredients'] = ingredients_data
+                            r['instructions'] = instructions
+                            break
                     
-                    if 'cocktail_recipes' not in st.session_state:
-                        st.session_state.cocktail_recipes = []
-                    
-                    st.session_state.cocktail_recipes.append(new_recipe)
                     save_recipes('cocktail')
                     
-                    # Reset form
-                    st.session_state.cocktail_ingredient_count = 1
+                    # Clear edit mode
+                    del st.session_state['editing_cocktail']
                     for key in list(st.session_state.keys()):
-                        if key.startswith("cocktail_ing_") or key in ["cocktail_recipe_name", "cocktail_instructions"]:
+                        if key.startswith(edit_prefix):
                             del st.session_state[key]
                     
-                    st.success(f"✅ '{recipe_name}' added successfully!")
+                    st.success(f"✅ '{recipe_name}' updated successfully!")
                     st.rerun()
+    
+    else:
+        # Normal view/add mode
+        tab_view, tab_add = st.tabs(["📖 View Recipes", "➕ Add New Recipe"])
+        
+        with tab_view:
+            if recipes:
+                display_recipe_list(recipes, 'cocktail', session_key='cocktail_recipes')
+            else:
+                st.info("No cocktail recipes found. Add one in the 'Add New Recipe' tab to get started!")
+        
+        with tab_add:
+            st.markdown("### Create New Cocktail Recipe")
+            
+            if not available_products:
+                st.warning("⚠️ No products found in Master Inventory. Add spirits and ingredients to the Master Inventory first to build recipes.")
+            
+            # Initialize session state for dynamic ingredients if not exists
+            if 'cocktail_ingredient_count' not in st.session_state:
+                st.session_state.cocktail_ingredient_count = 1
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                recipe_name = st.text_input("Recipe Name *", placeholder="e.g., Old Fashioned", key="cocktail_recipe_name")
+                glass_type = st.selectbox("Glass Type", ["Rocks", "Coupe", "Highball", "Collins", "Nick & Nora", "Martini", "Wine", "Flute", "Mug", "Copper Mug", "Tiki", "Other"], key="cocktail_glass_type")
+            
+            with col2:
+                sale_price = st.number_input("Menu Sale Price ($) *", min_value=0.0, step=0.50, value=14.00, key="cocktail_sale_price")
+            
+            st.markdown("#### Ingredients")
+            
+            # Column headers
+            col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+            with col_prod:
+                st.caption("Product")
+            with col_amt:
+                st.caption("Amount")
+            with col_unit:
+                st.caption("Unit")
+            with col_remove:
+                st.caption("")
+            
+            # Dynamic ingredient rows
+            ingredients_to_remove = []
+            for i in range(st.session_state.cocktail_ingredient_count):
+                col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+                with col_prod:
+                    st.selectbox(
+                        f"Product {i+1}",
+                        options=[""] + available_products,
+                        key=f"cocktail_ing_prod_{i}",
+                        label_visibility="collapsed"
+                    )
+                with col_amt:
+                    st.number_input(
+                        f"Amount {i+1}",
+                        min_value=0.0,
+                        step=0.25,
+                        value=0.0,
+                        key=f"cocktail_ing_amt_{i}",
+                        label_visibility="collapsed"
+                    )
+                with col_unit:
+                    st.selectbox(
+                        f"Unit {i+1}",
+                        options=["oz", "dashes", "barspoon", "drops", "rinse", "each", "ml"],
+                        key=f"cocktail_ing_unit_{i}",
+                        label_visibility="collapsed"
+                    )
+                with col_remove:
+                    if st.session_state.cocktail_ingredient_count > 1:
+                        if st.button("🗑️", key=f"cocktail_remove_ing_{i}", help="Remove ingredient"):
+                            ingredients_to_remove.append(i)
+            
+            # Handle ingredient removal
+            if ingredients_to_remove:
+                # Shift ingredients up to fill gaps
+                for remove_idx in sorted(ingredients_to_remove, reverse=True):
+                    for j in range(remove_idx, st.session_state.cocktail_ingredient_count - 1):
+                        # Copy values from j+1 to j
+                        if f"cocktail_ing_prod_{j+1}" in st.session_state:
+                            st.session_state[f"cocktail_ing_prod_{j}"] = st.session_state[f"cocktail_ing_prod_{j+1}"]
+                            st.session_state[f"cocktail_ing_amt_{j}"] = st.session_state[f"cocktail_ing_amt_{j+1}"]
+                            st.session_state[f"cocktail_ing_unit_{j}"] = st.session_state[f"cocktail_ing_unit_{j+1}"]
+                    st.session_state.cocktail_ingredient_count -= 1
+                st.rerun()
+            
+            # Add ingredient button
+            if st.button("➕ Add Ingredient", key="cocktail_add_ingredient"):
+                st.session_state.cocktail_ingredient_count += 1
+                st.rerun()
+            
+            st.markdown("#### Instructions")
+            instructions = st.text_area("Build/Preparation Instructions", placeholder="e.g., Stir with ice, strain into rocks glass with large ice cube. Express orange peel.", height=100, key="cocktail_instructions")
+            
+            st.markdown("---")
+            
+            # Save button
+            if st.button("💾 Save Recipe", type="primary", use_container_width=True, key="cocktail_save_btn"):
+                # Collect ingredient data
+                ingredients_data = []
+                for i in range(st.session_state.cocktail_ingredient_count):
+                    product = st.session_state.get(f"cocktail_ing_prod_{i}", "")
+                    amount = st.session_state.get(f"cocktail_ing_amt_{i}", 0.0)
+                    unit = st.session_state.get(f"cocktail_ing_unit_{i}", "oz")
+                    if product and amount > 0:
+                        ingredients_data.append({"product": product, "amount": amount, "unit": unit})
+                
+                if not recipe_name:
+                    st.error("❌ Recipe name is required.")
+                elif not ingredients_data:
+                    st.error("❌ At least one ingredient with amount > 0 is required.")
+                elif sale_price <= 0:
+                    st.error("❌ Sale price must be greater than $0.")
+                else:
+                    # Check for duplicate name
+                    existing_names = [r['name'].lower() for r in recipes]
+                    if recipe_name.lower() in existing_names:
+                        st.error(f"❌ A recipe named '{recipe_name}' already exists.")
+                    else:
+                        new_recipe = {
+                            "name": recipe_name,
+                            "glass": glass_type,
+                            "sale_price": sale_price,
+                            "ingredients": ingredients_data,
+                            "instructions": instructions
+                        }
+                        
+                        if 'cocktail_recipes' not in st.session_state:
+                            st.session_state.cocktail_recipes = []
+                        
+                        st.session_state.cocktail_recipes.append(new_recipe)
+                        save_recipes('cocktail')
+                        
+                        # Reset form
+                        st.session_state.cocktail_ingredient_count = 1
+                        for key in list(st.session_state.keys()):
+                            if key.startswith("cocktail_ing_") or key in ["cocktail_recipe_name", "cocktail_instructions"]:
+                                del st.session_state[key]
+                        
+                        st.success(f"✅ '{recipe_name}' added successfully!")
+                        st.rerun()
 
 
 def show_bar_prep():
-    """Bar Prep Recipe Book with view and add recipe functionality."""
+    """Bar Prep Recipe Book with view, add, and edit recipe functionality."""
     show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
@@ -3896,6 +4064,7 @@ def show_bar_prep():
         st.title("🧪 Bar Prep Recipe Book")
     
     recipes = st.session_state.get('bar_prep_recipes', [])
+    available_products = get_all_available_products()
     
     def handle_delete(recipe_name):
         st.session_state.bar_prep_recipes = [r for r in st.session_state.bar_prep_recipes if r['name'] != recipe_name]
@@ -3903,63 +4072,62 @@ def show_bar_prep():
         st.success(f"✅ {recipe_name} deleted!")
         st.rerun()
     
-    tab_syrups, tab_batched, tab_add = st.tabs(["🫙 Syrups, Infusions & Garnishes", "🍸 Batched Cocktails", "➕ Add New Recipe"])
+    # Check if we're in edit mode
+    editing_recipe_name = st.session_state.get('editing_bar_prep', None)
+    editing_recipe = None
+    if editing_recipe_name:
+        editing_recipe = next((r for r in recipes if r['name'] == editing_recipe_name), None)
+        if not editing_recipe:
+            # Recipe not found, clear edit mode
+            del st.session_state['editing_bar_prep']
+            editing_recipe_name = None
     
-    with tab_syrups:
-        # Support both old "Syrups" and new "Syrups, Infusions & Garnishes" categories for backward compatibility
-        syrups = [r for r in recipes if r.get('category') in ['Syrups', 'Syrups, Infusions & Garnishes']]
-        if syrups:
-            # Sync button for existing recipes
-            with st.expander("🔄 Sync Recipes to Ingredients Inventory", expanded=False):
-                st.caption("This will add any syrup/infusion/garnish recipes that aren't already in your Ingredients inventory.")
-                if st.button("Sync All to Ingredients", key="sync_syrups_btn"):
-                    added, skipped = sync_syrups_to_ingredients()
-                    if added > 0:
-                        st.success(f"✅ Added {added} recipe(s) to Ingredients inventory!")
-                    if skipped > 0:
-                        st.info(f"ℹ️ {skipped} recipe(s) already exist in Ingredients and were skipped.")
-                    if added == 0 and skipped == 0:
-                        st.info("No recipes to sync.")
-                    if added > 0:
-                        st.rerun()
-            
-            # Display recipes from both categories
-            for recipe in syrups:
-                display_recipe_card(recipe, 'bar_prep', recipes.index(recipe), on_delete=lambda name: handle_delete(name))
-        else:
-            st.info("No recipes found. Add one in the 'Add New Recipe' tab to get started!")
-    
-    with tab_batched:
-        batched = [r for r in recipes if r.get('category') == 'Batched Cocktails']
-        if batched:
-            display_recipe_list(recipes, 'bar_prep', category_filter='Batched Cocktails', session_key='bar_prep_recipes')
-        else:
-            st.info("No batched cocktail recipes found. Add one in the 'Add New Recipe' tab to get started!")
-    
-    with tab_add:
-        st.markdown("### Create New Bar Prep Recipe")
+    # Show edit form if editing
+    if editing_recipe:
+        st.markdown(f"### ✏️ Editing: {editing_recipe['name']}")
         
-        # Get available products for ingredient selection
-        available_products = get_all_available_products()
+        # Cancel button
+        if st.button("← Cancel Edit", key="cancel_barprep_edit"):
+            del st.session_state['editing_bar_prep']
+            # Clear edit form state
+            for key in list(st.session_state.keys()):
+                if key.startswith("edit_barprep_"):
+                    del st.session_state[key]
+            st.rerun()
         
-        if not available_products:
-            st.warning("⚠️ No products found in Master Inventory. Add spirits and ingredients to the Master Inventory first to build recipes.")
+        st.markdown("---")
         
-        # Initialize session state for dynamic ingredients if not exists
-        if 'barprep_ingredient_count' not in st.session_state:
-            st.session_state.barprep_ingredient_count = 1
+        # Initialize edit form state if not exists
+        edit_prefix = "edit_barprep_"
+        if f"{edit_prefix}initialized" not in st.session_state:
+            st.session_state[f"{edit_prefix}ingredient_count"] = len(editing_recipe.get('ingredients', []))
+            if st.session_state[f"{edit_prefix}ingredient_count"] == 0:
+                st.session_state[f"{edit_prefix}ingredient_count"] = 1
+            # Pre-populate ingredients
+            for i, ing in enumerate(editing_recipe.get('ingredients', [])):
+                st.session_state[f"{edit_prefix}ing_prod_{i}"] = ing.get('product', '')
+                st.session_state[f"{edit_prefix}ing_amt_{i}"] = ing.get('amount', 0.0)
+                st.session_state[f"{edit_prefix}ing_unit_{i}"] = ing.get('unit', 'oz')
+            st.session_state[f"{edit_prefix}initialized"] = True
         
         col1, col2 = st.columns(2)
         
+        category_options = ["Syrups, Infusions & Garnishes", "Batched Cocktails"]
+        current_category = editing_recipe.get('category', 'Syrups, Infusions & Garnishes')
+        # Handle old "Syrups" category
+        if current_category == 'Syrups':
+            current_category = 'Syrups, Infusions & Garnishes'
+        category_index = category_options.index(current_category) if current_category in category_options else 0
+        
         with col1:
-            recipe_name = st.text_input("Recipe Name *", placeholder="e.g., Simple Syrup", key="barprep_recipe_name")
-            category = st.selectbox("Category *", ["Syrups, Infusions & Garnishes", "Batched Cocktails"], key="barprep_category")
-            yield_oz = st.number_input("Yield (oz) *", min_value=1.0, step=1.0, value=32.0, key="barprep_yield_oz")
+            recipe_name = st.text_input("Recipe Name *", value=editing_recipe.get('name', ''), key=f"{edit_prefix}name")
+            category = st.selectbox("Category *", category_options, index=category_index, key=f"{edit_prefix}category")
+            yield_oz = st.number_input("Yield (oz) *", min_value=1.0, step=1.0, value=float(editing_recipe.get('yield_oz', 32)), key=f"{edit_prefix}yield_oz")
         
         with col2:
-            yield_description = st.text_input("Yield Description", placeholder="e.g., 1 quart, ~22 cocktails", key="barprep_yield_desc")
-            shelf_life = st.text_input("Shelf Life", placeholder="e.g., 2-3 weeks refrigerated", key="barprep_shelf_life")
-            storage = st.text_input("Storage Instructions", placeholder="e.g., Refrigerate in sealed container", key="barprep_storage")
+            yield_description = st.text_input("Yield Description", value=editing_recipe.get('yield_description', ''), key=f"{edit_prefix}yield_desc")
+            shelf_life = st.text_input("Shelf Life", value=editing_recipe.get('shelf_life', ''), key=f"{edit_prefix}shelf_life")
+            storage = st.text_input("Storage Instructions", value=editing_recipe.get('storage', ''), key=f"{edit_prefix}storage")
         
         st.markdown("#### Ingredients")
         
@@ -3974,69 +4142,62 @@ def show_bar_prep():
         with col_remove:
             st.caption("")
         
+        unit_options = ["oz", "cups", "ml", "each", "lbs", "grams", "dashes", "barspoon"]
+        
         # Dynamic ingredient rows
         ingredients_to_remove = []
-        for i in range(st.session_state.barprep_ingredient_count):
+        for i in range(st.session_state[f"{edit_prefix}ingredient_count"]):
             col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+            
+            # Get current values or defaults
+            current_prod = st.session_state.get(f"{edit_prefix}ing_prod_{i}", "")
+            current_amt = st.session_state.get(f"{edit_prefix}ing_amt_{i}", 0.0)
+            current_unit = st.session_state.get(f"{edit_prefix}ing_unit_{i}", "oz")
+            
+            prod_options = [""] + available_products
+            prod_index = prod_options.index(current_prod) if current_prod in prod_options else 0
+            unit_index = unit_options.index(current_unit) if current_unit in unit_options else 0
+            
             with col_prod:
-                st.selectbox(
-                    f"Product {i+1}",
-                    options=[""] + available_products,
-                    key=f"barprep_ing_prod_{i}",
-                    label_visibility="collapsed"
-                )
+                st.selectbox(f"Product {i+1}", options=prod_options, index=prod_index, key=f"{edit_prefix}ing_prod_{i}", label_visibility="collapsed")
             with col_amt:
-                st.number_input(
-                    f"Amount {i+1}",
-                    min_value=0.0,
-                    step=0.5,
-                    value=0.0,
-                    key=f"barprep_ing_amt_{i}",
-                    label_visibility="collapsed"
-                )
+                st.number_input(f"Amount {i+1}", min_value=0.0, step=0.5, value=float(current_amt), key=f"{edit_prefix}ing_amt_{i}", label_visibility="collapsed")
             with col_unit:
-                st.selectbox(
-                    f"Unit {i+1}",
-                    options=["oz", "cups", "ml", "each", "lbs", "grams", "dashes", "barspoon"],
-                    key=f"barprep_ing_unit_{i}",
-                    label_visibility="collapsed"
-                )
+                st.selectbox(f"Unit {i+1}", options=unit_options, index=unit_index, key=f"{edit_prefix}ing_unit_{i}", label_visibility="collapsed")
             with col_remove:
-                if st.session_state.barprep_ingredient_count > 1:
-                    if st.button("🗑️", key=f"barprep_remove_ing_{i}", help="Remove ingredient"):
+                if st.session_state[f"{edit_prefix}ingredient_count"] > 1:
+                    if st.button("🗑️", key=f"{edit_prefix}remove_ing_{i}", help="Remove ingredient"):
                         ingredients_to_remove.append(i)
         
         # Handle ingredient removal
         if ingredients_to_remove:
-            # Shift ingredients up to fill gaps
             for remove_idx in sorted(ingredients_to_remove, reverse=True):
-                for j in range(remove_idx, st.session_state.barprep_ingredient_count - 1):
-                    # Copy values from j+1 to j
-                    if f"barprep_ing_prod_{j+1}" in st.session_state:
-                        st.session_state[f"barprep_ing_prod_{j}"] = st.session_state[f"barprep_ing_prod_{j+1}"]
-                        st.session_state[f"barprep_ing_amt_{j}"] = st.session_state[f"barprep_ing_amt_{j+1}"]
-                        st.session_state[f"barprep_ing_unit_{j}"] = st.session_state[f"barprep_ing_unit_{j+1}"]
-                st.session_state.barprep_ingredient_count -= 1
+                for j in range(remove_idx, st.session_state[f"{edit_prefix}ingredient_count"] - 1):
+                    if f"{edit_prefix}ing_prod_{j+1}" in st.session_state:
+                        st.session_state[f"{edit_prefix}ing_prod_{j}"] = st.session_state[f"{edit_prefix}ing_prod_{j+1}"]
+                        st.session_state[f"{edit_prefix}ing_amt_{j}"] = st.session_state[f"{edit_prefix}ing_amt_{j+1}"]
+                        st.session_state[f"{edit_prefix}ing_unit_{j}"] = st.session_state[f"{edit_prefix}ing_unit_{j+1}"]
+                st.session_state[f"{edit_prefix}ingredient_count"] -= 1
             st.rerun()
         
         # Add ingredient button
-        if st.button("➕ Add Ingredient", key="barprep_add_ingredient"):
-            st.session_state.barprep_ingredient_count += 1
+        if st.button("➕ Add Ingredient", key=f"{edit_prefix}add_ingredient"):
+            st.session_state[f"{edit_prefix}ingredient_count"] += 1
             st.rerun()
         
         st.markdown("#### Instructions")
-        instructions = st.text_area("Preparation Instructions", placeholder="e.g., Combine equal parts sugar and hot water. Stir until dissolved. Cool before use.", height=100, key="barprep_instructions")
+        instructions = st.text_area("Preparation Instructions", value=editing_recipe.get('instructions', ''), height=100, key=f"{edit_prefix}instructions")
         
         st.markdown("---")
         
         # Save button
-        if st.button("💾 Save Recipe", type="primary", use_container_width=True, key="barprep_save_btn"):
+        if st.button("💾 Save Changes", type="primary", use_container_width=True, key=f"{edit_prefix}save_btn"):
             # Collect ingredient data
             ingredients_data = []
-            for i in range(st.session_state.barprep_ingredient_count):
-                product = st.session_state.get(f"barprep_ing_prod_{i}", "")
-                amount = st.session_state.get(f"barprep_ing_amt_{i}", 0.0)
-                unit = st.session_state.get(f"barprep_ing_unit_{i}", "oz")
+            for i in range(st.session_state[f"{edit_prefix}ingredient_count"]):
+                product = st.session_state.get(f"{edit_prefix}ing_prod_{i}", "")
+                amount = st.session_state.get(f"{edit_prefix}ing_amt_{i}", 0.0)
+                unit = st.session_state.get(f"{edit_prefix}ing_unit_{i}", "oz")
                 if product and amount > 0:
                     ingredients_data.append({"product": product, "amount": amount, "unit": unit})
             
@@ -4047,44 +4208,216 @@ def show_bar_prep():
             elif yield_oz <= 0:
                 st.error("❌ Yield must be greater than 0 oz.")
             else:
-                # Check for duplicate name
-                existing_names = [r['name'].lower() for r in recipes]
-                if recipe_name.lower() in existing_names:
+                # Check for duplicate name (excluding current recipe)
+                other_names = [r['name'].lower() for r in recipes if r['name'] != editing_recipe_name]
+                if recipe_name.lower() in other_names:
                     st.error(f"❌ A recipe named '{recipe_name}' already exists.")
                 else:
-                    new_recipe = {
-                        "name": recipe_name,
-                        "category": category,
-                        "yield_oz": yield_oz,
-                        "yield_description": yield_description,
-                        "shelf_life": shelf_life,
-                        "storage": storage,
-                        "ingredients": ingredients_data,
-                        "instructions": instructions
-                    }
+                    # Update the recipe
+                    for r in st.session_state.bar_prep_recipes:
+                        if r['name'] == editing_recipe_name:
+                            r['name'] = recipe_name
+                            r['category'] = category
+                            r['yield_oz'] = yield_oz
+                            r['yield_description'] = yield_description
+                            r['shelf_life'] = shelf_life
+                            r['storage'] = storage
+                            r['ingredients'] = ingredients_data
+                            r['instructions'] = instructions
+                            break
                     
-                    if 'bar_prep_recipes' not in st.session_state:
-                        st.session_state.bar_prep_recipes = []
-                    
-                    st.session_state.bar_prep_recipes.append(new_recipe)
                     save_recipes('bar_prep')
                     
-                    # If this is a Syrup/Infusion/Garnish recipe, add it to Ingredients inventory
-                    added_to_inventory = False
-                    if category == "Syrups, Infusions & Garnishes":
-                        added_to_inventory = add_syrup_to_ingredients(new_recipe)
-                    
-                    # Reset form
-                    st.session_state.barprep_ingredient_count = 1
+                    # Clear edit mode
+                    del st.session_state['editing_bar_prep']
                     for key in list(st.session_state.keys()):
-                        if key.startswith("barprep_ing_") or key in ["barprep_recipe_name", "barprep_instructions", "barprep_yield_desc", "barprep_shelf_life", "barprep_storage"]:
+                        if key.startswith(edit_prefix):
                             del st.session_state[key]
                     
-                    if added_to_inventory:
-                        st.success(f"✅ '{recipe_name}' added successfully and synced to Ingredients inventory!")
-                    else:
-                        st.success(f"✅ '{recipe_name}' added successfully!")
+                    st.success(f"✅ '{recipe_name}' updated successfully!")
                     st.rerun()
+    
+    else:
+        # Normal view/add mode
+        tab_syrups, tab_batched, tab_add = st.tabs(["🫙 Syrups, Infusions & Garnishes", "🍸 Batched Cocktails", "➕ Add New Recipe"])
+        
+        with tab_syrups:
+            # Support both old "Syrups" and new "Syrups, Infusions & Garnishes" categories for backward compatibility
+            syrups = [r for r in recipes if r.get('category') in ['Syrups', 'Syrups, Infusions & Garnishes']]
+            if syrups:
+                # Sync button for existing recipes
+                with st.expander("🔄 Sync Recipes to Ingredients Inventory", expanded=False):
+                    st.caption("This will add any syrup/infusion/garnish recipes that aren't already in your Ingredients inventory.")
+                    if st.button("Sync All to Ingredients", key="sync_syrups_btn"):
+                        added, skipped = sync_syrups_to_ingredients()
+                        if added > 0:
+                            st.success(f"✅ Added {added} recipe(s) to Ingredients inventory!")
+                        if skipped > 0:
+                            st.info(f"ℹ️ {skipped} recipe(s) already exist in Ingredients and were skipped.")
+                        if added == 0 and skipped == 0:
+                            st.info("No recipes to sync.")
+                        if added > 0:
+                            st.rerun()
+                
+                # Display recipes from both categories
+                for recipe in syrups:
+                    display_recipe_card(recipe, 'bar_prep', recipes.index(recipe), on_delete=lambda name: handle_delete(name))
+            else:
+                st.info("No recipes found. Add one in the 'Add New Recipe' tab to get started!")
+        
+        with tab_batched:
+            batched = [r for r in recipes if r.get('category') == 'Batched Cocktails']
+            if batched:
+                display_recipe_list(recipes, 'bar_prep', category_filter='Batched Cocktails', session_key='bar_prep_recipes')
+            else:
+                st.info("No batched cocktail recipes found. Add one in the 'Add New Recipe' tab to get started!")
+        
+        with tab_add:
+            st.markdown("### Create New Bar Prep Recipe")
+            
+            if not available_products:
+                st.warning("⚠️ No products found in Master Inventory. Add spirits and ingredients to the Master Inventory first to build recipes.")
+            
+            # Initialize session state for dynamic ingredients if not exists
+            if 'barprep_ingredient_count' not in st.session_state:
+                st.session_state.barprep_ingredient_count = 1
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                recipe_name = st.text_input("Recipe Name *", placeholder="e.g., Simple Syrup", key="barprep_recipe_name")
+                category = st.selectbox("Category *", ["Syrups, Infusions & Garnishes", "Batched Cocktails"], key="barprep_category")
+                yield_oz = st.number_input("Yield (oz) *", min_value=1.0, step=1.0, value=32.0, key="barprep_yield_oz")
+            
+            with col2:
+                yield_description = st.text_input("Yield Description", placeholder="e.g., 1 quart, ~22 cocktails", key="barprep_yield_desc")
+                shelf_life = st.text_input("Shelf Life", placeholder="e.g., 2-3 weeks refrigerated", key="barprep_shelf_life")
+                storage = st.text_input("Storage Instructions", placeholder="e.g., Refrigerate in sealed container", key="barprep_storage")
+            
+            st.markdown("#### Ingredients")
+            
+            # Column headers
+            col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+            with col_prod:
+                st.caption("Product")
+            with col_amt:
+                st.caption("Amount")
+            with col_unit:
+                st.caption("Unit")
+            with col_remove:
+                st.caption("")
+            
+            # Dynamic ingredient rows
+            ingredients_to_remove = []
+            for i in range(st.session_state.barprep_ingredient_count):
+                col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+                with col_prod:
+                    st.selectbox(
+                        f"Product {i+1}",
+                        options=[""] + available_products,
+                        key=f"barprep_ing_prod_{i}",
+                        label_visibility="collapsed"
+                    )
+                with col_amt:
+                    st.number_input(
+                        f"Amount {i+1}",
+                        min_value=0.0,
+                        step=0.5,
+                        value=0.0,
+                        key=f"barprep_ing_amt_{i}",
+                        label_visibility="collapsed"
+                    )
+                with col_unit:
+                    st.selectbox(
+                        f"Unit {i+1}",
+                        options=["oz", "cups", "ml", "each", "lbs", "grams", "dashes", "barspoon"],
+                        key=f"barprep_ing_unit_{i}",
+                        label_visibility="collapsed"
+                    )
+                with col_remove:
+                    if st.session_state.barprep_ingredient_count > 1:
+                        if st.button("🗑️", key=f"barprep_remove_ing_{i}", help="Remove ingredient"):
+                            ingredients_to_remove.append(i)
+            
+            # Handle ingredient removal
+            if ingredients_to_remove:
+                # Shift ingredients up to fill gaps
+                for remove_idx in sorted(ingredients_to_remove, reverse=True):
+                    for j in range(remove_idx, st.session_state.barprep_ingredient_count - 1):
+                        # Copy values from j+1 to j
+                        if f"barprep_ing_prod_{j+1}" in st.session_state:
+                            st.session_state[f"barprep_ing_prod_{j}"] = st.session_state[f"barprep_ing_prod_{j+1}"]
+                            st.session_state[f"barprep_ing_amt_{j}"] = st.session_state[f"barprep_ing_amt_{j+1}"]
+                            st.session_state[f"barprep_ing_unit_{j}"] = st.session_state[f"barprep_ing_unit_{j+1}"]
+                    st.session_state.barprep_ingredient_count -= 1
+                st.rerun()
+            
+            # Add ingredient button
+            if st.button("➕ Add Ingredient", key="barprep_add_ingredient"):
+                st.session_state.barprep_ingredient_count += 1
+                st.rerun()
+            
+            st.markdown("#### Instructions")
+            instructions = st.text_area("Preparation Instructions", placeholder="e.g., Combine equal parts sugar and hot water. Stir until dissolved. Cool before use.", height=100, key="barprep_instructions")
+            
+            st.markdown("---")
+            
+            # Save button
+            if st.button("💾 Save Recipe", type="primary", use_container_width=True, key="barprep_save_btn"):
+                # Collect ingredient data
+                ingredients_data = []
+                for i in range(st.session_state.barprep_ingredient_count):
+                    product = st.session_state.get(f"barprep_ing_prod_{i}", "")
+                    amount = st.session_state.get(f"barprep_ing_amt_{i}", 0.0)
+                    unit = st.session_state.get(f"barprep_ing_unit_{i}", "oz")
+                    if product and amount > 0:
+                        ingredients_data.append({"product": product, "amount": amount, "unit": unit})
+                
+                if not recipe_name:
+                    st.error("❌ Recipe name is required.")
+                elif not ingredients_data:
+                    st.error("❌ At least one ingredient with amount > 0 is required.")
+                elif yield_oz <= 0:
+                    st.error("❌ Yield must be greater than 0 oz.")
+                else:
+                    # Check for duplicate name
+                    existing_names = [r['name'].lower() for r in recipes]
+                    if recipe_name.lower() in existing_names:
+                        st.error(f"❌ A recipe named '{recipe_name}' already exists.")
+                    else:
+                        new_recipe = {
+                            "name": recipe_name,
+                            "category": category,
+                            "yield_oz": yield_oz,
+                            "yield_description": yield_description,
+                            "shelf_life": shelf_life,
+                            "storage": storage,
+                            "ingredients": ingredients_data,
+                            "instructions": instructions
+                        }
+                        
+                        if 'bar_prep_recipes' not in st.session_state:
+                            st.session_state.bar_prep_recipes = []
+                        
+                        st.session_state.bar_prep_recipes.append(new_recipe)
+                        save_recipes('bar_prep')
+                        
+                        # If this is a Syrup/Infusion/Garnish recipe, add it to Ingredients inventory
+                        added_to_inventory = False
+                        if category == "Syrups, Infusions & Garnishes":
+                            added_to_inventory = add_syrup_to_ingredients(new_recipe)
+                        
+                        # Reset form
+                        st.session_state.barprep_ingredient_count = 1
+                        for key in list(st.session_state.keys()):
+                            if key.startswith("barprep_ing_") or key in ["barprep_recipe_name", "barprep_instructions", "barprep_yield_desc", "barprep_shelf_life", "barprep_storage"]:
+                                del st.session_state[key]
+                        
+                        if added_to_inventory:
+                            st.success(f"✅ '{recipe_name}' added successfully and synced to Ingredients inventory!")
+                        else:
+                            st.success(f"✅ '{recipe_name}' added successfully!")
+                        st.rerun()
 
 
 def show_cogs():
