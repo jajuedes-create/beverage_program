@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.7
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.8
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -108,6 +108,12 @@
 #           - Renamed "Syrups & Infusions" tab to "Syrups, Infusions & Garnishes"
 #           - Updated category dropdown to match
 #           - Updated all category filters and auto-sync logic
+#   bb_V2.8 - Inventory save logic improvement:
+#           - Save now overwrites Google Sheet with current app data
+#           - Deletions in app now sync to Google Sheets on save
+#           - Simplified save logic for all inventory types (Spirits, Wine, Beer, Ingredients, N/A Beverages)
+#           - Bidirectional sync: App changes save to Sheets, Sheet changes load on app refresh
+#           - Added backward compatibility for old "Syrups" category in Bar Prep
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -927,7 +933,8 @@ def sync_syrups_to_ingredients() -> Tuple[int, int]:
         Tuple of (added_count, skipped_count)
     """
     recipes = st.session_state.get('bar_prep_recipes', [])
-    syrups = [r for r in recipes if r.get('category') == 'Syrups, Infusions & Garnishes']
+    # Support both old "Syrups" and new "Syrups, Infusions & Garnishes" categories
+    syrups = [r for r in recipes if r.get('category') in ['Syrups', 'Syrups, Infusions & Garnishes']]
     
     added = 0
     skipped = 0
@@ -2060,29 +2067,8 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     
     # Save button
     if st.button("💾 Save Changes", key="save_spirits_split", type="primary"):
-        full_df = calc_df.copy()
-        updated_inventory = st.session_state.spirits_inventory.copy()
-        
-        # Ensure location columns exist
-        for col in [loc1, loc2, loc3, "Total Inventory"]:
-            if col not in updated_inventory.columns:
-                updated_inventory[col] = 0.0
-        
-        for idx, row in full_df.iterrows():
-            product_name = row['Product']
-            mask = updated_inventory['Product'] == product_name
-            if mask.any():
-                for col in full_df.columns:
-                    if col in updated_inventory.columns:
-                        updated_inventory.loc[mask, col] = row[col]
-        
-        # Handle new rows
-        existing_products = updated_inventory['Product'].tolist()
-        for idx, row in full_df.iterrows():
-            if row['Product'] not in existing_products:
-                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
-        
-        st.session_state.spirits_inventory = updated_inventory
+        # Save the edited data directly (overwrites Google Sheet)
+        st.session_state.spirits_inventory = calc_df.copy()
         st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
         save_all_inventory_data()
         st.success("✅ Changes saved!")
@@ -2219,27 +2205,8 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
         st.metric("💰 Total Inventory Value", format_currency(total_value))
     
     if st.button("💾 Save Changes", key="save_wine_split", type="primary"):
-        full_df = calc_df.copy()
-        updated_inventory = st.session_state.wine_inventory.copy()
-        
-        for col in [loc1, loc2, loc3, "Total Inventory"]:
-            if col not in updated_inventory.columns:
-                updated_inventory[col] = 0.0
-        
-        for idx, row in full_df.iterrows():
-            product_name = row['Product']
-            mask = updated_inventory['Product'] == product_name
-            if mask.any():
-                for col in full_df.columns:
-                    if col in updated_inventory.columns:
-                        updated_inventory.loc[mask, col] = row[col]
-        
-        existing_products = updated_inventory['Product'].tolist()
-        for idx, row in full_df.iterrows():
-            if row['Product'] not in existing_products:
-                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
-        
-        st.session_state.wine_inventory = updated_inventory
+        # Save the edited data directly (overwrites Google Sheet)
+        st.session_state.wine_inventory = calc_df.copy()
         st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
         save_all_inventory_data()
         st.success("✅ Changes saved!")
@@ -2387,27 +2354,8 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
         st.metric("💰 Total Inventory Value", format_currency(total_value))
     
     if st.button("💾 Save Changes", key="save_beer_split", type="primary"):
-        full_df = calc_df.copy()
-        updated_inventory = st.session_state.beer_inventory.copy()
-        
-        for col in [loc1, loc2, loc3, "Total Inventory"]:
-            if col not in updated_inventory.columns:
-                updated_inventory[col] = 0.0
-        
-        for idx, row in full_df.iterrows():
-            product_name = row['Product']
-            mask = updated_inventory['Product'] == product_name
-            if mask.any():
-                for col in full_df.columns:
-                    if col in updated_inventory.columns:
-                        updated_inventory.loc[mask, col] = row[col]
-        
-        existing_products = updated_inventory['Product'].tolist()
-        for idx, row in full_df.iterrows():
-            if row['Product'] not in existing_products:
-                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
-        
-        st.session_state.beer_inventory = updated_inventory
+        # Save the edited data directly (overwrites Google Sheet)
+        st.session_state.beer_inventory = calc_df.copy()
         st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
         save_all_inventory_data()
         st.success("✅ Changes saved!")
@@ -2529,27 +2477,8 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     )
     
     if st.button("💾 Save Changes", key="save_ingredients_split", type="primary"):
-        full_df = calc_df.copy()
-        updated_inventory = st.session_state.ingredients_inventory.copy()
-        
-        for col in [loc1, loc2, loc3, "Total Inventory"]:
-            if col not in updated_inventory.columns:
-                updated_inventory[col] = 0.0
-        
-        for idx, row in full_df.iterrows():
-            product_name = row['Product']
-            mask = updated_inventory['Product'] == product_name
-            if mask.any():
-                for col in full_df.columns:
-                    if col in updated_inventory.columns:
-                        updated_inventory.loc[mask, col] = row[col]
-        
-        existing_products = updated_inventory['Product'].tolist()
-        for idx, row in full_df.iterrows():
-            if row['Product'] not in existing_products:
-                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
-        
-        st.session_state.ingredients_inventory = updated_inventory
+        # Save the edited data directly (overwrites Google Sheet)
+        st.session_state.ingredients_inventory = calc_df.copy()
         st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
         save_all_inventory_data()
         st.success("✅ Changes saved!")
@@ -2671,27 +2600,8 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
     )
     
     if st.button("💾 Save Changes", key="save_na_beverages_split", type="primary"):
-        full_df = calc_df.copy()
-        updated_inventory = st.session_state.na_beverages_inventory.copy()
-        
-        for col in [loc1, loc2, loc3, "Total Inventory"]:
-            if col not in updated_inventory.columns:
-                updated_inventory[col] = 0.0
-        
-        for idx, row in full_df.iterrows():
-            product_name = row['Product']
-            mask = updated_inventory['Product'] == product_name
-            if mask.any():
-                for col in full_df.columns:
-                    if col in updated_inventory.columns:
-                        updated_inventory.loc[mask, col] = row[col]
-        
-        existing_products = updated_inventory['Product'].tolist()
-        for idx, row in full_df.iterrows():
-            if row['Product'] not in existing_products:
-                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
-        
-        st.session_state.na_beverages_inventory = updated_inventory
+        # Save the edited data directly (overwrites Google Sheet)
+        st.session_state.na_beverages_inventory = calc_df.copy()
         st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
         save_all_inventory_data()
         st.success("✅ Changes saved!")
@@ -3964,10 +3874,17 @@ def show_bar_prep():
     
     recipes = st.session_state.get('bar_prep_recipes', [])
     
+    def handle_delete(recipe_name):
+        st.session_state.bar_prep_recipes = [r for r in st.session_state.bar_prep_recipes if r['name'] != recipe_name]
+        save_recipes('bar_prep')
+        st.success(f"✅ {recipe_name} deleted!")
+        st.rerun()
+    
     tab_syrups, tab_batched, tab_add = st.tabs(["🫙 Syrups, Infusions & Garnishes", "🍸 Batched Cocktails", "➕ Add New Recipe"])
     
     with tab_syrups:
-        syrups = [r for r in recipes if r.get('category') == 'Syrups, Infusions & Garnishes']
+        # Support both old "Syrups" and new "Syrups, Infusions & Garnishes" categories for backward compatibility
+        syrups = [r for r in recipes if r.get('category') in ['Syrups', 'Syrups, Infusions & Garnishes']]
         if syrups:
             # Sync button for existing recipes
             with st.expander("🔄 Sync Recipes to Ingredients Inventory", expanded=False):
@@ -3983,7 +3900,9 @@ def show_bar_prep():
                     if added > 0:
                         st.rerun()
             
-            display_recipe_list(recipes, 'bar_prep', category_filter='Syrups, Infusions & Garnishes', session_key='bar_prep_recipes')
+            # Display recipes from both categories
+            for recipe in syrups:
+                display_recipe_card(recipe, 'bar_prep', recipes.index(recipe), on_delete=lambda name: handle_delete(name))
         else:
             st.info("No recipes found. Add one in the 'Add New Recipe' tab to get started!")
     
