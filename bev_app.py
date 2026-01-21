@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.8
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.9
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -114,6 +114,10 @@
 #           - Simplified save logic for all inventory types (Spirits, Wine, Beer, Ingredients, N/A Beverages)
 #           - Bidirectional sync: App changes save to Sheets, Sheet changes load on app refresh
 #           - Added backward compatibility for old "Syrups" category in Bar Prep
+#   bb_V2.9 - Ingredients and N/A Beverages display updates:
+#           - Calculated fields reordered: Product, Cost/Unit, Total Inventory, Value
+#           - Added Value field (Cost × Total Inventory) with total at bottom
+#           - Removed index from Input tables (hide_index=True)
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -2402,7 +2406,7 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
             st.session_state.ingredients_inventory[col] = 0.0
     
     editable_cols = ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"]
-    calculated_cols = ["Total Inventory", "Cost/Unit"]
+    calculated_cols = ["Cost/Unit", "Total Inventory", "Value"]
     
     # Filter to only columns that exist and warn about missing ones
     missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
@@ -2423,6 +2427,7 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         filtered_df[editable_cols].copy(),
         use_container_width=True,
         num_rows="dynamic",
+        hide_index=True,
         key="editor_ingredients_split",
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -2456,6 +2461,10 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         calc_df["Cost/Unit"] = calc_df.apply(
             lambda r: round(r['Cost'] / r['Size/Yield'], 4) if r['Size/Yield'] > 0 else 0, axis=1)
     
+    # Calculate Value = Cost * Total Inventory
+    if "Cost" in calc_df.columns:
+        calc_df["Value"] = round(calc_df["Cost"] * calc_df["Total Inventory"], 2)
+    
     # Display calculated columns
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
     st.caption("These values update automatically based on your edits above.")
@@ -2471,10 +2480,15 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
             "Cost/Unit": st.column_config.NumberColumn(format="$%.4f"),
+            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
+            "Value": st.column_config.NumberColumn(format="$%.2f"),
         }
     )
+    
+    if "Value" in calc_df.columns:
+        total_value = calc_df["Value"].sum()
+        st.metric("💰 Total Inventory Value", format_currency(total_value))
     
     if st.button("💾 Save Changes", key="save_ingredients_split", type="primary"):
         # Save the edited data directly (overwrites Google Sheet)
@@ -2525,7 +2539,7 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
             st.session_state.na_beverages_inventory[col] = 0.0
     
     editable_cols = ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"]
-    calculated_cols = ["Total Inventory", "Cost/Unit"]
+    calculated_cols = ["Cost/Unit", "Total Inventory", "Value"]
     
     # Filter to only columns that exist and warn about missing ones
     missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
@@ -2546,6 +2560,7 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
         filtered_df[editable_cols].copy(),
         use_container_width=True,
         num_rows="dynamic",
+        hide_index=True,
         key="editor_na_beverages_split",
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -2579,6 +2594,10 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
         calc_df["Cost/Unit"] = calc_df.apply(
             lambda r: round(r['Cost'] / r['Size/Yield'], 4) if r['Size/Yield'] > 0 else 0, axis=1)
     
+    # Calculate Value = Cost * Total Inventory
+    if "Cost" in calc_df.columns:
+        calc_df["Value"] = round(calc_df["Cost"] * calc_df["Total Inventory"], 2)
+    
     # Display calculated columns
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
     st.caption("These values update automatically based on your edits above.")
@@ -2594,10 +2613,15 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
             "Cost/Unit": st.column_config.NumberColumn(format="$%.4f"),
+            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
+            "Value": st.column_config.NumberColumn(format="$%.2f"),
         }
     )
+    
+    if "Value" in calc_df.columns:
+        total_value = calc_df["Value"].sum()
+        st.metric("💰 Total Inventory Value", format_currency(total_value))
     
     if st.button("💾 Save Changes", key="save_na_beverages_split", type="primary"):
         # Save the edited data directly (overwrites Google Sheet)
