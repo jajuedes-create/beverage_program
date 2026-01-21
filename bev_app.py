@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.5
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.7
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -100,6 +100,14 @@
 #           - Cost/oz remains constant (doesn't change with scale)
 #           - Instructions, shelf life, storage unchanged
 #           - Scaling is temporary/display only - never saves over base recipe
+#   bb_V2.6 - Cocktail pour cost calculation update:
+#           - Changed margin calculation from (price-cost)/price to cost/price
+#           - Renamed "Margin" to "Pour Cost" for clarity
+#           - Pour Cost = Cocktail Cost / Menu Price × 100
+#   bb_V2.7 - Bar Prep category rename:
+#           - Renamed "Syrups & Infusions" tab to "Syrups, Infusions & Garnishes"
+#           - Updated category dropdown to match
+#           - Updated all category filters and auto-sync logic
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -919,7 +927,7 @@ def sync_syrups_to_ingredients() -> Tuple[int, int]:
         Tuple of (added_count, skipped_count)
     """
     recipes = st.session_state.get('bar_prep_recipes', [])
-    syrups = [r for r in recipes if r.get('category') == 'Syrups']
+    syrups = [r for r in recipes if r.get('category') == 'Syrups, Infusions & Garnishes']
     
     added = 0
     skipped = 0
@@ -1239,8 +1247,8 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
         header = f"**{recipe['name']}** | Yield: {recipe.get('yield_description', '')} | Batch: {format_currency(base_cost)} | Cost/oz: {format_currency(cost_per_oz)}"
     else:
         sale_price = recipe.get('sale_price', 0)
-        margin = ((sale_price - base_cost) / sale_price * 100) if sale_price > 0 else 0
-        header = f"**{recipe['name']}** | Cost: {format_currency(base_cost)} | Price: {format_currency(sale_price)} | Margin: {margin:.1f}%"
+        pour_cost = (base_cost / sale_price * 100) if sale_price > 0 else 0
+        header = f"**{recipe['name']}** | Cost: {format_currency(base_cost)} | Price: {format_currency(sale_price)} | Pour Cost: {pour_cost:.1f}%"
     
     with st.expander(header, expanded=False):
         # Batch scaling for bar_prep recipes
@@ -1377,7 +1385,7 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
             else:
                 st.metric("Total Cost", format_currency(base_cost))
                 st.metric("Sale Price", format_currency(recipe.get('sale_price', 0)))
-                st.metric("Margin", f"{margin:.1f}%")
+                st.metric("Pour Cost", f"{pour_cost:.1f}%")
         
         if on_delete:
             st.markdown("---")
@@ -3956,28 +3964,28 @@ def show_bar_prep():
     
     recipes = st.session_state.get('bar_prep_recipes', [])
     
-    tab_syrups, tab_batched, tab_add = st.tabs(["🫙 Syrups & Infusions", "🍸 Batched Cocktails", "➕ Add New Recipe"])
+    tab_syrups, tab_batched, tab_add = st.tabs(["🫙 Syrups, Infusions & Garnishes", "🍸 Batched Cocktails", "➕ Add New Recipe"])
     
     with tab_syrups:
-        syrups = [r for r in recipes if r.get('category') == 'Syrups']
+        syrups = [r for r in recipes if r.get('category') == 'Syrups, Infusions & Garnishes']
         if syrups:
             # Sync button for existing recipes
-            with st.expander("🔄 Sync Syrups to Ingredients Inventory", expanded=False):
-                st.caption("This will add any syrup recipes that aren't already in your Ingredients inventory.")
-                if st.button("Sync All Syrups to Ingredients", key="sync_syrups_btn"):
+            with st.expander("🔄 Sync Recipes to Ingredients Inventory", expanded=False):
+                st.caption("This will add any syrup/infusion/garnish recipes that aren't already in your Ingredients inventory.")
+                if st.button("Sync All to Ingredients", key="sync_syrups_btn"):
                     added, skipped = sync_syrups_to_ingredients()
                     if added > 0:
-                        st.success(f"✅ Added {added} syrup(s) to Ingredients inventory!")
+                        st.success(f"✅ Added {added} recipe(s) to Ingredients inventory!")
                     if skipped > 0:
-                        st.info(f"ℹ️ {skipped} syrup(s) already exist in Ingredients and were skipped.")
+                        st.info(f"ℹ️ {skipped} recipe(s) already exist in Ingredients and were skipped.")
                     if added == 0 and skipped == 0:
-                        st.info("No syrups to sync.")
+                        st.info("No recipes to sync.")
                     if added > 0:
                         st.rerun()
             
-            display_recipe_list(recipes, 'bar_prep', category_filter='Syrups', session_key='bar_prep_recipes')
+            display_recipe_list(recipes, 'bar_prep', category_filter='Syrups, Infusions & Garnishes', session_key='bar_prep_recipes')
         else:
-            st.info("No syrup recipes found. Add one in the 'Add New Recipe' tab to get started!")
+            st.info("No recipes found. Add one in the 'Add New Recipe' tab to get started!")
     
     with tab_batched:
         batched = [r for r in recipes if r.get('category') == 'Batched Cocktails']
@@ -4003,7 +4011,7 @@ def show_bar_prep():
         
         with col1:
             recipe_name = st.text_input("Recipe Name *", placeholder="e.g., Simple Syrup", key="barprep_recipe_name")
-            category = st.selectbox("Category *", ["Syrups", "Batched Cocktails"], key="barprep_category")
+            category = st.selectbox("Category *", ["Syrups, Infusions & Garnishes", "Batched Cocktails"], key="barprep_category")
             yield_oz = st.number_input("Yield (oz) *", min_value=1.0, step=1.0, value=32.0, key="barprep_yield_oz")
         
         with col2:
@@ -4119,9 +4127,9 @@ def show_bar_prep():
                     st.session_state.bar_prep_recipes.append(new_recipe)
                     save_recipes('bar_prep')
                     
-                    # If this is a Syrup recipe, add it to Ingredients inventory
+                    # If this is a Syrup/Infusion/Garnish recipe, add it to Ingredients inventory
                     added_to_inventory = False
-                    if category == "Syrups":
+                    if category == "Syrups, Infusions & Garnishes":
                         added_to_inventory = add_syrup_to_ingredients(new_recipe)
                     
                     # Reset form
