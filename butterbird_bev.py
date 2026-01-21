@@ -1,8 +1,8 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BETA 1.0
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.12
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
-#   - Master Inventory (Spirits, Wine, Beer, Ingredients)
+#   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
 #   - Weekly Order Builder
 #   - Cocktail Builds Book
 #   - Cost of Goods Sold (COGS) Calculator
@@ -11,6 +11,133 @@
 # Version History:
 #   V1.0 - V3.7: Development versions (see previous files for detailed history)
 #   BETA 1.0 - CLIENT CONFIGURATION SYSTEM (Production-Ready Template)
+#   bb_V1 - Butterbird initial deployment (clean slate, no sample data)
+#   bb_V1.1 - CSV upload improvements:
+#           - Added column validation with missing column error messages
+#           - Case-insensitive column name matching and normalization
+#           - Added debugging warnings for missing columns in display functions
+#           - Fixed Product column check in calculated fields display
+#   bb_V1.2 - Recipe management functionality:
+#           - Added "Add New Recipe" tab to Cocktail Builds Book
+#           - Added "Add New Recipe" tab to Bar Prep Recipe Book
+#           - Cocktail form: name, glass, sale price, up to 8 ingredients, instructions
+#           - Bar Prep form: name, category, yield, shelf life, storage, up to 10 ingredients, instructions
+#           - Duplicate recipe name validation
+#           - Auto-save to Google Sheets on recipe creation
+#   bb_V1.3 - Bar Prep ingredient selection update:
+#           - Changed Bar Prep ingredients from text input to dropdown selector
+#           - Ingredients now selected from Master Inventory (same as Cocktail Builds)
+#   bb_V1.4 - CSV upload UX improvement:
+#           - Moved CSV upload into each inventory tab (Spirits, Wine, Beer, Ingredients)
+#           - Each tab now shows only its category-specific upload instructions
+#           - Removed confusing category dropdown from upload section
+#           - Unique button keys per category to prevent conflicts
+#   bb_V1.5 - Google Sheets data type handling:
+#           - Added numeric conversion for all calculation columns
+#           - Handles currency-formatted strings ($25.00) from Google Sheets
+#           - Handles percentage-formatted strings from Google Sheets
+#           - Prevents division errors when data contains non-numeric values
+#           - Applied fix to Spirits, Wine, Beer, and Ingredients inventory displays
+#   bb_V1.6 - Spirits inventory field updates:
+#           - Renamed "Cost" to "Bottle Cost"
+#           - Renamed "Margin" to "Target Margin"
+#           - Reordered Input fields: Product, Type, Bottle Cost, Size (oz.), 
+#             [loc1], [loc2], [loc3], Target Margin, Use, Distributor, Order Notes
+#           - Updated CSV upload instructions and validation
+#           - Updated all calculation formulas to use new column names
+#   bb_V1.7 - Spirits calculated fields updates:
+#           - Reordered Calculated Fields: Product, Cost/Oz, Neat Price, Total Inventory, Value
+#           - Removed "Suggested Retail" from calculated fields
+#   bb_V1.8 - Spirits pour pricing calculations:
+#           - Added new calculated fields: Shot, Single, Neat Pour, Double
+#           - Shot = (1 * Cost/Oz) / Target Margin
+#           - Single = (1.5 * Cost/Oz) / Target Margin
+#           - Neat Pour = (2 * Cost/Oz) / Target Margin (renamed from Neat Price)
+#           - Double = (3 * Cost/Oz) / Target Margin
+#           - Final calculated field order: Product, Cost/Oz, Shot, Single, Neat Pour, Double, Total Inventory, Value
+#   bb_V1.9 - Beer inventory field updates:
+#           - Renamed "Margin" to "Target Margin"
+#           - Moved Target Margin to right of Storage, left of Distributor
+#           - New Input field order: Product, Type, Cost per Keg/Case, Size, UoM,
+#             [loc1], [loc2], [loc3], Target Margin, Distributor, Order Notes
+#   bb_V2.0 - Beer calculated fields updates:
+#           - Reordered Calculated Fields: Product, Cost/Unit, Menu Price, Total Inventory, Value
+#           - Fixed Menu Price calculation:
+#             * Half Barrel, Quarter Barrel, Sixtel: (16 * Cost/Unit) / Target Margin
+#             * Case: Cost/Unit / Target Margin
+#   bb_V2.1 - Added N/A Beverages inventory category:
+#           - New tab in Master Inventory module for non-alcoholic beverages
+#           - Same structure as Ingredients: Product, Cost, Size/Yield, UoM, locations, Distributor, Order Notes
+#           - Calculated fields: Total Inventory, Cost/Unit
+#           - Full Google Sheets integration (load/save)
+#           - CSV upload support with validation
+#           - Added to inventory dashboard metrics (6 columns now)
+#   bb_V2.2 - Dynamic ingredient addition in recipe forms:
+#           - Cocktail Builds: Replaced fixed 8-ingredient form with dynamic "Add Ingredient" button
+#           - Bar Prep: Replaced fixed 10-ingredient form with dynamic "Add Ingredient" button
+#           - Both forms now start with 1 ingredient row and allow adding/removing as needed
+#           - Added trash button to remove individual ingredients
+#           - Form resets after successful recipe save
+#   bb_V2.3 - Password protection:
+#           - Added optional password gate before app access
+#           - Password stored securely in secrets.toml (app_password)
+#           - Clean login screen with branding
+#           - If no password configured, app remains open access
+#           - Uses try/except for robust secrets access
+#   bb_V2.4 - Auto-sync Syrups to Ingredients inventory:
+#           - New syrup recipes automatically added to Ingredients inventory
+#           - Calculates total batch cost from recipe ingredients
+#           - Sets Cost = total batch cost, Size/Yield = recipe yield, UoM = oz
+#           - Distributor set to "House-made", Order Notes = "Bar Prep Recipe"
+#           - Sync button to add existing syrups that weren't auto-added
+#           - Syrups remain in Ingredients until manually deleted
+#   bb_V2.5 - Batch scaling for Bar Prep recipes:
+#           - Added scaling controls at top of each expanded recipe
+#           - Preset buttons: ½×, 1×, 2×, 3×, 4×
+#           - Custom multiplier input (0.1 to 20×, step 0.25)
+#           - Scales ingredient amounts and total yield
+#           - Shows scaled batch cost with indicator
+#           - Cost/oz remains constant (doesn't change with scale)
+#           - Instructions, shelf life, storage unchanged
+#           - Scaling is temporary/display only - never saves over base recipe
+#   bb_V2.6 - Cocktail pour cost calculation update:
+#           - Changed margin calculation from (price-cost)/price to cost/price
+#           - Renamed "Margin" to "Pour Cost" for clarity
+#           - Pour Cost = Cocktail Cost / Menu Price × 100
+#   bb_V2.7 - Bar Prep category rename:
+#           - Renamed "Syrups & Infusions" tab to "Syrups, Infusions & Garnishes"
+#           - Updated category dropdown to match
+#           - Updated all category filters and auto-sync logic
+#   bb_V2.8 - Inventory save logic improvement:
+#           - Save now overwrites Google Sheet with current app data
+#           - Deletions in app now sync to Google Sheets on save
+#           - Simplified save logic for all inventory types (Spirits, Wine, Beer, Ingredients, N/A Beverages)
+#           - Bidirectional sync: App changes save to Sheets, Sheet changes load on app refresh
+#           - Added backward compatibility for old "Syrups" category in Bar Prep
+#   bb_V2.9 - Ingredients and N/A Beverages display updates:
+#           - Calculated fields reordered: Product, Cost/Unit, Total Inventory, Value
+#           - Added Value field (Cost × Total Inventory) with total at bottom
+#           - Removed index from all Input tables using reset_index(drop=True)
+#           - Applied to: Spirits, Wine, Beer, Ingredients, N/A Beverages
+#   bb_V2.10 - Recipe editing functionality:
+#           - Added Edit button to recipe cards (Cocktails and Bar Prep)
+#           - Full edit form with pre-populated values
+#           - Dynamic ingredient editing (add/remove ingredients)
+#           - Cancel button to return to view mode without saving
+#           - Duplicate name checking (excludes current recipe being edited)
+#   bb_V2.11 - Batched Cocktails sync to Spirits inventory:
+#           - New batched cocktail recipes auto-add to Spirits inventory
+#           - Added "Sync Batched Cocktails to Spirits" button in Batched Cocktails tab
+#           - Spirits entry includes: Product, Type="Batched Cocktail", Bottle Cost, Size (oz.)
+#           - Pour prices (Shot, Single, Neat Pour, Double) calculated from cost/oz and margin
+#           - Distributor defaults to "House-made", Order Notes to "Bar Prep Recipe"
+#   bb_V2.12 - Filtered inventory edit fix:
+#           - Edits made in filtered views now persist when filters change
+#           - merge_edits_to_inventory() merges edits back to full inventory immediately
+#           - Save button disabled when filters are active (prevents data loss)
+#           - Warning message prompts user to clear filters before saving
+#           - Row add/delete disabled when filtered to prevent complexity
+#           - Applied to all 5 inventory types: Spirits, Wine, Beer, Ingredients, N/A Beverages
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -45,7 +172,7 @@ CLIENT_CONFIG = {
     # -------------------------------------------------------------------------
     # Restaurant Information
     # -------------------------------------------------------------------------
-    "restaurant_name": "Test Restaurant",
+    "restaurant_name": "Butterbird",
     "restaurant_tagline": "Manage your inventory, build orders, track cost of goods sold, and store all of your recipes.",
     
     # -------------------------------------------------------------------------
@@ -104,15 +231,7 @@ CLIENT_CONFIG = {
     # -------------------------------------------------------------------------
     # Pre-populate distributor dropdowns with these options
     "distributors": [
-        "Breakthru",
-        "General Beverage",
-        "Frank Beer",
-        "GB Beer",
-        "US Foods",
-        "Chromatic",
-        "Vino Veritas",
-        "Left Bank",
-        "House Made",
+        "",
     ],
     
     # -------------------------------------------------------------------------
@@ -134,6 +253,7 @@ CLIENT_CONFIG = {
         "wine_inventory": "wine_inventory",
         "beer_inventory": "beer_inventory",
         "ingredients_inventory": "ingredients_inventory",
+        "na_beverages_inventory": "na_beverages_inventory",
         "weekly_inventory": "weekly_inventory",
         "order_history": "order_history",
         "pending_order": "pending_order",
@@ -386,6 +506,7 @@ def save_all_inventory_data():
         ('wine_inventory', get_sheet_name('wine_inventory')),
         ('beer_inventory', get_sheet_name('beer_inventory')),
         ('ingredients_inventory', get_sheet_name('ingredients_inventory')),
+        ('na_beverages_inventory', get_sheet_name('na_beverages_inventory')),
         ('weekly_inventory', get_sheet_name('weekly_inventory')),
         ('order_history', get_sheet_name('order_history')),
     ]
@@ -455,6 +576,7 @@ def save_inventory_snapshot():
         'wine': calculate_total_value(st.session_state.get('wine_inventory', pd.DataFrame())),
         'beer': calculate_total_value(st.session_state.get('beer_inventory', pd.DataFrame())),
         'ingredients': calculate_total_value(st.session_state.get('ingredients_inventory', pd.DataFrame())),
+        'na_beverages': calculate_total_value(st.session_state.get('na_beverages_inventory', pd.DataFrame())),
     }
     values['total'] = sum(values.values())
     
@@ -464,6 +586,7 @@ def save_inventory_snapshot():
         'Wine Value': values['wine'],
         'Beer Value': values['beer'],
         'Ingredients Value': values['ingredients'],
+        'N/A Beverages Value': values['na_beverages'],
         'Total Value': values['total']
     }
     
@@ -764,6 +887,231 @@ def calculate_recipe_cost(ingredients: list) -> float:
                for ing in ingredients)
 
 
+def add_syrup_to_ingredients(recipe: dict) -> bool:
+    """
+    Adds a Syrup/Infusion recipe to the Ingredients inventory.
+    
+    Args:
+        recipe: Dictionary with recipe data including 'name', 'yield_oz', 'ingredients'
+    
+    Returns:
+        True if added successfully, False if already exists
+    """
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
+    recipe_name = recipe.get('name', '')
+    yield_oz = recipe.get('yield_oz', 0)
+    ingredients_list = recipe.get('ingredients', [])
+    
+    if not recipe_name or yield_oz <= 0:
+        return False
+    
+    # Calculate total batch cost from ingredients
+    total_cost = calculate_recipe_cost(ingredients_list)
+    
+    # Initialize ingredients inventory if needed
+    if 'ingredients_inventory' not in st.session_state:
+        st.session_state.ingredients_inventory = get_sample_ingredients()
+    
+    ingredients_df = st.session_state.ingredients_inventory
+    
+    # Check if product already exists (case-insensitive)
+    if len(ingredients_df) > 0 and 'Product' in ingredients_df.columns:
+        existing = ingredients_df[ingredients_df['Product'].str.lower().str.strip() == recipe_name.lower().strip()]
+        if len(existing) > 0:
+            # Already exists, don't add duplicate
+            return False
+    
+    # Create new ingredient row
+    new_row = {
+        'Product': recipe_name,
+        'Cost': round(total_cost, 2),
+        'Size/Yield': yield_oz,
+        'UoM': 'oz',
+        'Cost/Unit': round(total_cost / yield_oz, 4) if yield_oz > 0 else 0,
+        loc1: 0.0,
+        loc2: 0.0,
+        loc3: 0.0,
+        'Total Inventory': 0.0,
+        'Distributor': 'House-made',
+        'Order Notes': 'Bar Prep Recipe'
+    }
+    
+    # Add to ingredients inventory
+    new_df = pd.DataFrame([new_row])
+    st.session_state.ingredients_inventory = pd.concat([ingredients_df, new_df], ignore_index=True)
+    
+    # Save to Google Sheets
+    save_all_inventory_data()
+    
+    return True
+
+
+def sync_syrups_to_ingredients() -> Tuple[int, int]:
+    """
+    Syncs all existing Syrup recipes to Ingredients inventory.
+    
+    Returns:
+        Tuple of (added_count, skipped_count)
+    """
+    recipes = st.session_state.get('bar_prep_recipes', [])
+    # Support both old "Syrups" and new "Syrups, Infusions & Garnishes" categories
+    syrups = [r for r in recipes if r.get('category') in ['Syrups', 'Syrups, Infusions & Garnishes']]
+    
+    added = 0
+    skipped = 0
+    
+    for recipe in syrups:
+        if add_syrup_to_ingredients(recipe):
+            added += 1
+        else:
+            skipped += 1
+    
+    return (added, skipped)
+
+
+def add_batched_cocktail_to_spirits(recipe: dict) -> bool:
+    """
+    Adds a Batched Cocktail recipe to the Spirits inventory.
+    
+    Args:
+        recipe: Dictionary with recipe data including 'name', 'yield_oz', 'ingredients'
+    
+    Returns:
+        True if added successfully, False if already exists
+    """
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
+    recipe_name = recipe.get('name', '')
+    yield_oz = recipe.get('yield_oz', 0)
+    ingredients_list = recipe.get('ingredients', [])
+    
+    if not recipe_name or yield_oz <= 0:
+        return False
+    
+    # Calculate total batch cost from ingredients
+    total_cost = calculate_recipe_cost(ingredients_list)
+    cost_per_oz = total_cost / yield_oz if yield_oz > 0 else 0
+    
+    # Initialize spirits inventory if needed
+    if 'spirits_inventory' not in st.session_state:
+        st.session_state.spirits_inventory = get_sample_spirits()
+    
+    spirits_df = st.session_state.spirits_inventory
+    
+    # Check if product already exists (case-insensitive)
+    if len(spirits_df) > 0 and 'Product' in spirits_df.columns:
+        existing = spirits_df[spirits_df['Product'].str.lower().str.strip() == recipe_name.lower().strip()]
+        if len(existing) > 0:
+            # Already exists, don't add duplicate
+            return False
+    
+    # Get default margin from config
+    default_margin = CLIENT_CONFIG.get('default_margin', 80)
+    
+    # Calculate pour prices based on cost/oz and margin
+    # Pour price = cost / (1 - margin/100)
+    margin_multiplier = 1 / (1 - default_margin / 100) if default_margin < 100 else 5
+    shot_price = round(cost_per_oz * 1.5 * margin_multiplier, 2)  # 1.5 oz shot
+    single_price = round(cost_per_oz * 1.5 * margin_multiplier, 2)  # 1.5 oz single
+    neat_price = round(cost_per_oz * 2.0 * margin_multiplier, 2)  # 2 oz neat
+    double_price = round(cost_per_oz * 3.0 * margin_multiplier, 2)  # 3 oz double
+    
+    # Create new spirits row
+    new_row = {
+        'Product': recipe_name,
+        'Type': 'Batched Cocktail',
+        'Bottle Cost': round(total_cost, 2),
+        'Size (oz.)': yield_oz,
+        loc1: 0.0,
+        loc2: 0.0,
+        loc3: 0.0,
+        'Target Margin': default_margin,
+        'Use': 'Batched',
+        'Distributor': 'House-made',
+        'Order Notes': 'Bar Prep Recipe',
+        'Cost/Oz': round(cost_per_oz, 4),
+        'Shot': shot_price,
+        'Single': single_price,
+        'Neat Pour': neat_price,
+        'Double': double_price,
+        'Total Inventory': 0.0,
+        'Value': 0.0
+    }
+    
+    # Add to spirits inventory
+    new_df = pd.DataFrame([new_row])
+    st.session_state.spirits_inventory = pd.concat([spirits_df, new_df], ignore_index=True)
+    
+    # Save to Google Sheets
+    save_all_inventory_data()
+    
+    return True
+
+
+def sync_batched_cocktails_to_spirits() -> Tuple[int, int]:
+    """
+    Syncs all existing Batched Cocktail recipes to Spirits inventory.
+    
+    Returns:
+        Tuple of (added_count, skipped_count)
+    """
+    recipes = st.session_state.get('bar_prep_recipes', [])
+    batched = [r for r in recipes if r.get('category') == 'Batched Cocktails']
+    
+    added = 0
+    skipped = 0
+    
+    for recipe in batched:
+        if add_batched_cocktail_to_spirits(recipe):
+            added += 1
+        else:
+            skipped += 1
+    
+    return (added, skipped)
+
+
+def merge_edits_to_inventory(edited_df: pd.DataFrame, inventory_key: str, original_products: list) -> None:
+    """
+    Merges edited rows back to the full inventory in session state.
+    Only updates existing products, doesn't add or remove rows.
+    
+    Args:
+        edited_df: The edited DataFrame from the data_editor
+        inventory_key: The session state key for the inventory (e.g., 'spirits_inventory')
+        original_products: List of product names that were in the filtered view before editing
+    """
+    if inventory_key not in st.session_state:
+        return
+    
+    full_inventory = st.session_state[inventory_key]
+    if len(full_inventory) == 0 or 'Product' not in full_inventory.columns:
+        return
+    
+    if len(edited_df) == 0 or 'Product' not in edited_df.columns:
+        return
+    
+    # Update each row in the full inventory that matches a product in the edited df
+    for idx, edited_row in edited_df.iterrows():
+        product_name = edited_row.get('Product', '')
+        if not product_name:
+            continue
+        
+        # Find matching row in full inventory
+        mask = full_inventory['Product'] == product_name
+        if mask.any():
+            # Update all columns that exist in both dataframes
+            for col in edited_df.columns:
+                if col in full_inventory.columns:
+                    full_inventory.loc[mask, col] = edited_row[col]
+    
+    st.session_state[inventory_key] = full_inventory
+
+
 def get_all_available_products() -> list:
     """Gets all products from Spirits and Ingredients inventories."""
     products = []
@@ -862,365 +1210,98 @@ def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_data
 def get_sample_spirits():
-    """Returns sample spirit inventory data (cached)."""
+    """Returns empty spirit inventory DataFrame with proper columns."""
     loc1 = get_location_1()
     loc2 = get_location_2()
     loc3 = get_location_3()
     
-    data = [
-        {"Product": "Hendrick's", "Type": "Gin", "Cost": 30.80, "Size (oz.)": 33.8, 
-         "Margin": 20, loc1: 0.5, loc2: 0.5, loc3: 0.0, "Use": "Backbar", 
-         "Distributor": "Breakthru", "Order Notes": "6 pk deal"},
-        {"Product": "Tito's", "Type": "Vodka", "Cost": 24.50, "Size (oz.)": 33.8, 
-         "Margin": 18, loc1: 1.0, loc2: 1.0, loc3: 1.0, "Use": "Rail", 
-         "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
-        {"Product": "Ketel One", "Type": "Vodka", "Cost": 32.25, "Size (oz.)": 33.8, 
-         "Margin": 19, loc1: 0.5, loc2: 1.0, loc3: 1.5, "Use": "Backbar", 
-         "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
-        {"Product": "Tempus Fugit Crème de Cacao", "Type": "Cordial & Digestif", "Cost": 32.50, "Size (oz.)": 23.7, 
-         "Margin": 22, loc1: 2.0, loc2: 2.0, loc3: 2.0, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": "6 pk deal"},
-        {"Product": "St. George Absinthe", "Type": "Cordial & Digestif", "Cost": 54.00, "Size (oz.)": 25.3, 
-         "Margin": 23, loc1: 0.0, loc2: 0.5, loc3: 0.5, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": ""},
-        {"Product": "Espolòn Blanco", "Type": "Tequila", "Cost": 25.00, "Size (oz.)": 33.8, 
-         "Margin": 20, loc1: 1.0, loc2: 1.5, loc3: 1.5, "Use": "Rail", 
-         "Distributor": "Breakthru", "Order Notes": ""},
-        {"Product": "Lustau Vermut Rojo", "Type": "Vermouth & Aperitif", "Cost": 16.00, "Size (oz.)": 25.3, 
-         "Margin": 18, loc1: 0.5, loc2: 1.0, loc3: 0.5, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": ""},
-        {"Product": "Buffalo Trace", "Type": "Whiskey", "Cost": 31.00, "Size (oz.)": 33.8, 
-         "Margin": 20, loc1: 0.5, loc2: 0.5, loc3: 1.0, "Use": "Rail", 
-         "Distributor": "Breakthru", "Order Notes": ""},
-        {"Product": "Rittenhouse Rye", "Type": "Whiskey", "Cost": 28.00, "Size (oz.)": 25.3, 
-         "Margin": 19, loc1: 0.5, loc2: 1.0, loc3: 1.5, "Use": "Rail", 
-         "Distributor": "Breakthru", "Order Notes": ""},
-        {"Product": "Botanist", "Type": "Gin", "Cost": 33.74, "Size (oz.)": 33.8, 
-         "Margin": 21, loc1: 1.0, loc2: 1.5, loc3: 1.5, "Use": "Menu", 
-         "Distributor": "General Beverage", "Order Notes": ""},
-        {"Product": "Bordiga Extra Dry Vermouth", "Type": "Vermouth & Aperitif", "Cost": 23.00, "Size (oz.)": 25.3, 
-         "Margin": 18, loc1: 0.5, loc2: 1.0, loc3: 0.5, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": ""},
-        {"Product": "Campari", "Type": "Vermouth & Aperitif", "Cost": 28.00, "Size (oz.)": 33.8, 
-         "Margin": 20, loc1: 0.5, loc2: 1.0, loc3: 0.5, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": ""},
-        {"Product": "Angostura Bitters", "Type": "Bitters", "Cost": 32.00, "Size (oz.)": 16.0, 
-         "Margin": 15, loc1: 0.5, loc2: 1.0, loc3: 0.5, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": ""},
-        {"Product": "Angostura Orange Bitters", "Type": "Bitters", "Cost": 16.00, "Size (oz.)": 4.0, 
-         "Margin": 15, loc1: 0.5, loc2: 1.0, loc3: 0.5, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": ""},
-        {"Product": "Wray & Nephew Overproof Rum", "Type": "Rum", "Cost": 29.00, "Size (oz.)": 25.3, 
-         "Margin": 21, loc1: 0.0, loc2: 0.5, loc3: 0.5, "Use": "Menu", 
-         "Distributor": "Breakthru", "Order Notes": ""},
-    ]
-    df = pd.DataFrame(data)
-    # Calculate Total Inventory from location columns
-    df["Total Inventory"] = df[loc1] + df[loc2] + df[loc3]
-    # Calculated fields (non-editable)
-    df["Cost/Oz"] = round(df["Cost"] / df["Size (oz.)"], 2)
-    df["Neat Price"] = df.apply(
-        lambda row: math.ceil(((row["Cost"] / row["Size (oz.)"]) * 2) / (row["Margin"] / 100)) if row["Margin"] > 0 else 0, axis=1)
-    df["Value"] = round(df["Cost"] * df["Total Inventory"], 2)
-    df["Suggested Retail"] = df["Cost"].apply(lambda x: math.ceil(x * 1.44))
-    
-    return df[["Product", "Type", "Cost", "Size (oz.)", "Margin", "Cost/Oz", "Neat Price",
-               loc1, loc2, loc3, "Total Inventory", "Value", "Use", "Distributor", "Order Notes", "Suggested Retail"]]
+    columns = ["Product", "Type", "Bottle Cost", "Size (oz.)", loc1, loc2, loc3, "Target Margin", 
+               "Use", "Distributor", "Order Notes", "Cost/Oz", "Shot", "Single", "Neat Pour", "Double", "Total Inventory", "Value"]
+    return pd.DataFrame(columns=columns)
 
 
 @st.cache_data
 def get_sample_wines():
-    """Returns sample wine inventory data (cached)."""
+    """Returns empty wine inventory DataFrame with proper columns."""
     loc1 = get_location_1()
     loc2 = get_location_2()
     loc3 = get_location_3()
     
-    data = [
-        {"Product": "Mauzac Nature, 2022, Domaine Plageoles, Gaillac, France", 
-         "Type": "Bubbles", "Cost": 22.0, "Size (oz.)": 25.3, "Margin": 35, 
-         loc1: 2.0, loc2: 4.0, loc3: 12.0, "Distributor": "Chromatic", "Order Notes": ""},
-        {"Product": "Savagnin, 2022, Domaine de la Pinte, 'Sav'Or' Vin de France (Jura)", 
-         "Type": "Rosé/Orange", "Cost": 29.0, "Size (oz.)": 25.3, "Margin": 37, 
-         loc1: 1.0, loc2: 2.0, loc3: 2.0, "Distributor": "Chromatic", "Order Notes": ""},
-        {"Product": "Sémillon, 2015, Forlorn Hope, 'Nacré', Napa Valley, CA", 
-         "Type": "White", "Cost": 17.0, "Size (oz.)": 25.3, "Margin": 33, 
-         loc1: 0.0, loc2: 1.0, loc3: 1.0, "Distributor": "Chromatic", "Order Notes": ""},
-        {"Product": "Chardonnay, 2023, Jean Dauvissat, Chablis, France", 
-         "Type": "White", "Cost": 31.5, "Size (oz.)": 25.3, "Margin": 35, 
-         loc1: 1.0, loc2: 2.0, loc3: 3.0, "Distributor": "Vino Veritas", "Order Notes": ""},
-        {"Product": "Pinot Noir, 2021, Domaine de la Côte, Sta. Rita Hills, CA", 
-         "Type": "Red", "Cost": 55.0, "Size (oz.)": 25.3, "Margin": 34, 
-         loc1: 0.0, loc2: 1.0, loc3: 2.0, "Distributor": "Vino Veritas", "Order Notes": ""},
-        {"Product": "Nebbiolo, 2019, Cantina Massara, Barolo, Piedmont, Italy", 
-         "Type": "Red", "Cost": 31.0, "Size (oz.)": 25.3, "Margin": 32, 
-         loc1: 1.0, loc2: 1.0, loc3: 2.0, "Distributor": "Vino Veritas", "Order Notes": ""},
-    ]
-    df = pd.DataFrame(data)
-    # Calculate Total Inventory from location columns
-    df["Total Inventory"] = df[loc1] + df[loc2] + df[loc3]
-    # Calculated fields (non-editable)
-    df["Bottle Price"] = df.apply(
-        lambda row: math.ceil(row["Cost"] / (row["Margin"] / 100)) if row["Margin"] > 0 else 0, axis=1)
-    df["Value"] = df["Cost"] * df["Total Inventory"]
-    df["BTG"] = df["Cost"].apply(lambda x: math.ceil(x / 4))
-    df["Suggested Retail"] = df["Cost"].apply(lambda x: math.ceil(x * 1.44))
-    return df[["Product", "Type", "Cost", "Size (oz.)", "Margin", "Bottle Price", 
+    columns = ["Product", "Type", "Cost", "Size (oz.)", "Margin", "Bottle Price", 
                loc1, loc2, loc3, "Total Inventory",
-               "Value", "Distributor", "Order Notes", "BTG", "Suggested Retail"]]
+               "Value", "Distributor", "Order Notes", "BTG", "Suggested Retail"]
+    return pd.DataFrame(columns=columns)
 
 
 @st.cache_data
 def get_sample_beers():
-    """Returns sample beer inventory data (cached)."""
+    """Returns empty beer inventory DataFrame with proper columns."""
     loc1 = get_location_1()
     loc2 = get_location_2()
     loc3 = get_location_3()
     
-    data = [
-        {"Product": "New Glarus Staghorn Oktoberfest", "Type": "Can", 
-         "Cost per Keg/Case": 26.40, "Size": 24.0, "UoM": "cans", 
-         "Margin": 21, loc1: 0.0, loc2: 0.5, loc3: 0.5,
-         "Distributor": "Frank Beer", "Order Notes": ""},
-        {"Product": "New Glarus Moon Man", "Type": "Can", 
-         "Cost per Keg/Case": 26.40, "Size": 24.0, "UoM": "cans", 
-         "Margin": 21, loc1: 0.5, loc2: 0.5, loc3: 1.0,
-         "Distributor": "Frank Beer", "Order Notes": ""},
-        {"Product": "Coors Light", "Type": "Can", 
-         "Cost per Keg/Case": 24.51, "Size": 30.0, "UoM": "cans", 
-         "Margin": 19, loc1: 0.0, loc2: 0.5, loc3: 0.5,
-         "Distributor": "Frank Beer", "Order Notes": ""},
-        {"Product": "Hop Haus Yard Work IPA", "Type": "Sixtel", 
-         "Cost per Keg/Case": 75.00, "Size": 661.0, "UoM": "oz", 
-         "Margin": 22, loc1: 0.0, loc2: 1.0, loc3: 0.0,
-         "Distributor": "GB Beer", "Order Notes": ""},
-        {"Product": "High Life", "Type": "Bottle", 
-         "Cost per Keg/Case": 21.15, "Size": 24.0, "UoM": "bottles", 
-         "Margin": 18, loc1: 0.5, loc2: 1.0, loc3: 0.5,
-         "Distributor": "Frank Beer", "Order Notes": ""},
-    ]
-    df = pd.DataFrame(data)
-    # Calculate Total Inventory from location columns
-    df["Total Inventory"] = df[loc1] + df[loc2] + df[loc3]
-    # Calculated fields (non-editable)
-    df["Cost/Unit"] = df["Cost per Keg/Case"] / df["Size"]
-    df["Value"] = df["Cost per Keg/Case"] * df["Total Inventory"]
-    # Menu Price - different formula for cans/bottles vs kegs
-    def calc_menu_price(row):
-        cost_unit = row["Cost/Unit"]
-        margin = row["Margin"]
-        if margin <= 0:
-            return 0
-        if row["Type"] in ["Can", "Bottle"]:
-            return round(cost_unit / (margin / 100))
-        elif row["Type"] in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
-            return round((cost_unit * 16) / (margin / 100))
-        return 0
-    df["Menu Price"] = df.apply(calc_menu_price, axis=1)
-    return df[["Product", "Type", "Cost per Keg/Case", "Size", "UoM", 
-               "Cost/Unit", "Margin", "Menu Price", loc1, loc2, loc3,
-               "Total Inventory", "Value", "Distributor", "Order Notes"]]
+    columns = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", 
+               loc1, loc2, loc3, "Target Margin", "Distributor", "Order Notes",
+               "Total Inventory", "Cost/Unit", "Menu Price", "Value"]
+    return pd.DataFrame(columns=columns)
 
 
 @st.cache_data
 def get_sample_ingredients():
-    """Returns sample ingredient inventory data (cached)."""
+    """Returns empty ingredient inventory DataFrame with proper columns."""
     loc1 = get_location_1()
     loc2 = get_location_2()
     loc3 = get_location_3()
     
-    data = [
-        {"Product": "Amaretto Cherries", "Cost": 15.00, "Size/Yield": 80.0, 
-         "UoM": "cherries", loc1: 0.5, loc2: 1.0, loc3: 0.5,
-         "Distributor": "Left Bank", "Order Notes": ""},
-        {"Product": "Olives", "Cost": 29.63, "Size/Yield": 300.0, 
-         "UoM": "pieces", loc1: 0.0, loc2: 1.0, loc3: 1.0,
-         "Distributor": "US Foods", "Order Notes": ""},
-        {"Product": "Natalie's Lime Juice", "Cost": 8.34, "Size/Yield": 32.0, 
-         "UoM": "oz", loc1: 0.5, loc2: 1.0, loc3: 2.0,
-         "Distributor": "US Foods", "Order Notes": ""},
-        {"Product": "Natalie's Lemon Juice", "Cost": 8.34, "Size/Yield": 32.0, 
-         "UoM": "oz", loc1: 0.5, loc2: 1.0, loc3: 1.5,
-         "Distributor": "US Foods", "Order Notes": ""},
-        {"Product": "Agave Nectar", "Cost": 17.56, "Size/Yield": 64.0, 
-         "UoM": "oz", loc1: 0.5, loc2: 1.0, loc3: 1.0,
-         "Distributor": "US Foods", "Order Notes": ""},
-        {"Product": "Q Ginger Beer", "Cost": 0.00, "Size/Yield": 7.5, 
-         "UoM": "oz", loc1: 0.0, loc2: 2.0, loc3: 4.0,
-         "Distributor": "Breakthru", "Order Notes": "Free"},
-        {"Product": "Q Club Soda", "Cost": 1.04, "Size/Yield": 7.5, 
-         "UoM": "oz", loc1: 0.0, loc2: 2.0, loc3: 4.0,
-         "Distributor": "Breakthru", "Order Notes": "3cs mix"},
-        {"Product": "Heavy Cream", "Cost": 9.59, "Size/Yield": 64.0, 
-         "UoM": "oz", loc1: 0.0, loc2: 1.0, loc3: 1.0,
-         "Distributor": "US Foods", "Order Notes": ""},
-        {"Product": "Simple Syrup (House)", "Cost": 5.00, "Size/Yield": 32.0, 
-         "UoM": "oz", loc1: 0.5, loc2: 1.0, loc3: 1.0,
-         "Distributor": "House Made", "Order Notes": ""},
-        {"Product": "Demerara Syrup (House)", "Cost": 8.00, "Size/Yield": 32.0, 
-         "UoM": "oz", loc1: 0.5, loc2: 1.0, loc3: 0.5,
-         "Distributor": "House Made", "Order Notes": ""},
-        {"Product": "Orange Peel", "Cost": 0.50, "Size/Yield": 10.0, 
-         "UoM": "pieces", loc1: 0.5, loc2: 1.0, loc3: 0.0,
-         "Distributor": "House Made", "Order Notes": ""},
-        {"Product": "Lemon Peel", "Cost": 0.50, "Size/Yield": 10.0, 
-         "UoM": "pieces", loc1: 0.5, loc2: 1.0, loc3: 0.0,
-         "Distributor": "House Made", "Order Notes": ""},
-        {"Product": "Luxardo Cherry", "Cost": 25.00, "Size/Yield": 50.0, 
-         "UoM": "cherries", loc1: 0.0, loc2: 1.0, loc3: 1.0,
-         "Distributor": "Breakthru", "Order Notes": ""},
-    ]
-    df = pd.DataFrame(data)
-    # Calculate Total Inventory from location columns
-    df["Total Inventory"] = df[loc1] + df[loc2] + df[loc3]
-    df["Cost/Unit"] = df["Cost"] / df["Size/Yield"]
-    return df[["Product", "Cost", "Size/Yield", "UoM", "Cost/Unit", 
+    columns = ["Product", "Cost", "Size/Yield", "UoM", "Cost/Unit", 
                loc1, loc2, loc3, "Total Inventory",
-               "Distributor", "Order Notes"]]
+               "Distributor", "Order Notes"]
+    return pd.DataFrame(columns=columns)
+
+
+@st.cache_data
+def get_sample_na_beverages():
+    """Returns empty N/A beverages inventory DataFrame with proper columns."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
+    columns = ["Product", "Cost", "Size/Yield", "UoM", "Cost/Unit", 
+               loc1, loc2, loc3, "Total Inventory",
+               "Distributor", "Order Notes"]
+    return pd.DataFrame(columns=columns)
 
 
 @st.cache_data
 def get_sample_weekly_inventory():
-    """Returns sample weekly inventory data (cached)."""
+    """Returns empty weekly inventory DataFrame with proper columns."""
     loc1 = get_location_1()
     loc2 = get_location_2()
     loc3 = get_location_3()
     
-    data = [
-        {"Product": "Hendrick's", "Category": "Spirits", "Par": 2, loc1: 0.5, loc2: 0.5, loc3: 0.0, 
-         "Unit": "bottle", "Unit Cost": 30.80, "Distributor": "Breakthru", "Order Notes": "6 pk deal"},
-        {"Product": "Tito's", "Category": "Spirits", "Par": 4, loc1: 1.0, loc2: 1.0, loc3: 1.0, 
-         "Unit": "bottle", "Unit Cost": 24.50, "Distributor": "Breakthru", "Order Notes": "3 bttl deal"},
-        {"Product": "Espolòn Blanco", "Category": "Spirits", "Par": 3, loc1: 1.0, loc2: 1.5, loc3: 1.5, 
-         "Unit": "bottle", "Unit Cost": 25.00, "Distributor": "Breakthru", "Order Notes": ""},
-        {"Product": "Buffalo Trace", "Category": "Spirits", "Par": 3, loc1: 0.5, loc2: 0.5, loc3: 1.0, 
-         "Unit": "bottle", "Unit Cost": 31.00, "Distributor": "Breakthru", "Order Notes": ""},
-        {"Product": "Mauzac Nature", "Category": "Wine", "Par": 12, loc1: 2.0, loc2: 4.0, loc3: 12.0, 
-         "Unit": "bottle", "Unit Cost": 22.00, "Distributor": "Chromatic", "Order Notes": ""},
-        {"Product": "New Glarus Moon Man", "Category": "Beer", "Par": 3, loc1: 0.5, loc2: 0.5, loc3: 1.0, 
-         "Unit": "case", "Unit Cost": 26.40, "Distributor": "Frank Beer", "Order Notes": ""},
-        {"Product": "Natalie's Lime Juice", "Category": "Ingredients", "Par": 4, loc1: 0.5, loc2: 1.0, loc3: 2.0, 
-         "Unit": "bottle", "Unit Cost": 8.34, "Distributor": "US Foods", "Order Notes": ""},
-        {"Product": "Agave Nectar", "Category": "Ingredients", "Par": 3, loc1: 0.5, loc2: 1.0, loc3: 1.0, 
-         "Unit": "bottle", "Unit Cost": 17.56, "Distributor": "US Foods", "Order Notes": ""},
-    ]
-    df = pd.DataFrame(data)
-    df['Total Current Inventory'] = df[loc1] + df[loc2] + df[loc3]
-    return df
+    columns = ["Product", "Category", "Par", loc1, loc2, loc3, 
+               "Total Current Inventory", "Unit", "Unit Cost", "Distributor", "Order Notes"]
+    return pd.DataFrame(columns=columns)
 
 
 @st.cache_data
 def get_sample_order_history():
-    """Returns sample order history data (cached)."""
-    today = datetime.now()
-    data = [
-        {"Week": (today - timedelta(days=14)).strftime("%Y-%m-%d"), "Product": "Hendrick's", "Category": "Spirits",
-         "Order Quantity": 2, "Unit Cost": 30.80, "Total Cost": 61.60, "Distributor": "Breakthru",
-         "Invoice #": "INV-001", "Invoice Date": (today - timedelta(days=13)).strftime("%Y-%m-%d")},
-        {"Week": (today - timedelta(days=14)).strftime("%Y-%m-%d"), "Product": "Tito's", "Category": "Spirits",
-         "Order Quantity": 3, "Unit Cost": 24.50, "Total Cost": 73.50, "Distributor": "Breakthru",
-         "Invoice #": "INV-001", "Invoice Date": (today - timedelta(days=13)).strftime("%Y-%m-%d")},
-        {"Week": (today - timedelta(days=7)).strftime("%Y-%m-%d"), "Product": "Espolòn Blanco", "Category": "Spirits",
-         "Order Quantity": 2, "Unit Cost": 25.00, "Total Cost": 50.00, "Distributor": "Breakthru",
-         "Invoice #": "INV-002", "Invoice Date": (today - timedelta(days=6)).strftime("%Y-%m-%d")},
-        {"Week": (today - timedelta(days=7)).strftime("%Y-%m-%d"), "Product": "Mauzac Nature", "Category": "Wine",
-         "Order Quantity": 6, "Unit Cost": 22.00, "Total Cost": 132.00, "Distributor": "Chromatic",
-         "Invoice #": "INV-003", "Invoice Date": (today - timedelta(days=6)).strftime("%Y-%m-%d")},
-    ]
-    return pd.DataFrame(data)
+    """Returns empty order history DataFrame with proper columns."""
+    columns = ["Week", "Product", "Category", "Order Quantity", "Unit Cost", 
+               "Total Cost", "Distributor", "Invoice #", "Invoice Date"]
+    return pd.DataFrame(columns=columns)
 
 
 @st.cache_data
 def get_sample_cocktails():
-    """Returns sample cocktail recipes (cached)."""
-    return [
-        {"name": "Old Fashioned", "glass": "Rocks", "sale_price": 14.00,
-         "ingredients": [
-             {"product": "Buffalo Trace", "amount": 2.0, "unit": "oz"},
-             {"product": "Demerara Syrup (House)", "amount": 0.25, "unit": "oz"},
-             {"product": "Angostura Bitters", "amount": 2, "unit": "dashes"},
-         ],
-         "instructions": "Stir with ice, strain into rocks glass with large ice cube. Express orange peel."},
-        {"name": "Margarita", "glass": "Coupe", "sale_price": 13.00,
-         "ingredients": [
-             {"product": "Espolòn Blanco", "amount": 2.0, "unit": "oz"},
-             {"product": "Natalie's Lime Juice", "amount": 1.0, "unit": "oz"},
-             {"product": "Agave Nectar", "amount": 0.75, "unit": "oz"},
-         ],
-         "instructions": "Shake with ice, strain into chilled coupe. Salt rim optional."},
-        {"name": "Negroni", "glass": "Rocks", "sale_price": 14.00,
-         "ingredients": [
-             {"product": "Botanist", "amount": 1.0, "unit": "oz"},
-             {"product": "Campari", "amount": 1.0, "unit": "oz"},
-             {"product": "Lustau Vermut Rojo", "amount": 1.0, "unit": "oz"},
-         ],
-         "instructions": "Stir with ice, strain into rocks glass with large ice cube. Orange peel garnish."},
-        {"name": "Daiquiri", "glass": "Coupe", "sale_price": 12.00,
-         "ingredients": [
-             {"product": "Wray & Nephew Overproof Rum", "amount": 2.0, "unit": "oz"},
-             {"product": "Natalie's Lime Juice", "amount": 1.0, "unit": "oz"},
-             {"product": "Simple Syrup (House)", "amount": 0.75, "unit": "oz"},
-         ],
-         "instructions": "Shake with ice, double strain into chilled coupe."},
-    ]
+    """Returns empty cocktail recipes list."""
+    return []
 
 
 @st.cache_data
 def get_sample_bar_prep_recipes():
-    """Returns sample bar prep recipes (cached)."""
-    return [
-        {"name": "Simple Syrup", "category": "Syrups", "yield_oz": 32,
-         "yield_description": "1 quart", "shelf_life": "2-3 weeks refrigerated",
-         "storage": "Refrigerate in sealed container",
-         "instructions": "Combine equal parts sugar and hot water. Stir until dissolved. Cool before use.",
-         "ingredients": [
-             {"product": "Sugar", "amount": 16, "unit": "oz"},
-             {"product": "Water", "amount": 16, "unit": "oz"},
-         ]},
-        {"name": "Demerara Syrup", "category": "Syrups", "yield_oz": 32,
-         "yield_description": "1 quart", "shelf_life": "2-3 weeks refrigerated",
-         "storage": "Refrigerate in sealed container",
-         "instructions": "Combine 2:1 demerara sugar to hot water. Stir until dissolved. Cool.",
-         "ingredients": [
-             {"product": "Demerara Sugar", "amount": 21, "unit": "oz"},
-             {"product": "Water", "amount": 10.5, "unit": "oz"},
-         ]},
-        {"name": "House Manhattan Batch", "category": "Batched Cocktails", "yield_oz": 66,
-         "yield_description": "~2 liters (22 cocktails)", "shelf_life": "2-3 months",
-         "storage": "Room temp",
-         "instructions": "Pour 3oz batch into mixing glass. Add ice and stir. Strain into Nick and Nora.",
-         "ingredients": [
-             {"product": "Berto Bitter", "amount": 16.5, "unit": "oz"},
-             {"product": "Sazerac Rye", "amount": 33, "unit": "oz"},
-             {"product": "Bordiga Extra Dry", "amount": 16.5, "unit": "oz"},
-         ]},
-        {"name": "Mezcal Sour", "category": "Batched Cocktails", "yield_oz": 66,
-         "yield_description": "~2 liters (24 cocktails)", "shelf_life": "2-3 months",
-         "storage": "Room temp",
-         "instructions": "Pour 2.75oz batch into tin. Add lime juice and egg white. Dry shake, add ice, shake. Double strain.",
-         "ingredients": [
-             {"product": "Yuu Baal Reposado", "amount": 36, "unit": "oz"},
-             {"product": "Pasubio", "amount": 24, "unit": "oz"},
-             {"product": "Agave Nectar", "amount": 6, "unit": "oz"},
-         ]},
-        {"name": "Black Walnut Manhattan", "category": "Batched Cocktails", "yield_oz": 66,
-         "yield_description": "~2 liters (22 cocktails)", "shelf_life": "2-3 months",
-         "storage": "Room temp",
-         "instructions": "Pour 3oz into mixing glass. Add bitters, ice, and stir. Strain into chilled coupe.",
-         "ingredients": [
-             {"product": "Four Roses Bourbon", "amount": 44, "unit": "oz"},
-             {"product": "Sweet Vermouth", "amount": 11, "unit": "oz"},
-             {"product": "Nux Alpina Walnut Liqueur", "amount": 11, "unit": "oz"},
-         ]},
-        {"name": "Sazerac", "category": "Batched Cocktails", "yield_oz": 64,
-         "yield_description": "~2 liters (28 cocktails)", "shelf_life": "2-3 months",
-         "storage": "Room temp",
-         "instructions": "Rinse glass with absinthe. Pour 2.25oz batch. Add bitters, ice, stir. Strain.",
-         "ingredients": [
-             {"product": "Sazerac Rye", "amount": 50, "unit": "oz"},
-             {"product": "Delord Armagnac", "amount": 7, "unit": "oz"},
-             {"product": "Demerara Syrup", "amount": 7, "unit": "oz"},
-         ]},
-    ]
+    """Returns empty bar prep recipes list."""
+    return []
 
 
 # =============================================================================
@@ -1241,6 +1322,7 @@ def init_session_state():
         'wine_inventory': (get_sheet_name('wine_inventory'), get_sample_wines),
         'beer_inventory': (get_sheet_name('beer_inventory'), get_sample_beers),
         'ingredients_inventory': (get_sheet_name('ingredients_inventory'), get_sample_ingredients),
+        'na_beverages_inventory': (get_sheet_name('na_beverages_inventory'), get_sample_na_beverages),
         'weekly_inventory': (get_sheet_name('weekly_inventory'), get_sample_weekly_inventory),
         'order_history': (get_sheet_name('order_history'), get_sample_order_history),
     }
@@ -1324,44 +1406,129 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
     """
     Reusable recipe card display for both Cocktails and Bar Prep.
     """
-    # Calculate costs
-    total_cost = calculate_recipe_cost(recipe.get('ingredients', []))
+    # Calculate base costs
+    base_cost = calculate_recipe_cost(recipe.get('ingredients', []))
     
     # Create a safe key from recipe name
     safe_name = recipe['name'].replace(' ', '_').replace('/', '_').replace("'", "")
     
     if recipe_type == 'bar_prep':
         yield_oz = recipe.get('yield_oz', 32)
-        cost_per_oz = total_cost / yield_oz if yield_oz > 0 else 0
-        header = f"**{recipe['name']}** | Yield: {recipe.get('yield_description', '')} | Batch: {format_currency(total_cost)} | Cost/oz: {format_currency(cost_per_oz)}"
+        cost_per_oz = base_cost / yield_oz if yield_oz > 0 else 0
+        header = f"**{recipe['name']}** | Yield: {recipe.get('yield_description', '')} | Batch: {format_currency(base_cost)} | Cost/oz: {format_currency(cost_per_oz)}"
     else:
         sale_price = recipe.get('sale_price', 0)
-        margin = ((sale_price - total_cost) / sale_price * 100) if sale_price > 0 else 0
-        header = f"**{recipe['name']}** | Cost: {format_currency(total_cost)} | Price: {format_currency(sale_price)} | Margin: {margin:.1f}%"
+        pour_cost = (base_cost / sale_price * 100) if sale_price > 0 else 0
+        header = f"**{recipe['name']}** | Cost: {format_currency(base_cost)} | Price: {format_currency(sale_price)} | Pour Cost: {pour_cost:.1f}%"
     
     with st.expander(header, expanded=False):
+        # Batch scaling for bar_prep recipes
+        if recipe_type == 'bar_prep':
+            st.markdown("#### 📏 Batch Scaling")
+            scale_col1, scale_col2, scale_col3 = st.columns([2, 1, 1])
+            
+            with scale_col1:
+                # Preset buttons
+                preset_cols = st.columns(5)
+                scale_key = f"scale_{recipe_type}_{safe_name}_{idx}"
+                
+                # Initialize scale in session state if not exists
+                if scale_key not in st.session_state:
+                    st.session_state[scale_key] = 1.0
+                
+                with preset_cols[0]:
+                    if st.button("½×", key=f"half_{safe_name}_{idx}", help="Half batch"):
+                        st.session_state[scale_key] = 0.5
+                        st.rerun()
+                with preset_cols[1]:
+                    if st.button("1×", key=f"single_{safe_name}_{idx}", help="Standard batch"):
+                        st.session_state[scale_key] = 1.0
+                        st.rerun()
+                with preset_cols[2]:
+                    if st.button("2×", key=f"double_{safe_name}_{idx}", help="Double batch"):
+                        st.session_state[scale_key] = 2.0
+                        st.rerun()
+                with preset_cols[3]:
+                    if st.button("3×", key=f"triple_{safe_name}_{idx}", help="Triple batch"):
+                        st.session_state[scale_key] = 3.0
+                        st.rerun()
+                with preset_cols[4]:
+                    if st.button("4×", key=f"quad_{safe_name}_{idx}", help="Quadruple batch"):
+                        st.session_state[scale_key] = 4.0
+                        st.rerun()
+            
+            with scale_col2:
+                custom_scale = st.number_input(
+                    "Custom",
+                    min_value=0.1,
+                    max_value=20.0,
+                    value=st.session_state[scale_key],
+                    step=0.25,
+                    key=f"custom_scale_{safe_name}_{idx}",
+                    help="Enter custom multiplier"
+                )
+                if custom_scale != st.session_state[scale_key]:
+                    st.session_state[scale_key] = custom_scale
+                    st.rerun()
+            
+            with scale_col3:
+                current_scale = st.session_state[scale_key]
+                if current_scale != 1.0:
+                    st.markdown(f"**Scaling: {current_scale}×**")
+                else:
+                    st.markdown("**Standard Batch**")
+            
+            # Get the current scale factor
+            scale_factor = st.session_state[scale_key]
+            
+            # Calculate scaled values
+            scaled_cost = base_cost * scale_factor
+            scaled_yield = yield_oz * scale_factor
+            cost_per_oz = base_cost / yield_oz if yield_oz > 0 else 0  # Cost/oz stays same regardless of scale
+            
+            st.markdown("---")
+        else:
+            scale_factor = 1.0
+            scaled_cost = base_cost
+        
         col_info, col_cost = st.columns([2, 1])
         
         with col_info:
             if recipe_type == 'bar_prep':
-                st.markdown(f"**Yield:** {recipe.get('yield_description', '')} ({recipe.get('yield_oz', 0)} oz)")
+                # Show scaled yield
+                base_yield_desc = recipe.get('yield_description', '')
+                if scale_factor != 1.0:
+                    st.markdown(f"**Yield:** {scaled_yield:.1f} oz *(scaled from {yield_oz} oz)*")
+                else:
+                    st.markdown(f"**Yield:** {base_yield_desc} ({yield_oz} oz)")
                 st.markdown(f"**Shelf Life:** {recipe.get('shelf_life', 'N/A')}")
                 st.markdown(f"**Storage:** {recipe.get('storage', 'N/A')}")
             else:
                 st.markdown(f"**Glass:** {recipe.get('glass', 'N/A')}")
                 st.markdown(f"**Sale Price:** {format_currency(recipe.get('sale_price', 0))}")
             
-            # Ingredients table
+            # Ingredients table (scaled for bar_prep)
             st.markdown("**Ingredients:**")
             ing_data = []
             for ing in recipe.get('ingredients', []):
-                _, ing_cost = get_product_cost(ing['product'], ing['amount'], ing.get('unit', 'oz'))
-                ing_data.append({
-                    "Ingredient": ing['product'],
-                    "Amount": ing['amount'],
-                    "Unit": ing.get('unit', 'oz'),
-                    "Cost": ing_cost
-                })
+                base_amount = ing['amount']
+                scaled_amount = base_amount * scale_factor
+                _, ing_cost = get_product_cost(ing['product'], scaled_amount, ing.get('unit', 'oz'))
+                
+                if recipe_type == 'bar_prep' and scale_factor != 1.0:
+                    ing_data.append({
+                        "Ingredient": ing['product'],
+                        "Amount": f"{scaled_amount:.2f}",
+                        "Unit": ing.get('unit', 'oz'),
+                        "Cost": ing_cost
+                    })
+                else:
+                    ing_data.append({
+                        "Ingredient": ing['product'],
+                        "Amount": base_amount,
+                        "Unit": ing.get('unit', 'oz'),
+                        "Cost": ing_cost
+                    })
             
             if ing_data:
                 st.dataframe(
@@ -1377,19 +1544,30 @@ def display_recipe_card(recipe: dict, recipe_type: str, idx: int, on_delete=None
         
         with col_cost:
             st.markdown("#### 💰 Costing")
-            st.metric("Total Cost", format_currency(total_cost))
             
             if recipe_type == 'bar_prep':
+                if scale_factor != 1.0:
+                    st.metric("Scaled Batch Cost", format_currency(scaled_cost), delta=f"{scale_factor}× batch")
+                    st.caption(f"Base batch: {format_currency(base_cost)}")
+                else:
+                    st.metric("Batch Cost", format_currency(base_cost))
                 st.metric("Cost/oz", format_currency(cost_per_oz))
                 st.metric("Cost/quart", format_currency(cost_per_oz * 32))
             else:
+                st.metric("Total Cost", format_currency(base_cost))
                 st.metric("Sale Price", format_currency(recipe.get('sale_price', 0)))
-                st.metric("Margin", f"{margin:.1f}%")
+                st.metric("Pour Cost", f"{pour_cost:.1f}%")
         
         if on_delete:
             st.markdown("---")
-            if st.button("🗑️ Delete Recipe", key=f"delete_{recipe_type}_{safe_name}"):
-                on_delete(recipe['name'])
+            col_edit, col_delete = st.columns(2)
+            with col_edit:
+                if st.button("✏️ Edit Recipe", key=f"edit_{recipe_type}_{safe_name}"):
+                    st.session_state[f'editing_{recipe_type}'] = recipe['name']
+                    st.rerun()
+            with col_delete:
+                if st.button("🗑️ Delete Recipe", key=f"delete_{recipe_type}_{safe_name}"):
+                    on_delete(recipe['name'])
 
 
 def display_recipe_list(recipes: list, recipe_type: str, category_filter: str = None, session_key: str = None):
@@ -1425,10 +1603,10 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
     
     try:
         df = df.copy()
-        for col in ['Cost', 'Cost/Oz', 'Neat Price', 'Suggested Retail', 'Value']:
+        for col in ['Bottle Cost', 'Cost/Oz', 'Shot', 'Single', 'Neat Pour', 'Double', 'Value']:
             df = clean_currency_column(df, col)
-        if 'Margin' in df.columns:
-            df = clean_percentage_column(df, 'Margin')
+        if 'Target Margin' in df.columns:
+            df = clean_percentage_column(df, 'Target Margin')
         for col in ['Size (oz.)', 'Inventory']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -1444,16 +1622,26 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
         df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
         
         # Recalculate all calculated fields
-        if 'Cost' in df.columns and 'Size (oz.)' in df.columns:
+        if 'Bottle Cost' in df.columns and 'Size (oz.)' in df.columns:
             df['Cost/Oz'] = df.apply(
-                lambda row: round(row['Cost'] / row['Size (oz.)'], 2) if row['Size (oz.)'] > 0 else 0, axis=1)
-        if 'Cost' in df.columns and 'Size (oz.)' in df.columns and 'Margin' in df.columns:
-            df['Neat Price'] = df.apply(
-                lambda row: math.ceil(((row['Cost'] / row['Size (oz.)']) * 2) / (row['Margin'] / 100)) if row['Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
-        if 'Cost' in df.columns and 'Total Inventory' in df.columns:
-            df['Value'] = round(df['Cost'] * df['Total Inventory'], 2)
-        if 'Cost' in df.columns:
-            df['Suggested Retail'] = df['Cost'].apply(lambda x: math.ceil(x * 1.44))
+                lambda row: round(row['Bottle Cost'] / row['Size (oz.)'], 2) if row['Size (oz.)'] > 0 else 0, axis=1)
+        
+        if 'Bottle Cost' in df.columns and 'Size (oz.)' in df.columns and 'Target Margin' in df.columns:
+            # Shot = (1 * Cost/Oz) / Target Margin
+            df['Shot'] = df.apply(
+                lambda row: math.ceil((1 * (row['Bottle Cost'] / row['Size (oz.)'])) / (row['Target Margin'] / 100)) if row['Target Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
+            # Single = (1.5 * Cost/Oz) / Target Margin
+            df['Single'] = df.apply(
+                lambda row: math.ceil((1.5 * (row['Bottle Cost'] / row['Size (oz.)'])) / (row['Target Margin'] / 100)) if row['Target Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
+            # Neat Pour = (2 * Cost/Oz) / Target Margin
+            df['Neat Pour'] = df.apply(
+                lambda row: math.ceil((2 * (row['Bottle Cost'] / row['Size (oz.)'])) / (row['Target Margin'] / 100)) if row['Target Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
+            # Double = (3 * Cost/Oz) / Target Margin
+            df['Double'] = df.apply(
+                lambda row: math.ceil((3 * (row['Bottle Cost'] / row['Size (oz.)'])) / (row['Target Margin'] / 100)) if row['Target Margin'] > 0 and row['Size (oz.)'] > 0 else 0, axis=1)
+        
+        if 'Bottle Cost' in df.columns and 'Total Inventory' in df.columns:
+            df['Value'] = round(df['Bottle Cost'] * df['Total Inventory'], 2)
         return df
     except Exception as e:
         st.error(f"Error processing spirits data: {e}")
@@ -1511,8 +1699,8 @@ def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         for col in ['Cost per Keg/Case', 'Cost/Unit', 'Menu Price', 'Value']:
             df = clean_currency_column(df, col)
-        if 'Margin' in df.columns:
-            df = clean_percentage_column(df, 'Margin')
+        if 'Target Margin' in df.columns:
+            df = clean_percentage_column(df, 'Target Margin')
         for col in ['Size', 'Inventory']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -1535,16 +1723,18 @@ def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
             df['Value'] = round(df['Cost per Keg/Case'] * df['Total Inventory'], 2)
         
         # Menu Price calculation
-        if 'Cost/Unit' in df.columns and 'Margin' in df.columns and 'Type' in df.columns:
+        if 'Cost/Unit' in df.columns and 'Target Margin' in df.columns and 'Type' in df.columns:
             def calc_menu_price(row):
                 cost_unit = row.get("Cost/Unit", 0)
-                margin = row.get("Margin", 0)
+                margin = row.get("Target Margin", 0)
                 if margin <= 0:
                     return 0
-                if row.get("Type", "") in ["Can", "Bottle"]:
-                    return round(cost_unit / (margin / 100))
-                elif row.get("Type", "") in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
+                if row.get("Type", "") in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
+                    # For kegs: (16 * Cost/Unit) / Target Margin
                     return round((cost_unit * 16) / (margin / 100))
+                elif row.get("Type", "") == "Case":
+                    # For cases: Cost/Unit / Target Margin
+                    return round(cost_unit / (margin / 100))
                 return 0
             df['Menu Price'] = df.apply(calc_menu_price, axis=1)
         return df
@@ -1582,6 +1772,38 @@ def process_uploaded_ingredients(df: pd.DataFrame) -> pd.DataFrame:
         return df
     except Exception as e:
         st.error(f"Error processing ingredients data: {e}")
+        return df
+
+
+def process_uploaded_na_beverages(df: pd.DataFrame) -> pd.DataFrame:
+    """Processes an uploaded N/A Beverages inventory CSV."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
+    try:
+        df = df.copy()
+        for col in ['Cost', 'Cost/Unit']:
+            df = clean_currency_column(df, col)
+        if 'Size/Yield' in df.columns:
+            df['Size/Yield'] = pd.to_numeric(df['Size/Yield'], errors='coerce').fillna(0)
+        
+        # Handle location columns
+        for col in [loc1, loc2, loc3]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            else:
+                df[col] = 0.0
+        
+        # Calculate Total Inventory from location columns
+        df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
+        
+        if 'Cost' in df.columns and 'Size/Yield' in df.columns:
+            df['Cost/Unit'] = df.apply(
+                lambda row: round(row['Cost'] / row['Size/Yield'], 2) if row['Size/Yield'] > 0 else 0, axis=1)
+        return df
+    except Exception as e:
+        st.error(f"Error processing N/A beverages data: {e}")
         return df
 
 
@@ -1715,13 +1937,14 @@ def show_inventory():
         'wine': calculate_total_value(st.session_state.get('wine_inventory', pd.DataFrame())),
         'beer': calculate_total_value(st.session_state.get('beer_inventory', pd.DataFrame())),
         'ingredients': calculate_total_value(st.session_state.get('ingredients_inventory', pd.DataFrame())),
+        'na_beverages': calculate_total_value(st.session_state.get('na_beverages_inventory', pd.DataFrame())),
     }
     total = sum(values.values())
     
-    cols = st.columns(5)
+    cols = st.columns(6)
     labels = [('🥃 Spirits', values['spirits']), ('🍷 Wine', values['wine']), 
               ('🍺 Beer', values['beer']), ('🧴 Ingredients', values['ingredients']),
-              ('💰 Total', total)]
+              ('🥤 N/A Bev', values['na_beverages']), ('💰 Total', total)]
     for col, (label, val) in zip(cols, labels):
         with col:
             st.metric(label=label, value=format_currency(val))
@@ -1730,42 +1953,55 @@ def show_inventory():
     st.markdown("---")
     
     # Tabs
-    tab_spirits, tab_wine, tab_beer, tab_ingredients = st.tabs(["🥃 Spirits", "🍷 Wine", "🍺 Beer", "🧴 Ingredients"])
+    tab_spirits, tab_wine, tab_beer, tab_ingredients, tab_na_beverages = st.tabs(["🥃 Spirits", "🍷 Wine", "🍺 Beer", "🧴 Ingredients", "🥤 N/A Beverages"])
     
     with tab_spirits:
         show_spirits_inventory_split(st.session_state.get('spirits_inventory', pd.DataFrame()), ["Type", "Distributor", "Use"])
+        with st.expander("📤 Upload Spirits Inventory (CSV)", expanded=False):
+            show_csv_upload_section("Spirits")
     
     with tab_wine:
         show_wine_inventory_split(st.session_state.get('wine_inventory', pd.DataFrame()), ["Type", "Distributor"])
+        with st.expander("📤 Upload Wine Inventory (CSV)", expanded=False):
+            show_csv_upload_section("Wine")
     
     with tab_beer:
         show_beer_inventory_split(st.session_state.get('beer_inventory', pd.DataFrame()), ["Type", "Distributor"])
+        with st.expander("📤 Upload Beer Inventory (CSV)", expanded=False):
+            show_csv_upload_section("Beer")
     
     with tab_ingredients:
         show_ingredients_inventory_split(st.session_state.get('ingredients_inventory', pd.DataFrame()), ["Distributor"])
+        with st.expander("📤 Upload Ingredients Inventory (CSV)", expanded=False):
+            show_csv_upload_section("Ingredients")
     
-    st.markdown("---")
-    
-    # CSV Upload
-    with st.expander("📤 Upload Inventory Data (CSV)", expanded=False):
-        show_csv_upload_section()
+    with tab_na_beverages:
+        show_na_beverages_inventory_split(st.session_state.get('na_beverages_inventory', pd.DataFrame()), ["Distributor"])
+        with st.expander("📤 Upload N/A Beverages Inventory (CSV)", expanded=False):
+            show_csv_upload_section("N/A Beverages")
 
 
-def show_csv_upload_section():
-    """Shows the CSV upload section with instructions."""
+def show_csv_upload_section(upload_category: str):
+    """Shows the CSV upload section with instructions and column validation for a specific category."""
     loc1 = get_location_1()
     loc2 = get_location_2()
     loc3 = get_location_3()
     
-    st.markdown("Upload a CSV file to replace inventory data for any category.")
-    upload_category = st.selectbox("Select category:", ["Spirits", "Wine", "Beer", "Ingredients"], key="upload_category")
+    # Required columns for each category (used for validation)
+    required_columns = {
+        "Spirits": ["Product", "Type", "Bottle Cost", "Size (oz.)", loc1, loc2, loc3, "Target Margin", "Use", "Distributor", "Order Notes"],
+        "Wine": ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"],
+        "Beer": ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", loc1, loc2, loc3, "Target Margin", "Distributor", "Order Notes"],
+        "Ingredients": ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"],
+        "N/A Beverages": ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"],
+    }
     
     # CSV Upload Instructions
     instructions = {
         "Spirits": f"""
-**Required columns:** Product, Type, Cost, Size (oz.), Margin, {loc1}, {loc2}, {loc3}, Use, Distributor, Order Notes
+**Required columns:** Product, Type, Bottle Cost, Size (oz.), {loc1}, {loc2}, {loc3}, Target Margin, Use, Distributor, Order Notes
 
-**Calculated columns (auto-generated):** Total Inventory, Cost/Oz, Neat Price, Value, Suggested Retail
+**Calculated columns (auto-generated):** Cost/Oz, Shot, Single, Neat Pour, Double, Total Inventory, Value
 """,
         "Wine": f"""
 **Required columns:** Product, Type, Cost, Size (oz.), Margin, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
@@ -1773,11 +2009,16 @@ def show_csv_upload_section():
 **Calculated columns (auto-generated):** Total Inventory, Bottle Price, Value, BTG, Suggested Retail
 """,
         "Beer": f"""
-**Required columns:** Product, Type, Cost per Keg/Case, Size, UoM, Margin, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
+**Required columns:** Product, Type, Cost per Keg/Case, Size, UoM, {loc1}, {loc2}, {loc3}, Target Margin, Distributor, Order Notes
 
-**Calculated columns (auto-generated):** Total Inventory, Cost/Unit, Menu Price, Value
+**Calculated columns (auto-generated):** Cost/Unit, Menu Price, Total Inventory, Value
 """,
         "Ingredients": f"""
+**Required columns:** Product, Cost, Size/Yield, UoM, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
+
+**Calculated columns (auto-generated):** Total Inventory, Cost/Unit
+""",
+        "N/A Beverages": f"""
 **Required columns:** Product, Cost, Size/Yield, UoM, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
 
 **Calculated columns (auto-generated):** Total Inventory, Cost/Unit
@@ -1791,23 +2032,57 @@ def show_csv_upload_section():
     if uploaded_file is not None:
         try:
             new_data = pd.read_csv(uploaded_file)
-            st.dataframe(new_data.head(), use_container_width=True)
             
-            if st.button("✅ Import Data", key="confirm_upload"):
-                processors = {
-                    "Spirits": (process_uploaded_spirits, 'spirits_inventory'),
-                    "Wine": (process_uploaded_wine, 'wine_inventory'),
-                    "Beer": (process_uploaded_beer, 'beer_inventory'),
-                    "Ingredients": (process_uploaded_ingredients, 'ingredients_inventory'),
-                }
-                func, key = processors[upload_category]
-                st.session_state[key] = func(new_data)
-                st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-                save_all_inventory_data()
-                st.success(f"✅ {upload_category} inventory uploaded!")
-                st.rerun()
+            # Strip whitespace from column names
+            new_data.columns = [col.strip() for col in new_data.columns]
+            
+            # Create case-insensitive column mapping for normalization
+            # This allows "product" to match "Product", etc.
+            required = required_columns[upload_category]
+            uploaded_columns = new_data.columns.tolist()
+            
+            # Build a mapping of lowercase -> expected case
+            column_mapping = {}
+            for req_col in required:
+                for up_col in uploaded_columns:
+                    if up_col.lower() == req_col.lower() and up_col != req_col:
+                        column_mapping[up_col] = req_col
+            
+            # Rename columns to match expected case
+            if column_mapping:
+                new_data = new_data.rename(columns=column_mapping)
+                uploaded_columns = new_data.columns.tolist()
+                st.info(f"ℹ️ Normalized column names: {', '.join([f'{k} → {v}' for k, v in column_mapping.items()])}")
+            
+            # Validate required columns
+            missing_columns = [col for col in required if col not in uploaded_columns]
+            
+            if missing_columns:
+                st.error(f"❌ **Missing required columns:** {', '.join(missing_columns)}")
+                st.warning("Please update your CSV file to include all required columns and try again.")
+                st.markdown("**Your file contains these columns:**")
+                st.code(", ".join(uploaded_columns))
+            else:
+                st.success("✅ All required columns found!")
+                st.dataframe(new_data.head(), use_container_width=True)
+                
+                if st.button("✅ Import Data", key=f"confirm_upload_{upload_category.lower().replace('/', '_')}"):
+                    processors = {
+                        "Spirits": (process_uploaded_spirits, 'spirits_inventory'),
+                        "Wine": (process_uploaded_wine, 'wine_inventory'),
+                        "Beer": (process_uploaded_beer, 'beer_inventory'),
+                        "Ingredients": (process_uploaded_ingredients, 'ingredients_inventory'),
+                        "N/A Beverages": (process_uploaded_na_beverages, 'na_beverages_inventory'),
+                    }
+                    func, key = processors[upload_category]
+                    st.session_state[key] = func(new_data)
+                    st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+                    save_all_inventory_data()
+                    st.success(f"✅ {upload_category} inventory uploaded!")
+                    st.rerun()
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"❌ **Error reading CSV file:** {e}")
+            st.warning("Please check that your file is a valid CSV format and try again.")
 
 
 # =============================================================================
@@ -1839,8 +2114,19 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
                 if selected:
                     column_filters[col_name] = selected
     
+    # Check if any filters are active
+    is_filtered = bool(search_term) or bool(column_filters)
+    
+    # Store original products list before filtering
+    original_products = df['Product'].tolist() if 'Product' in df.columns else []
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
-    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # Show filter status
+    if is_filtered:
+        st.caption(f"🔍 Showing {len(filtered_df)} of {len(df)} products (filtered)")
+    else:
+        st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
     for col in [loc1, loc2, loc3]:
@@ -1850,33 +2136,63 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
             st.session_state.spirits_inventory[col] = 0.0
     
     # Define editable vs calculated columns
-    editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Use", "Distributor", "Order Notes"]
-    calculated_cols = ["Total Inventory", "Cost/Oz", "Neat Price", "Value", "Suggested Retail"]
+    editable_cols = ["Product", "Type", "Bottle Cost", "Size (oz.)", loc1, loc2, loc3, "Target Margin", "Use", "Distributor", "Order Notes"]
+    calculated_cols = ["Cost/Oz", "Shot", "Single", "Neat Pour", "Double", "Total Inventory", "Value"]
     
-    # Filter to only columns that exist
+    # Filter to only columns that exist and warn about missing ones
+    missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
+    if missing_cols:
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
+        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+    
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
     
+    if not editable_cols:
+        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        return
+    
     st.markdown("#### ✏️ Inputs")
-    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    if is_filtered:
+        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+    else:
+        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    # Store products in filtered view for tracking
+    filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
     # Show only editable columns in the data editor
+    # Disable adding/deleting rows when filtered to avoid complexity
     edited_df = st.data_editor(
-        filtered_df[editable_cols].copy(),
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="dynamic",
+        num_rows="fixed" if is_filtered else "dynamic",
         key="editor_spirits_split",
         column_config={
-            "Cost": st.column_config.NumberColumn(format="$%.2f"),
+            "Bottle Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Size (oz.)": st.column_config.NumberColumn(format="%.1f"),
-            "Margin": st.column_config.NumberColumn(format="%.0f%%"),
+            "Target Margin": st.column_config.NumberColumn(format="%.0f%%"),
             loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
             loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
             loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
         }
     )
     
+    # Immediately merge edits back to full inventory (so edits persist when filters change)
+    if is_filtered:
+        merge_edits_to_inventory(edited_df, 'spirits_inventory', filtered_products)
+    
     # Calculate computed columns from edited data
     calc_df = edited_df.copy()
+    
+    # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
+    numeric_cols = ["Bottle Cost", "Size (oz.)", "Target Margin", loc1, loc2, loc3]
+    for col in numeric_cols:
+        if col in calc_df.columns:
+            # Remove currency symbols and convert to numeric
+            calc_df[col] = pd.to_numeric(
+                calc_df[col].astype(str).str.replace(r'[$,%]', '', regex=True).str.strip(),
+                errors='coerce'
+            ).fillna(0)
     
     # Total Inventory = sum of all locations
     calc_df["Total Inventory"] = (
@@ -1885,36 +2201,54 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         calc_df[loc3].fillna(0)
     )
     
-    if "Cost" in calc_df.columns and "Size (oz.)" in calc_df.columns:
+    # Cost/Oz calculation
+    if "Bottle Cost" in calc_df.columns and "Size (oz.)" in calc_df.columns:
         calc_df["Cost/Oz"] = calc_df.apply(
-            lambda r: round(r['Cost'] / r['Size (oz.)'], 2) if r['Size (oz.)'] > 0 else 0, axis=1)
+            lambda r: round(r['Bottle Cost'] / r['Size (oz.)'], 2) if r['Size (oz.)'] > 0 else 0, axis=1)
     
-    if "Cost" in calc_df.columns and "Size (oz.)" in calc_df.columns and "Margin" in calc_df.columns:
-        calc_df["Neat Price"] = calc_df.apply(
-            lambda r: math.ceil(((r['Cost'] / r['Size (oz.)']) * 2) / (r['Margin'] / 100)) if r['Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
+    # Pour price calculations based on Cost/Oz and Target Margin
+    if "Bottle Cost" in calc_df.columns and "Size (oz.)" in calc_df.columns and "Target Margin" in calc_df.columns:
+        # Shot = (1 * Cost/Oz) / Target Margin
+        calc_df["Shot"] = calc_df.apply(
+            lambda r: math.ceil((1 * (r['Bottle Cost'] / r['Size (oz.)'])) / (r['Target Margin'] / 100)) if r['Target Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
+        
+        # Single = (1.5 * Cost/Oz) / Target Margin
+        calc_df["Single"] = calc_df.apply(
+            lambda r: math.ceil((1.5 * (r['Bottle Cost'] / r['Size (oz.)'])) / (r['Target Margin'] / 100)) if r['Target Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
+        
+        # Neat Pour = (2 * Cost/Oz) / Target Margin
+        calc_df["Neat Pour"] = calc_df.apply(
+            lambda r: math.ceil((2 * (r['Bottle Cost'] / r['Size (oz.)'])) / (r['Target Margin'] / 100)) if r['Target Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
+        
+        # Double = (3 * Cost/Oz) / Target Margin
+        calc_df["Double"] = calc_df.apply(
+            lambda r: math.ceil((3 * (r['Bottle Cost'] / r['Size (oz.)'])) / (r['Target Margin'] / 100)) if r['Target Margin'] > 0 and r['Size (oz.)'] > 0 else 0, axis=1)
     
-    if "Cost" in calc_df.columns and "Total Inventory" in calc_df.columns:
-        calc_df["Value"] = round(calc_df["Cost"] * calc_df["Total Inventory"], 2)
-    
-    if "Cost" in calc_df.columns:
-        calc_df["Suggested Retail"] = calc_df["Cost"].apply(lambda x: math.ceil(x * 1.44))
+    if "Bottle Cost" in calc_df.columns and "Total Inventory" in calc_df.columns:
+        calc_df["Value"] = round(calc_df["Bottle Cost"] * calc_df["Total Inventory"], 2)
     
     # Display calculated columns in read-only table
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
     st.caption("These values update automatically based on your edits above.")
     
-    display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
+    # Build display columns, only include Product if it exists
+    display_calc_cols = []
+    if "Product" in calc_df.columns:
+        display_calc_cols.append("Product")
+    display_calc_cols.extend([c for c in calculated_cols if c in calc_df.columns])
     
     st.dataframe(
         calc_df[display_calc_cols],
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
             "Cost/Oz": st.column_config.NumberColumn(format="$%.2f"),
-            "Neat Price": st.column_config.NumberColumn(format="$%.0f"),
+            "Shot": st.column_config.NumberColumn(format="$%.0f"),
+            "Single": st.column_config.NumberColumn(format="$%.0f"),
+            "Neat Pour": st.column_config.NumberColumn(format="$%.0f"),
+            "Double": st.column_config.NumberColumn(format="$%.0f"),
+            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
             "Value": st.column_config.NumberColumn(format="$%.2f"),
-            "Suggested Retail": st.column_config.NumberColumn(format="$%.0f"),
         }
     )
     
@@ -1923,35 +2257,18 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         total_value = calc_df["Value"].sum()
         st.metric("💰 Total Inventory Value", format_currency(total_value))
     
-    # Save button
-    if st.button("💾 Save Changes", key="save_spirits_split", type="primary"):
-        full_df = calc_df.copy()
-        updated_inventory = st.session_state.spirits_inventory.copy()
-        
-        # Ensure location columns exist
-        for col in [loc1, loc2, loc3, "Total Inventory"]:
-            if col not in updated_inventory.columns:
-                updated_inventory[col] = 0.0
-        
-        for idx, row in full_df.iterrows():
-            product_name = row['Product']
-            mask = updated_inventory['Product'] == product_name
-            if mask.any():
-                for col in full_df.columns:
-                    if col in updated_inventory.columns:
-                        updated_inventory.loc[mask, col] = row[col]
-        
-        # Handle new rows
-        existing_products = updated_inventory['Product'].tolist()
-        for idx, row in full_df.iterrows():
-            if row['Product'] not in existing_products:
-                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
-        
-        st.session_state.spirits_inventory = updated_inventory
-        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-        save_all_inventory_data()
-        st.success("✅ Changes saved!")
-        st.rerun()
+    # Save button - disabled when filtered
+    if is_filtered:
+        st.warning("⚠️ Clear all filters before saving to Google Sheets. Your edits are preserved.")
+        st.button("💾 Save Changes", key="save_spirits_split", type="primary", disabled=True)
+    else:
+        if st.button("💾 Save Changes", key="save_spirits_split", type="primary"):
+            # Save the edited data directly (overwrites Google Sheet)
+            st.session_state.spirits_inventory = calc_df.copy()
+            st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+            save_all_inventory_data()
+            st.success("✅ Changes saved!")
+            st.rerun()
 
 
 # =============================================================================
@@ -1983,8 +2300,16 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
                 if selected:
                     column_filters[col_name] = selected
     
+    # Check if any filters are active
+    is_filtered = bool(search_term) or bool(column_filters)
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
-    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # Show filter status
+    if is_filtered:
+        st.caption(f"🔍 Showing {len(filtered_df)} of {len(df)} products (filtered)")
+    else:
+        st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
     for col in [loc1, loc2, loc3]:
@@ -1996,15 +2321,31 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"]
     calculated_cols = ["Total Inventory", "Bottle Price", "Value", "BTG", "Suggested Retail"]
     
+    # Filter to only columns that exist and warn about missing ones
+    missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
+    if missing_cols:
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
+        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+    
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
     
+    if not editable_cols:
+        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        return
+    
     st.markdown("#### ✏️ Inputs")
-    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    if is_filtered:
+        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+    else:
+        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    # Store products in filtered view for tracking
+    filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
     edited_df = st.data_editor(
-        filtered_df[editable_cols].copy(),
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="dynamic",
+        num_rows="fixed" if is_filtered else "dynamic",
         key="editor_wine_split",
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -2016,8 +2357,22 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
         }
     )
     
+    # Immediately merge edits back to full inventory (so edits persist when filters change)
+    if is_filtered:
+        merge_edits_to_inventory(edited_df, 'wine_inventory', filtered_products)
+    
     # Calculate computed columns
     calc_df = edited_df.copy()
+    
+    # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
+    numeric_cols = ["Cost", "Size (oz.)", "Margin", loc1, loc2, loc3]
+    for col in numeric_cols:
+        if col in calc_df.columns:
+            # Remove currency symbols and convert to numeric
+            calc_df[col] = pd.to_numeric(
+                calc_df[col].astype(str).str.replace(r'[$,%]', '', regex=True).str.strip(),
+                errors='coerce'
+            ).fillna(0)
     
     calc_df["Total Inventory"] = (
         calc_df[loc1].fillna(0) + 
@@ -2033,14 +2388,18 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
         calc_df["Value"] = round(calc_df["Cost"] * calc_df["Total Inventory"], 2)
     
     if "Cost" in calc_df.columns:
-        calc_df["BTG"] = calc_df["Cost"].apply(lambda x: math.ceil(x / 4))
-        calc_df["Suggested Retail"] = calc_df["Cost"].apply(lambda x: math.ceil(x * 1.44))
+        calc_df["BTG"] = calc_df["Cost"].apply(lambda x: math.ceil(x / 4) if pd.notna(x) and x > 0 else 0)
+        calc_df["Suggested Retail"] = calc_df["Cost"].apply(lambda x: math.ceil(x * 1.44) if pd.notna(x) and x > 0 else 0)
     
     # Display calculated columns
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
     st.caption("These values update automatically based on your edits above.")
     
-    display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
+    # Build display columns, only include Product if it exists
+    display_calc_cols = []
+    if "Product" in calc_df.columns:
+        display_calc_cols.append("Product")
+    display_calc_cols.extend([c for c in calculated_cols if c in calc_df.columns])
     
     st.dataframe(
         calc_df[display_calc_cols],
@@ -2059,32 +2418,18 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
         total_value = calc_df["Value"].sum()
         st.metric("💰 Total Inventory Value", format_currency(total_value))
     
-    if st.button("💾 Save Changes", key="save_wine_split", type="primary"):
-        full_df = calc_df.copy()
-        updated_inventory = st.session_state.wine_inventory.copy()
-        
-        for col in [loc1, loc2, loc3, "Total Inventory"]:
-            if col not in updated_inventory.columns:
-                updated_inventory[col] = 0.0
-        
-        for idx, row in full_df.iterrows():
-            product_name = row['Product']
-            mask = updated_inventory['Product'] == product_name
-            if mask.any():
-                for col in full_df.columns:
-                    if col in updated_inventory.columns:
-                        updated_inventory.loc[mask, col] = row[col]
-        
-        existing_products = updated_inventory['Product'].tolist()
-        for idx, row in full_df.iterrows():
-            if row['Product'] not in existing_products:
-                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
-        
-        st.session_state.wine_inventory = updated_inventory
-        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-        save_all_inventory_data()
-        st.success("✅ Changes saved!")
-        st.rerun()
+    # Save button - disabled when filtered
+    if is_filtered:
+        st.warning("⚠️ Clear all filters before saving to Google Sheets. Your edits are preserved.")
+        st.button("💾 Save Changes", key="save_wine_split", type="primary", disabled=True)
+    else:
+        if st.button("💾 Save Changes", key="save_wine_split", type="primary"):
+            # Save the edited data directly (overwrites Google Sheet)
+            st.session_state.wine_inventory = calc_df.copy()
+            st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+            save_all_inventory_data()
+            st.success("✅ Changes saved!")
+            st.rerun()
 
 
 # =============================================================================
@@ -2116,8 +2461,16 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
                 if selected:
                     column_filters[col_name] = selected
     
+    # Check if any filters are active
+    is_filtered = bool(search_term) or bool(column_filters)
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
-    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # Show filter status
+    if is_filtered:
+        st.caption(f"🔍 Showing {len(filtered_df)} of {len(df)} products (filtered)")
+    else:
+        st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
     for col in [loc1, loc2, loc3]:
@@ -2126,31 +2479,61 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
         if col not in st.session_state.beer_inventory.columns:
             st.session_state.beer_inventory[col] = 0.0
     
-    editable_cols = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"]
-    calculated_cols = ["Total Inventory", "Cost/Unit", "Menu Price", "Value"]
+    editable_cols = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", loc1, loc2, loc3, "Target Margin", "Distributor", "Order Notes"]
+    calculated_cols = ["Cost/Unit", "Menu Price", "Total Inventory", "Value"]
+    
+    # Filter to only columns that exist and warn about missing ones
+    missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
+    if missing_cols:
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
+        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
     
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
     
+    if not editable_cols:
+        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        return
+    
     st.markdown("#### ✏️ Inputs")
-    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    if is_filtered:
+        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+    else:
+        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    # Store products in filtered view for tracking
+    filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
     edited_df = st.data_editor(
-        filtered_df[editable_cols].copy(),
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="dynamic",
+        num_rows="fixed" if is_filtered else "dynamic",
         key="editor_beer_split",
         column_config={
             "Cost per Keg/Case": st.column_config.NumberColumn(format="$%.2f"),
             "Size": st.column_config.NumberColumn(format="%.1f"),
-            "Margin": st.column_config.NumberColumn(format="%.0f%%"),
             loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
             loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
             loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
+            "Target Margin": st.column_config.NumberColumn(format="%.0f%%"),
         }
     )
     
+    # Immediately merge edits back to full inventory (so edits persist when filters change)
+    if is_filtered:
+        merge_edits_to_inventory(edited_df, 'beer_inventory', filtered_products)
+    
     # Calculate computed columns
     calc_df = edited_df.copy()
+    
+    # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
+    numeric_cols = ["Cost per Keg/Case", "Size", loc1, loc2, loc3, "Target Margin"]
+    for col in numeric_cols:
+        if col in calc_df.columns:
+            # Remove currency symbols and convert to numeric
+            calc_df[col] = pd.to_numeric(
+                calc_df[col].astype(str).str.replace(r'[$,%]', '', regex=True).str.strip(),
+                errors='coerce'
+            ).fillna(0)
     
     calc_df["Total Inventory"] = (
         calc_df[loc1].fillna(0) + 
@@ -2163,16 +2546,18 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
             lambda r: round(r['Cost per Keg/Case'] / r['Size'], 2) if r['Size'] > 0 else 0, axis=1)
     
     # Menu Price calculation
-    if "Cost/Unit" in calc_df.columns and "Margin" in calc_df.columns and "Type" in calc_df.columns:
+    if "Cost/Unit" in calc_df.columns and "Target Margin" in calc_df.columns and "Type" in calc_df.columns:
         def calc_menu_price(row):
             cost_unit = row["Cost/Unit"]
-            margin = row["Margin"]
+            margin = row["Target Margin"]
             if margin <= 0:
                 return 0
-            if row["Type"] in ["Can", "Bottle"]:
-                return round(cost_unit / (margin / 100))
-            elif row["Type"] in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
+            if row["Type"] in ["Half Barrel", "Quarter Barrel", "Sixtel"]:
+                # For kegs: (16 * Cost/Unit) / Target Margin
                 return round((cost_unit * 16) / (margin / 100))
+            elif row["Type"] == "Case":
+                # For cases: Cost/Unit / Target Margin
+                return round(cost_unit / (margin / 100))
             return 0
         calc_df["Menu Price"] = calc_df.apply(calc_menu_price, axis=1)
     
@@ -2183,16 +2568,20 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
     st.caption("These values update automatically based on your edits above.")
     
-    display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
+    # Build display columns, only include Product if it exists
+    display_calc_cols = []
+    if "Product" in calc_df.columns:
+        display_calc_cols.append("Product")
+    display_calc_cols.extend([c for c in calculated_cols if c in calc_df.columns])
     
     st.dataframe(
         calc_df[display_calc_cols],
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
             "Cost/Unit": st.column_config.NumberColumn(format="$%.2f"),
             "Menu Price": st.column_config.NumberColumn(format="$%.0f"),
+            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
             "Value": st.column_config.NumberColumn(format="$%.2f"),
         }
     )
@@ -2201,32 +2590,18 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
         total_value = calc_df["Value"].sum()
         st.metric("💰 Total Inventory Value", format_currency(total_value))
     
-    if st.button("💾 Save Changes", key="save_beer_split", type="primary"):
-        full_df = calc_df.copy()
-        updated_inventory = st.session_state.beer_inventory.copy()
-        
-        for col in [loc1, loc2, loc3, "Total Inventory"]:
-            if col not in updated_inventory.columns:
-                updated_inventory[col] = 0.0
-        
-        for idx, row in full_df.iterrows():
-            product_name = row['Product']
-            mask = updated_inventory['Product'] == product_name
-            if mask.any():
-                for col in full_df.columns:
-                    if col in updated_inventory.columns:
-                        updated_inventory.loc[mask, col] = row[col]
-        
-        existing_products = updated_inventory['Product'].tolist()
-        for idx, row in full_df.iterrows():
-            if row['Product'] not in existing_products:
-                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
-        
-        st.session_state.beer_inventory = updated_inventory
-        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-        save_all_inventory_data()
-        st.success("✅ Changes saved!")
-        st.rerun()
+    # Save button - disabled when filtered
+    if is_filtered:
+        st.warning("⚠️ Clear all filters before saving to Google Sheets. Your edits are preserved.")
+        st.button("💾 Save Changes", key="save_beer_split", type="primary", disabled=True)
+    else:
+        if st.button("💾 Save Changes", key="save_beer_split", type="primary"):
+            # Save the edited data directly (overwrites Google Sheet)
+            st.session_state.beer_inventory = calc_df.copy()
+            st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+            save_all_inventory_data()
+            st.success("✅ Changes saved!")
+            st.rerun()
 
 
 # =============================================================================
@@ -2258,8 +2633,16 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
                 if selected:
                     column_filters[col_name] = selected
     
+    # Check if any filters are active
+    is_filtered = bool(search_term) or bool(column_filters)
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
-    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # Show filter status
+    if is_filtered:
+        st.caption(f"🔍 Showing {len(filtered_df)} of {len(df)} products (filtered)")
+    else:
+        st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
     for col in [loc1, loc2, loc3]:
@@ -2269,17 +2652,33 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
             st.session_state.ingredients_inventory[col] = 0.0
     
     editable_cols = ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"]
-    calculated_cols = ["Total Inventory", "Cost/Unit"]
+    calculated_cols = ["Cost/Unit", "Total Inventory", "Value"]
+    
+    # Filter to only columns that exist and warn about missing ones
+    missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
+    if missing_cols:
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
+        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
     
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
     
+    if not editable_cols:
+        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        return
+    
     st.markdown("#### ✏️ Inputs")
-    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    if is_filtered:
+        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+    else:
+        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    # Store products in filtered view for tracking
+    filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
     edited_df = st.data_editor(
-        filtered_df[editable_cols].copy(),
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="dynamic",
+        num_rows="fixed" if is_filtered else "dynamic",
         key="editor_ingredients_split",
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -2290,8 +2689,22 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         }
     )
     
+    # Immediately merge edits back to full inventory (so edits persist when filters change)
+    if is_filtered:
+        merge_edits_to_inventory(edited_df, 'ingredients_inventory', filtered_products)
+    
     # Calculate computed columns
     calc_df = edited_df.copy()
+    
+    # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
+    numeric_cols = ["Cost", "Size/Yield", loc1, loc2, loc3]
+    for col in numeric_cols:
+        if col in calc_df.columns:
+            # Remove currency symbols and convert to numeric
+            calc_df[col] = pd.to_numeric(
+                calc_df[col].astype(str).str.replace(r'[$,%]', '', regex=True).str.strip(),
+                errors='coerce'
+            ).fillna(0)
     
     calc_df["Total Inventory"] = (
         calc_df[loc1].fillna(0) + 
@@ -2303,48 +2716,202 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         calc_df["Cost/Unit"] = calc_df.apply(
             lambda r: round(r['Cost'] / r['Size/Yield'], 4) if r['Size/Yield'] > 0 else 0, axis=1)
     
+    # Calculate Value = Cost * Total Inventory
+    if "Cost" in calc_df.columns:
+        calc_df["Value"] = round(calc_df["Cost"] * calc_df["Total Inventory"], 2)
+    
     # Display calculated columns
     st.markdown("#### 📊 Calculated Fields (Live Preview)")
     st.caption("These values update automatically based on your edits above.")
     
-    display_calc_cols = ["Product"] + [c for c in calculated_cols if c in calc_df.columns]
+    # Build display columns, only include Product if it exists
+    display_calc_cols = []
+    if "Product" in calc_df.columns:
+        display_calc_cols.append("Product")
+    display_calc_cols.extend([c for c in calculated_cols if c in calc_df.columns])
     
     st.dataframe(
         calc_df[display_calc_cols],
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
             "Cost/Unit": st.column_config.NumberColumn(format="$%.4f"),
+            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
+            "Value": st.column_config.NumberColumn(format="$%.2f"),
         }
     )
     
-    if st.button("💾 Save Changes", key="save_ingredients_split", type="primary"):
-        full_df = calc_df.copy()
-        updated_inventory = st.session_state.ingredients_inventory.copy()
-        
-        for col in [loc1, loc2, loc3, "Total Inventory"]:
-            if col not in updated_inventory.columns:
-                updated_inventory[col] = 0.0
-        
-        for idx, row in full_df.iterrows():
-            product_name = row['Product']
-            mask = updated_inventory['Product'] == product_name
-            if mask.any():
-                for col in full_df.columns:
-                    if col in updated_inventory.columns:
-                        updated_inventory.loc[mask, col] = row[col]
-        
-        existing_products = updated_inventory['Product'].tolist()
-        for idx, row in full_df.iterrows():
-            if row['Product'] not in existing_products:
-                updated_inventory = pd.concat([updated_inventory, pd.DataFrame([row])], ignore_index=True)
-        
-        st.session_state.ingredients_inventory = updated_inventory
-        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-        save_all_inventory_data()
-        st.success("✅ Changes saved!")
-        st.rerun()
+    if "Value" in calc_df.columns:
+        total_value = calc_df["Value"].sum()
+        st.metric("💰 Total Inventory Value", format_currency(total_value))
+    
+    # Save button - disabled when filtered
+    if is_filtered:
+        st.warning("⚠️ Clear all filters before saving to Google Sheets. Your edits are preserved.")
+        st.button("💾 Save Changes", key="save_ingredients_split", type="primary", disabled=True)
+    else:
+        if st.button("💾 Save Changes", key="save_ingredients_split", type="primary"):
+            # Save the edited data directly (overwrites Google Sheet)
+            st.session_state.ingredients_inventory = calc_df.copy()
+            st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+            save_all_inventory_data()
+            st.success("✅ Changes saved!")
+            st.rerun()
+
+
+# =============================================================================
+# SPLIT DISPLAY FOR N/A BEVERAGES - Using CLIENT_CONFIG locations
+# =============================================================================
+
+def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
+    """Renders N/A beverages inventory with split display approach."""
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
+    if df is None or len(df) == 0:
+        st.info("No N/A beverages inventory data.")
+        return
+    
+    st.markdown("#### Search & Filter N/A Beverages")
+    filter_cols = st.columns([2] + [1] * len(filter_columns))
+    
+    with filter_cols[0]:
+        search_term = st.text_input("🔍 Search", key="search_na_beverages", placeholder="Type to search...")
+    
+    column_filters = {}
+    for i, col_name in enumerate(filter_columns):
+        with filter_cols[i + 1]:
+            if col_name in df.columns:
+                unique_values = df[col_name].dropna().unique().tolist()
+                selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_na_beverages_{col_name}")
+                if selected:
+                    column_filters[col_name] = selected
+    
+    # Check if any filters are active
+    is_filtered = bool(search_term) or bool(column_filters)
+    
+    filtered_df = filter_dataframe(df, search_term, column_filters)
+    
+    # Show filter status
+    if is_filtered:
+        st.caption(f"🔍 Showing {len(filtered_df)} of {len(df)} products (filtered)")
+    else:
+        st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # Add location columns if they don't exist
+    for col in [loc1, loc2, loc3]:
+        if col not in filtered_df.columns:
+            filtered_df[col] = 0.0
+        if col not in st.session_state.na_beverages_inventory.columns:
+            st.session_state.na_beverages_inventory[col] = 0.0
+    
+    editable_cols = ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"]
+    calculated_cols = ["Cost/Unit", "Total Inventory", "Value"]
+    
+    # Filter to only columns that exist and warn about missing ones
+    missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
+    if missing_cols:
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
+        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+    
+    editable_cols = [c for c in editable_cols if c in filtered_df.columns]
+    
+    if not editable_cols:
+        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        return
+    
+    st.markdown("#### ✏️ Inputs")
+    if is_filtered:
+        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+    else:
+        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    # Store products in filtered view for tracking
+    filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
+    
+    edited_df = st.data_editor(
+        filtered_df[editable_cols].copy().reset_index(drop=True),
+        use_container_width=True,
+        num_rows="fixed" if is_filtered else "dynamic",
+        key="editor_na_beverages_split",
+        column_config={
+            "Cost": st.column_config.NumberColumn(format="$%.2f"),
+            "Size/Yield": st.column_config.NumberColumn(format="%.1f"),
+            loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
+            loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
+            loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
+        }
+    )
+    
+    # Immediately merge edits back to full inventory (so edits persist when filters change)
+    if is_filtered:
+        merge_edits_to_inventory(edited_df, 'na_beverages_inventory', filtered_products)
+    
+    # Calculate computed columns
+    calc_df = edited_df.copy()
+    
+    # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
+    numeric_cols = ["Cost", "Size/Yield", loc1, loc2, loc3]
+    for col in numeric_cols:
+        if col in calc_df.columns:
+            # Remove currency symbols and convert to numeric
+            calc_df[col] = pd.to_numeric(
+                calc_df[col].astype(str).str.replace(r'[$,%]', '', regex=True).str.strip(),
+                errors='coerce'
+            ).fillna(0)
+    
+    calc_df["Total Inventory"] = (
+        calc_df[loc1].fillna(0) + 
+        calc_df[loc2].fillna(0) + 
+        calc_df[loc3].fillna(0)
+    )
+    
+    if "Cost" in calc_df.columns and "Size/Yield" in calc_df.columns:
+        calc_df["Cost/Unit"] = calc_df.apply(
+            lambda r: round(r['Cost'] / r['Size/Yield'], 4) if r['Size/Yield'] > 0 else 0, axis=1)
+    
+    # Calculate Value = Cost * Total Inventory
+    if "Cost" in calc_df.columns:
+        calc_df["Value"] = round(calc_df["Cost"] * calc_df["Total Inventory"], 2)
+    
+    # Display calculated columns
+    st.markdown("#### 📊 Calculated Fields (Live Preview)")
+    st.caption("These values update automatically based on your edits above.")
+    
+    # Build display columns, only include Product if it exists
+    display_calc_cols = []
+    if "Product" in calc_df.columns:
+        display_calc_cols.append("Product")
+    display_calc_cols.extend([c for c in calculated_cols if c in calc_df.columns])
+    
+    st.dataframe(
+        calc_df[display_calc_cols],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Cost/Unit": st.column_config.NumberColumn(format="$%.4f"),
+            "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
+            "Value": st.column_config.NumberColumn(format="$%.2f"),
+        }
+    )
+    
+    if "Value" in calc_df.columns:
+        total_value = calc_df["Value"].sum()
+        st.metric("💰 Total Inventory Value", format_currency(total_value))
+    
+    # Save button - disabled when filtered
+    if is_filtered:
+        st.warning("⚠️ Clear all filters before saving to Google Sheets. Your edits are preserved.")
+        st.button("💾 Save Changes", key="save_na_beverages_split", type="primary", disabled=True)
+    else:
+        if st.button("💾 Save Changes", key="save_na_beverages_split", type="primary"):
+            # Save the edited data directly (overwrites Google Sheet)
+            st.session_state.na_beverages_inventory = calc_df.copy()
+            st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+            save_all_inventory_data()
+            st.success("✅ Changes saved!")
+            st.rerun()
 
 
 # =============================================================================
@@ -3441,7 +4008,7 @@ def show_ordering():
 
 
 def show_cocktails():
-    """Placeholder for Cocktail Builds - preserved from V3.7."""
+    """Cocktail Builds Book with view, add, and edit recipe functionality."""
     show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
@@ -3453,15 +4020,310 @@ def show_cocktails():
         st.title("🍹 Cocktail Builds Book")
     
     recipes = st.session_state.get('cocktail_recipes', [])
+    available_products = get_all_available_products()
     
-    if recipes:
-        display_recipe_list(recipes, 'cocktail', session_key='cocktail_recipes')
+    # Check if we're in edit mode
+    editing_recipe_name = st.session_state.get('editing_cocktail', None)
+    editing_recipe = None
+    if editing_recipe_name:
+        editing_recipe = next((r for r in recipes if r['name'] == editing_recipe_name), None)
+        if not editing_recipe:
+            # Recipe not found, clear edit mode
+            del st.session_state['editing_cocktail']
+            editing_recipe_name = None
+    
+    # Show edit form if editing
+    if editing_recipe:
+        st.markdown(f"### ✏️ Editing: {editing_recipe['name']}")
+        
+        # Cancel button
+        if st.button("← Cancel Edit", key="cancel_cocktail_edit"):
+            del st.session_state['editing_cocktail']
+            # Clear edit form state
+            for key in list(st.session_state.keys()):
+                if key.startswith("edit_cocktail_"):
+                    del st.session_state[key]
+            st.rerun()
+        
+        st.markdown("---")
+        
+        # Initialize edit form state if not exists
+        edit_prefix = "edit_cocktail_"
+        if f"{edit_prefix}initialized" not in st.session_state:
+            st.session_state[f"{edit_prefix}ingredient_count"] = len(editing_recipe.get('ingredients', []))
+            if st.session_state[f"{edit_prefix}ingredient_count"] == 0:
+                st.session_state[f"{edit_prefix}ingredient_count"] = 1
+            # Pre-populate ingredients
+            for i, ing in enumerate(editing_recipe.get('ingredients', [])):
+                st.session_state[f"{edit_prefix}ing_prod_{i}"] = ing.get('product', '')
+                st.session_state[f"{edit_prefix}ing_amt_{i}"] = ing.get('amount', 0.0)
+                st.session_state[f"{edit_prefix}ing_unit_{i}"] = ing.get('unit', 'oz')
+            st.session_state[f"{edit_prefix}initialized"] = True
+        
+        col1, col2 = st.columns(2)
+        
+        glass_options = ["Rocks", "Coupe", "Highball", "Collins", "Nick & Nora", "Martini", "Wine", "Flute", "Mug", "Copper Mug", "Tiki", "Other"]
+        current_glass = editing_recipe.get('glass', 'Rocks')
+        glass_index = glass_options.index(current_glass) if current_glass in glass_options else 0
+        
+        with col1:
+            recipe_name = st.text_input("Recipe Name *", value=editing_recipe.get('name', ''), key=f"{edit_prefix}name")
+            glass_type = st.selectbox("Glass Type", glass_options, index=glass_index, key=f"{edit_prefix}glass")
+        
+        with col2:
+            sale_price = st.number_input("Menu Sale Price ($) *", min_value=0.0, step=0.50, value=float(editing_recipe.get('sale_price', 14.0)), key=f"{edit_prefix}price")
+        
+        st.markdown("#### Ingredients")
+        
+        # Column headers
+        col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+        with col_prod:
+            st.caption("Product")
+        with col_amt:
+            st.caption("Amount")
+        with col_unit:
+            st.caption("Unit")
+        with col_remove:
+            st.caption("")
+        
+        unit_options = ["oz", "dashes", "barspoon", "drops", "rinse", "each", "ml"]
+        
+        # Dynamic ingredient rows
+        ingredients_to_remove = []
+        for i in range(st.session_state[f"{edit_prefix}ingredient_count"]):
+            col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+            
+            # Get current values or defaults
+            current_prod = st.session_state.get(f"{edit_prefix}ing_prod_{i}", "")
+            current_amt = st.session_state.get(f"{edit_prefix}ing_amt_{i}", 0.0)
+            current_unit = st.session_state.get(f"{edit_prefix}ing_unit_{i}", "oz")
+            
+            prod_options = [""] + available_products
+            prod_index = prod_options.index(current_prod) if current_prod in prod_options else 0
+            unit_index = unit_options.index(current_unit) if current_unit in unit_options else 0
+            
+            with col_prod:
+                st.selectbox(f"Product {i+1}", options=prod_options, index=prod_index, key=f"{edit_prefix}ing_prod_{i}", label_visibility="collapsed")
+            with col_amt:
+                st.number_input(f"Amount {i+1}", min_value=0.0, step=0.25, value=float(current_amt), key=f"{edit_prefix}ing_amt_{i}", label_visibility="collapsed")
+            with col_unit:
+                st.selectbox(f"Unit {i+1}", options=unit_options, index=unit_index, key=f"{edit_prefix}ing_unit_{i}", label_visibility="collapsed")
+            with col_remove:
+                if st.session_state[f"{edit_prefix}ingredient_count"] > 1:
+                    if st.button("🗑️", key=f"{edit_prefix}remove_ing_{i}", help="Remove ingredient"):
+                        ingredients_to_remove.append(i)
+        
+        # Handle ingredient removal
+        if ingredients_to_remove:
+            for remove_idx in sorted(ingredients_to_remove, reverse=True):
+                for j in range(remove_idx, st.session_state[f"{edit_prefix}ingredient_count"] - 1):
+                    if f"{edit_prefix}ing_prod_{j+1}" in st.session_state:
+                        st.session_state[f"{edit_prefix}ing_prod_{j}"] = st.session_state[f"{edit_prefix}ing_prod_{j+1}"]
+                        st.session_state[f"{edit_prefix}ing_amt_{j}"] = st.session_state[f"{edit_prefix}ing_amt_{j+1}"]
+                        st.session_state[f"{edit_prefix}ing_unit_{j}"] = st.session_state[f"{edit_prefix}ing_unit_{j+1}"]
+                st.session_state[f"{edit_prefix}ingredient_count"] -= 1
+            st.rerun()
+        
+        # Add ingredient button
+        if st.button("➕ Add Ingredient", key=f"{edit_prefix}add_ingredient"):
+            st.session_state[f"{edit_prefix}ingredient_count"] += 1
+            st.rerun()
+        
+        st.markdown("#### Instructions")
+        instructions = st.text_area("Build/Preparation Instructions", value=editing_recipe.get('instructions', ''), height=100, key=f"{edit_prefix}instructions")
+        
+        st.markdown("---")
+        
+        # Save button
+        if st.button("💾 Save Changes", type="primary", use_container_width=True, key=f"{edit_prefix}save_btn"):
+            # Collect ingredient data
+            ingredients_data = []
+            for i in range(st.session_state[f"{edit_prefix}ingredient_count"]):
+                product = st.session_state.get(f"{edit_prefix}ing_prod_{i}", "")
+                amount = st.session_state.get(f"{edit_prefix}ing_amt_{i}", 0.0)
+                unit = st.session_state.get(f"{edit_prefix}ing_unit_{i}", "oz")
+                if product and amount > 0:
+                    ingredients_data.append({"product": product, "amount": amount, "unit": unit})
+            
+            if not recipe_name:
+                st.error("❌ Recipe name is required.")
+            elif not ingredients_data:
+                st.error("❌ At least one ingredient with amount > 0 is required.")
+            elif sale_price <= 0:
+                st.error("❌ Sale price must be greater than $0.")
+            else:
+                # Check for duplicate name (excluding current recipe)
+                other_names = [r['name'].lower() for r in recipes if r['name'] != editing_recipe_name]
+                if recipe_name.lower() in other_names:
+                    st.error(f"❌ A recipe named '{recipe_name}' already exists.")
+                else:
+                    # Update the recipe
+                    for r in st.session_state.cocktail_recipes:
+                        if r['name'] == editing_recipe_name:
+                            r['name'] = recipe_name
+                            r['glass'] = glass_type
+                            r['sale_price'] = sale_price
+                            r['ingredients'] = ingredients_data
+                            r['instructions'] = instructions
+                            break
+                    
+                    save_recipes('cocktail')
+                    
+                    # Clear edit mode
+                    del st.session_state['editing_cocktail']
+                    for key in list(st.session_state.keys()):
+                        if key.startswith(edit_prefix):
+                            del st.session_state[key]
+                    
+                    st.success(f"✅ '{recipe_name}' updated successfully!")
+                    st.rerun()
+    
     else:
-        st.info("No cocktail recipes found. Add some to get started!")
+        # Normal view/add mode
+        tab_view, tab_add = st.tabs(["📖 View Recipes", "➕ Add New Recipe"])
+        
+        with tab_view:
+            if recipes:
+                display_recipe_list(recipes, 'cocktail', session_key='cocktail_recipes')
+            else:
+                st.info("No cocktail recipes found. Add one in the 'Add New Recipe' tab to get started!")
+        
+        with tab_add:
+            st.markdown("### Create New Cocktail Recipe")
+            
+            if not available_products:
+                st.warning("⚠️ No products found in Master Inventory. Add spirits and ingredients to the Master Inventory first to build recipes.")
+            
+            # Initialize session state for dynamic ingredients if not exists
+            if 'cocktail_ingredient_count' not in st.session_state:
+                st.session_state.cocktail_ingredient_count = 1
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                recipe_name = st.text_input("Recipe Name *", placeholder="e.g., Old Fashioned", key="cocktail_recipe_name")
+                glass_type = st.selectbox("Glass Type", ["Rocks", "Coupe", "Highball", "Collins", "Nick & Nora", "Martini", "Wine", "Flute", "Mug", "Copper Mug", "Tiki", "Other"], key="cocktail_glass_type")
+            
+            with col2:
+                sale_price = st.number_input("Menu Sale Price ($) *", min_value=0.0, step=0.50, value=14.00, key="cocktail_sale_price")
+            
+            st.markdown("#### Ingredients")
+            
+            # Column headers
+            col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+            with col_prod:
+                st.caption("Product")
+            with col_amt:
+                st.caption("Amount")
+            with col_unit:
+                st.caption("Unit")
+            with col_remove:
+                st.caption("")
+            
+            # Dynamic ingredient rows
+            ingredients_to_remove = []
+            for i in range(st.session_state.cocktail_ingredient_count):
+                col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+                with col_prod:
+                    st.selectbox(
+                        f"Product {i+1}",
+                        options=[""] + available_products,
+                        key=f"cocktail_ing_prod_{i}",
+                        label_visibility="collapsed"
+                    )
+                with col_amt:
+                    st.number_input(
+                        f"Amount {i+1}",
+                        min_value=0.0,
+                        step=0.25,
+                        value=0.0,
+                        key=f"cocktail_ing_amt_{i}",
+                        label_visibility="collapsed"
+                    )
+                with col_unit:
+                    st.selectbox(
+                        f"Unit {i+1}",
+                        options=["oz", "dashes", "barspoon", "drops", "rinse", "each", "ml"],
+                        key=f"cocktail_ing_unit_{i}",
+                        label_visibility="collapsed"
+                    )
+                with col_remove:
+                    if st.session_state.cocktail_ingredient_count > 1:
+                        if st.button("🗑️", key=f"cocktail_remove_ing_{i}", help="Remove ingredient"):
+                            ingredients_to_remove.append(i)
+            
+            # Handle ingredient removal
+            if ingredients_to_remove:
+                # Shift ingredients up to fill gaps
+                for remove_idx in sorted(ingredients_to_remove, reverse=True):
+                    for j in range(remove_idx, st.session_state.cocktail_ingredient_count - 1):
+                        # Copy values from j+1 to j
+                        if f"cocktail_ing_prod_{j+1}" in st.session_state:
+                            st.session_state[f"cocktail_ing_prod_{j}"] = st.session_state[f"cocktail_ing_prod_{j+1}"]
+                            st.session_state[f"cocktail_ing_amt_{j}"] = st.session_state[f"cocktail_ing_amt_{j+1}"]
+                            st.session_state[f"cocktail_ing_unit_{j}"] = st.session_state[f"cocktail_ing_unit_{j+1}"]
+                    st.session_state.cocktail_ingredient_count -= 1
+                st.rerun()
+            
+            # Add ingredient button
+            if st.button("➕ Add Ingredient", key="cocktail_add_ingredient"):
+                st.session_state.cocktail_ingredient_count += 1
+                st.rerun()
+            
+            st.markdown("#### Instructions")
+            instructions = st.text_area("Build/Preparation Instructions", placeholder="e.g., Stir with ice, strain into rocks glass with large ice cube. Express orange peel.", height=100, key="cocktail_instructions")
+            
+            st.markdown("---")
+            
+            # Save button
+            if st.button("💾 Save Recipe", type="primary", use_container_width=True, key="cocktail_save_btn"):
+                # Collect ingredient data
+                ingredients_data = []
+                for i in range(st.session_state.cocktail_ingredient_count):
+                    product = st.session_state.get(f"cocktail_ing_prod_{i}", "")
+                    amount = st.session_state.get(f"cocktail_ing_amt_{i}", 0.0)
+                    unit = st.session_state.get(f"cocktail_ing_unit_{i}", "oz")
+                    if product and amount > 0:
+                        ingredients_data.append({"product": product, "amount": amount, "unit": unit})
+                
+                if not recipe_name:
+                    st.error("❌ Recipe name is required.")
+                elif not ingredients_data:
+                    st.error("❌ At least one ingredient with amount > 0 is required.")
+                elif sale_price <= 0:
+                    st.error("❌ Sale price must be greater than $0.")
+                else:
+                    # Check for duplicate name
+                    existing_names = [r['name'].lower() for r in recipes]
+                    if recipe_name.lower() in existing_names:
+                        st.error(f"❌ A recipe named '{recipe_name}' already exists.")
+                    else:
+                        new_recipe = {
+                            "name": recipe_name,
+                            "glass": glass_type,
+                            "sale_price": sale_price,
+                            "ingredients": ingredients_data,
+                            "instructions": instructions
+                        }
+                        
+                        if 'cocktail_recipes' not in st.session_state:
+                            st.session_state.cocktail_recipes = []
+                        
+                        st.session_state.cocktail_recipes.append(new_recipe)
+                        save_recipes('cocktail')
+                        
+                        # Reset form
+                        st.session_state.cocktail_ingredient_count = 1
+                        for key in list(st.session_state.keys()):
+                            if key.startswith("cocktail_ing_") or key in ["cocktail_recipe_name", "cocktail_instructions"]:
+                                del st.session_state[key]
+                        
+                        st.success(f"✅ '{recipe_name}' added successfully!")
+                        st.rerun()
 
 
 def show_bar_prep():
-    """Placeholder for Bar Prep - preserved from V3.7."""
+    """Bar Prep Recipe Book with view, add, and edit recipe functionality."""
     show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
@@ -3473,14 +4335,380 @@ def show_bar_prep():
         st.title("🧪 Bar Prep Recipe Book")
     
     recipes = st.session_state.get('bar_prep_recipes', [])
+    available_products = get_all_available_products()
     
-    tab_syrups, tab_batched = st.tabs(["🫙 Syrups & Infusions", "🍸 Batched Cocktails"])
+    def handle_delete(recipe_name):
+        st.session_state.bar_prep_recipes = [r for r in st.session_state.bar_prep_recipes if r['name'] != recipe_name]
+        save_recipes('bar_prep')
+        st.success(f"✅ {recipe_name} deleted!")
+        st.rerun()
     
-    with tab_syrups:
-        display_recipe_list(recipes, 'bar_prep', category_filter='Syrups', session_key='bar_prep_recipes')
+    # Check if we're in edit mode
+    editing_recipe_name = st.session_state.get('editing_bar_prep', None)
+    editing_recipe = None
+    if editing_recipe_name:
+        editing_recipe = next((r for r in recipes if r['name'] == editing_recipe_name), None)
+        if not editing_recipe:
+            # Recipe not found, clear edit mode
+            del st.session_state['editing_bar_prep']
+            editing_recipe_name = None
     
-    with tab_batched:
-        display_recipe_list(recipes, 'bar_prep', category_filter='Batched Cocktails', session_key='bar_prep_recipes')
+    # Show edit form if editing
+    if editing_recipe:
+        st.markdown(f"### ✏️ Editing: {editing_recipe['name']}")
+        
+        # Cancel button
+        if st.button("← Cancel Edit", key="cancel_barprep_edit"):
+            del st.session_state['editing_bar_prep']
+            # Clear edit form state
+            for key in list(st.session_state.keys()):
+                if key.startswith("edit_barprep_"):
+                    del st.session_state[key]
+            st.rerun()
+        
+        st.markdown("---")
+        
+        # Initialize edit form state if not exists
+        edit_prefix = "edit_barprep_"
+        if f"{edit_prefix}initialized" not in st.session_state:
+            st.session_state[f"{edit_prefix}ingredient_count"] = len(editing_recipe.get('ingredients', []))
+            if st.session_state[f"{edit_prefix}ingredient_count"] == 0:
+                st.session_state[f"{edit_prefix}ingredient_count"] = 1
+            # Pre-populate ingredients
+            for i, ing in enumerate(editing_recipe.get('ingredients', [])):
+                st.session_state[f"{edit_prefix}ing_prod_{i}"] = ing.get('product', '')
+                st.session_state[f"{edit_prefix}ing_amt_{i}"] = ing.get('amount', 0.0)
+                st.session_state[f"{edit_prefix}ing_unit_{i}"] = ing.get('unit', 'oz')
+            st.session_state[f"{edit_prefix}initialized"] = True
+        
+        col1, col2 = st.columns(2)
+        
+        category_options = ["Syrups, Infusions & Garnishes", "Batched Cocktails"]
+        current_category = editing_recipe.get('category', 'Syrups, Infusions & Garnishes')
+        # Handle old "Syrups" category
+        if current_category == 'Syrups':
+            current_category = 'Syrups, Infusions & Garnishes'
+        category_index = category_options.index(current_category) if current_category in category_options else 0
+        
+        with col1:
+            recipe_name = st.text_input("Recipe Name *", value=editing_recipe.get('name', ''), key=f"{edit_prefix}name")
+            category = st.selectbox("Category *", category_options, index=category_index, key=f"{edit_prefix}category")
+            yield_oz = st.number_input("Yield (oz) *", min_value=1.0, step=1.0, value=float(editing_recipe.get('yield_oz', 32)), key=f"{edit_prefix}yield_oz")
+        
+        with col2:
+            yield_description = st.text_input("Yield Description", value=editing_recipe.get('yield_description', ''), key=f"{edit_prefix}yield_desc")
+            shelf_life = st.text_input("Shelf Life", value=editing_recipe.get('shelf_life', ''), key=f"{edit_prefix}shelf_life")
+            storage = st.text_input("Storage Instructions", value=editing_recipe.get('storage', ''), key=f"{edit_prefix}storage")
+        
+        st.markdown("#### Ingredients")
+        
+        # Column headers
+        col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+        with col_prod:
+            st.caption("Product")
+        with col_amt:
+            st.caption("Amount")
+        with col_unit:
+            st.caption("Unit")
+        with col_remove:
+            st.caption("")
+        
+        unit_options = ["oz", "cups", "ml", "each", "lbs", "grams", "dashes", "barspoon"]
+        
+        # Dynamic ingredient rows
+        ingredients_to_remove = []
+        for i in range(st.session_state[f"{edit_prefix}ingredient_count"]):
+            col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+            
+            # Get current values or defaults
+            current_prod = st.session_state.get(f"{edit_prefix}ing_prod_{i}", "")
+            current_amt = st.session_state.get(f"{edit_prefix}ing_amt_{i}", 0.0)
+            current_unit = st.session_state.get(f"{edit_prefix}ing_unit_{i}", "oz")
+            
+            prod_options = [""] + available_products
+            prod_index = prod_options.index(current_prod) if current_prod in prod_options else 0
+            unit_index = unit_options.index(current_unit) if current_unit in unit_options else 0
+            
+            with col_prod:
+                st.selectbox(f"Product {i+1}", options=prod_options, index=prod_index, key=f"{edit_prefix}ing_prod_{i}", label_visibility="collapsed")
+            with col_amt:
+                st.number_input(f"Amount {i+1}", min_value=0.0, step=0.5, value=float(current_amt), key=f"{edit_prefix}ing_amt_{i}", label_visibility="collapsed")
+            with col_unit:
+                st.selectbox(f"Unit {i+1}", options=unit_options, index=unit_index, key=f"{edit_prefix}ing_unit_{i}", label_visibility="collapsed")
+            with col_remove:
+                if st.session_state[f"{edit_prefix}ingredient_count"] > 1:
+                    if st.button("🗑️", key=f"{edit_prefix}remove_ing_{i}", help="Remove ingredient"):
+                        ingredients_to_remove.append(i)
+        
+        # Handle ingredient removal
+        if ingredients_to_remove:
+            for remove_idx in sorted(ingredients_to_remove, reverse=True):
+                for j in range(remove_idx, st.session_state[f"{edit_prefix}ingredient_count"] - 1):
+                    if f"{edit_prefix}ing_prod_{j+1}" in st.session_state:
+                        st.session_state[f"{edit_prefix}ing_prod_{j}"] = st.session_state[f"{edit_prefix}ing_prod_{j+1}"]
+                        st.session_state[f"{edit_prefix}ing_amt_{j}"] = st.session_state[f"{edit_prefix}ing_amt_{j+1}"]
+                        st.session_state[f"{edit_prefix}ing_unit_{j}"] = st.session_state[f"{edit_prefix}ing_unit_{j+1}"]
+                st.session_state[f"{edit_prefix}ingredient_count"] -= 1
+            st.rerun()
+        
+        # Add ingredient button
+        if st.button("➕ Add Ingredient", key=f"{edit_prefix}add_ingredient"):
+            st.session_state[f"{edit_prefix}ingredient_count"] += 1
+            st.rerun()
+        
+        st.markdown("#### Instructions")
+        instructions = st.text_area("Preparation Instructions", value=editing_recipe.get('instructions', ''), height=100, key=f"{edit_prefix}instructions")
+        
+        st.markdown("---")
+        
+        # Save button
+        if st.button("💾 Save Changes", type="primary", use_container_width=True, key=f"{edit_prefix}save_btn"):
+            # Collect ingredient data
+            ingredients_data = []
+            for i in range(st.session_state[f"{edit_prefix}ingredient_count"]):
+                product = st.session_state.get(f"{edit_prefix}ing_prod_{i}", "")
+                amount = st.session_state.get(f"{edit_prefix}ing_amt_{i}", 0.0)
+                unit = st.session_state.get(f"{edit_prefix}ing_unit_{i}", "oz")
+                if product and amount > 0:
+                    ingredients_data.append({"product": product, "amount": amount, "unit": unit})
+            
+            if not recipe_name:
+                st.error("❌ Recipe name is required.")
+            elif not ingredients_data:
+                st.error("❌ At least one ingredient with amount > 0 is required.")
+            elif yield_oz <= 0:
+                st.error("❌ Yield must be greater than 0 oz.")
+            else:
+                # Check for duplicate name (excluding current recipe)
+                other_names = [r['name'].lower() for r in recipes if r['name'] != editing_recipe_name]
+                if recipe_name.lower() in other_names:
+                    st.error(f"❌ A recipe named '{recipe_name}' already exists.")
+                else:
+                    # Update the recipe
+                    for r in st.session_state.bar_prep_recipes:
+                        if r['name'] == editing_recipe_name:
+                            r['name'] = recipe_name
+                            r['category'] = category
+                            r['yield_oz'] = yield_oz
+                            r['yield_description'] = yield_description
+                            r['shelf_life'] = shelf_life
+                            r['storage'] = storage
+                            r['ingredients'] = ingredients_data
+                            r['instructions'] = instructions
+                            break
+                    
+                    save_recipes('bar_prep')
+                    
+                    # Clear edit mode
+                    del st.session_state['editing_bar_prep']
+                    for key in list(st.session_state.keys()):
+                        if key.startswith(edit_prefix):
+                            del st.session_state[key]
+                    
+                    st.success(f"✅ '{recipe_name}' updated successfully!")
+                    st.rerun()
+    
+    else:
+        # Normal view/add mode
+        tab_syrups, tab_batched, tab_add = st.tabs(["🫙 Syrups, Infusions & Garnishes", "🍸 Batched Cocktails", "➕ Add New Recipe"])
+        
+        with tab_syrups:
+            # Support both old "Syrups" and new "Syrups, Infusions & Garnishes" categories for backward compatibility
+            syrups = [r for r in recipes if r.get('category') in ['Syrups', 'Syrups, Infusions & Garnishes']]
+            if syrups:
+                # Sync button for existing recipes
+                with st.expander("🔄 Sync Recipes to Ingredients Inventory", expanded=False):
+                    st.caption("This will add any syrup/infusion/garnish recipes that aren't already in your Ingredients inventory.")
+                    if st.button("Sync All to Ingredients", key="sync_syrups_btn"):
+                        added, skipped = sync_syrups_to_ingredients()
+                        if added > 0:
+                            st.success(f"✅ Added {added} recipe(s) to Ingredients inventory!")
+                        if skipped > 0:
+                            st.info(f"ℹ️ {skipped} recipe(s) already exist in Ingredients and were skipped.")
+                        if added == 0 and skipped == 0:
+                            st.info("No recipes to sync.")
+                        if added > 0:
+                            st.rerun()
+                
+                # Display recipes from both categories
+                for recipe in syrups:
+                    display_recipe_card(recipe, 'bar_prep', recipes.index(recipe), on_delete=lambda name: handle_delete(name))
+            else:
+                st.info("No recipes found. Add one in the 'Add New Recipe' tab to get started!")
+        
+        with tab_batched:
+            batched = [r for r in recipes if r.get('category') == 'Batched Cocktails']
+            if batched:
+                # Sync button for existing recipes
+                with st.expander("🔄 Sync Batched Cocktails to Spirits Inventory", expanded=False):
+                    st.caption("This will add any batched cocktail recipes that aren't already in your Spirits inventory.")
+                    if st.button("Sync All to Spirits", key="sync_batched_btn"):
+                        added, skipped = sync_batched_cocktails_to_spirits()
+                        if added > 0:
+                            st.success(f"✅ Added {added} batched cocktail(s) to Spirits inventory!")
+                        if skipped > 0:
+                            st.info(f"ℹ️ {skipped} batched cocktail(s) already exist in Spirits and were skipped.")
+                        if added == 0 and skipped == 0:
+                            st.info("No batched cocktails to sync.")
+                        if added > 0:
+                            st.rerun()
+                
+                display_recipe_list(recipes, 'bar_prep', category_filter='Batched Cocktails', session_key='bar_prep_recipes')
+            else:
+                st.info("No batched cocktail recipes found. Add one in the 'Add New Recipe' tab to get started!")
+        
+        with tab_add:
+            st.markdown("### Create New Bar Prep Recipe")
+            
+            if not available_products:
+                st.warning("⚠️ No products found in Master Inventory. Add spirits and ingredients to the Master Inventory first to build recipes.")
+            
+            # Initialize session state for dynamic ingredients if not exists
+            if 'barprep_ingredient_count' not in st.session_state:
+                st.session_state.barprep_ingredient_count = 1
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                recipe_name = st.text_input("Recipe Name *", placeholder="e.g., Simple Syrup", key="barprep_recipe_name")
+                category = st.selectbox("Category *", ["Syrups, Infusions & Garnishes", "Batched Cocktails"], key="barprep_category")
+                yield_oz = st.number_input("Yield (oz) *", min_value=1.0, step=1.0, value=32.0, key="barprep_yield_oz")
+            
+            with col2:
+                yield_description = st.text_input("Yield Description", placeholder="e.g., 1 quart, ~22 cocktails", key="barprep_yield_desc")
+                shelf_life = st.text_input("Shelf Life", placeholder="e.g., 2-3 weeks refrigerated", key="barprep_shelf_life")
+                storage = st.text_input("Storage Instructions", placeholder="e.g., Refrigerate in sealed container", key="barprep_storage")
+            
+            st.markdown("#### Ingredients")
+            
+            # Column headers
+            col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+            with col_prod:
+                st.caption("Product")
+            with col_amt:
+                st.caption("Amount")
+            with col_unit:
+                st.caption("Unit")
+            with col_remove:
+                st.caption("")
+            
+            # Dynamic ingredient rows
+            ingredients_to_remove = []
+            for i in range(st.session_state.barprep_ingredient_count):
+                col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+                with col_prod:
+                    st.selectbox(
+                        f"Product {i+1}",
+                        options=[""] + available_products,
+                        key=f"barprep_ing_prod_{i}",
+                        label_visibility="collapsed"
+                    )
+                with col_amt:
+                    st.number_input(
+                        f"Amount {i+1}",
+                        min_value=0.0,
+                        step=0.5,
+                        value=0.0,
+                        key=f"barprep_ing_amt_{i}",
+                        label_visibility="collapsed"
+                    )
+                with col_unit:
+                    st.selectbox(
+                        f"Unit {i+1}",
+                        options=["oz", "cups", "ml", "each", "lbs", "grams", "dashes", "barspoon"],
+                        key=f"barprep_ing_unit_{i}",
+                        label_visibility="collapsed"
+                    )
+                with col_remove:
+                    if st.session_state.barprep_ingredient_count > 1:
+                        if st.button("🗑️", key=f"barprep_remove_ing_{i}", help="Remove ingredient"):
+                            ingredients_to_remove.append(i)
+            
+            # Handle ingredient removal
+            if ingredients_to_remove:
+                # Shift ingredients up to fill gaps
+                for remove_idx in sorted(ingredients_to_remove, reverse=True):
+                    for j in range(remove_idx, st.session_state.barprep_ingredient_count - 1):
+                        # Copy values from j+1 to j
+                        if f"barprep_ing_prod_{j+1}" in st.session_state:
+                            st.session_state[f"barprep_ing_prod_{j}"] = st.session_state[f"barprep_ing_prod_{j+1}"]
+                            st.session_state[f"barprep_ing_amt_{j}"] = st.session_state[f"barprep_ing_amt_{j+1}"]
+                            st.session_state[f"barprep_ing_unit_{j}"] = st.session_state[f"barprep_ing_unit_{j+1}"]
+                    st.session_state.barprep_ingredient_count -= 1
+                st.rerun()
+            
+            # Add ingredient button
+            if st.button("➕ Add Ingredient", key="barprep_add_ingredient"):
+                st.session_state.barprep_ingredient_count += 1
+                st.rerun()
+            
+            st.markdown("#### Instructions")
+            instructions = st.text_area("Preparation Instructions", placeholder="e.g., Combine equal parts sugar and hot water. Stir until dissolved. Cool before use.", height=100, key="barprep_instructions")
+            
+            st.markdown("---")
+            
+            # Save button
+            if st.button("💾 Save Recipe", type="primary", use_container_width=True, key="barprep_save_btn"):
+                # Collect ingredient data
+                ingredients_data = []
+                for i in range(st.session_state.barprep_ingredient_count):
+                    product = st.session_state.get(f"barprep_ing_prod_{i}", "")
+                    amount = st.session_state.get(f"barprep_ing_amt_{i}", 0.0)
+                    unit = st.session_state.get(f"barprep_ing_unit_{i}", "oz")
+                    if product and amount > 0:
+                        ingredients_data.append({"product": product, "amount": amount, "unit": unit})
+                
+                if not recipe_name:
+                    st.error("❌ Recipe name is required.")
+                elif not ingredients_data:
+                    st.error("❌ At least one ingredient with amount > 0 is required.")
+                elif yield_oz <= 0:
+                    st.error("❌ Yield must be greater than 0 oz.")
+                else:
+                    # Check for duplicate name
+                    existing_names = [r['name'].lower() for r in recipes]
+                    if recipe_name.lower() in existing_names:
+                        st.error(f"❌ A recipe named '{recipe_name}' already exists.")
+                    else:
+                        new_recipe = {
+                            "name": recipe_name,
+                            "category": category,
+                            "yield_oz": yield_oz,
+                            "yield_description": yield_description,
+                            "shelf_life": shelf_life,
+                            "storage": storage,
+                            "ingredients": ingredients_data,
+                            "instructions": instructions
+                        }
+                        
+                        if 'bar_prep_recipes' not in st.session_state:
+                            st.session_state.bar_prep_recipes = []
+                        
+                        st.session_state.bar_prep_recipes.append(new_recipe)
+                        save_recipes('bar_prep')
+                        
+                        # If this is a Syrup/Infusion/Garnish recipe, add it to Ingredients inventory
+                        added_to_ingredients = False
+                        added_to_spirits = False
+                        if category == "Syrups, Infusions & Garnishes":
+                            added_to_ingredients = add_syrup_to_ingredients(new_recipe)
+                        # If this is a Batched Cocktail recipe, add it to Spirits inventory
+                        elif category == "Batched Cocktails":
+                            added_to_spirits = add_batched_cocktail_to_spirits(new_recipe)
+                        
+                        # Reset form
+                        st.session_state.barprep_ingredient_count = 1
+                        for key in list(st.session_state.keys()):
+                            if key.startswith("barprep_ing_") or key in ["barprep_recipe_name", "barprep_instructions", "barprep_yield_desc", "barprep_shelf_life", "barprep_storage"]:
+                                del st.session_state[key]
+                        
+                        if added_to_ingredients:
+                            st.success(f"✅ '{recipe_name}' added successfully and synced to Ingredients inventory!")
+                        elif added_to_spirits:
+                            st.success(f"✅ '{recipe_name}' added successfully and synced to Spirits inventory!")
+                        else:
+                            st.success(f"✅ '{recipe_name}' added successfully!")
+                        st.rerun()
 
 
 def show_cogs():
@@ -3521,8 +4749,88 @@ def show_cogs():
 # MAIN ROUTING LOGIC
 # =============================================================================
 
+def check_password():
+    """Returns True if the user has entered the correct password."""
+    
+    # Check if password is configured in secrets
+    try:
+        app_password = st.secrets["app_password"]
+        if not app_password or app_password == "":
+            # Password is empty, allow access
+            return True
+    except (KeyError, FileNotFoundError):
+        # No password configured, allow access
+        return True
+    
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state.get("password_input") == app_password:
+            st.session_state["password_correct"] = True
+            if "password_input" in st.session_state:
+                del st.session_state["password_input"]  # Don't store the password
+        else:
+            st.session_state["password_correct"] = False
+
+    # First run or password not yet correct
+    if "password_correct" not in st.session_state:
+        st.markdown(
+            """
+            <style>
+            .password-container {
+                max-width: 400px;
+                margin: 100px auto;
+                padding: 40px;
+                background: white;
+                border-radius: 10px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("## 🍸 Butterbird")
+            st.markdown("#### Beverage Management System")
+            st.markdown("---")
+            st.text_input(
+                "Enter Password", 
+                type="password", 
+                key="password_input",
+                on_change=password_entered
+            )
+            st.button("Login", on_click=password_entered, type="primary", use_container_width=True)
+        return False
+    
+    # Password was entered but incorrect
+    elif not st.session_state["password_correct"]:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("## 🍸 Butterbird")
+            st.markdown("#### Beverage Management System")
+            st.markdown("---")
+            st.text_input(
+                "Enter Password", 
+                type="password", 
+                key="password_input",
+                on_change=password_entered
+            )
+            st.button("Login", on_click=password_entered, type="primary", use_container_width=True)
+            st.error("😕 Incorrect password. Please try again.")
+        return False
+    
+    # Password correct
+    return True
+
+
 def main():
     """Main application entry point."""
+    
+    # Check password before allowing access
+    if not check_password():
+        return
+    
     init_session_state()
     
     page_handlers = {
