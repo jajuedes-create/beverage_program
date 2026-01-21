@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.11
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.12
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -131,6 +131,13 @@
 #           - Spirits entry includes: Product, Type="Batched Cocktail", Bottle Cost, Size (oz.)
 #           - Pour prices (Shot, Single, Neat Pour, Double) calculated from cost/oz and margin
 #           - Distributor defaults to "House-made", Order Notes to "Bar Prep Recipe"
+#   bb_V2.12 - Filtered inventory edit fix:
+#           - Edits made in filtered views now persist when filters change
+#           - merge_edits_to_inventory() merges edits back to full inventory immediately
+#           - Save button disabled when filters are active (prevents data loss)
+#           - Warning message prompts user to clear filters before saving
+#           - Row add/delete disabled when filtered to prevent complexity
+#           - Applied to all 5 inventory types: Spirits, Wine, Beer, Ingredients, N/A Beverages
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -1066,6 +1073,43 @@ def sync_batched_cocktails_to_spirits() -> Tuple[int, int]:
             skipped += 1
     
     return (added, skipped)
+
+
+def merge_edits_to_inventory(edited_df: pd.DataFrame, inventory_key: str, original_products: list) -> None:
+    """
+    Merges edited rows back to the full inventory in session state.
+    Only updates existing products, doesn't add or remove rows.
+    
+    Args:
+        edited_df: The edited DataFrame from the data_editor
+        inventory_key: The session state key for the inventory (e.g., 'spirits_inventory')
+        original_products: List of product names that were in the filtered view before editing
+    """
+    if inventory_key not in st.session_state:
+        return
+    
+    full_inventory = st.session_state[inventory_key]
+    if len(full_inventory) == 0 or 'Product' not in full_inventory.columns:
+        return
+    
+    if len(edited_df) == 0 or 'Product' not in edited_df.columns:
+        return
+    
+    # Update each row in the full inventory that matches a product in the edited df
+    for idx, edited_row in edited_df.iterrows():
+        product_name = edited_row.get('Product', '')
+        if not product_name:
+            continue
+        
+        # Find matching row in full inventory
+        mask = full_inventory['Product'] == product_name
+        if mask.any():
+            # Update all columns that exist in both dataframes
+            for col in edited_df.columns:
+                if col in full_inventory.columns:
+                    full_inventory.loc[mask, col] = edited_row[col]
+    
+    st.session_state[inventory_key] = full_inventory
 
 
 def get_all_available_products() -> list:
@@ -2070,8 +2114,19 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
                 if selected:
                     column_filters[col_name] = selected
     
+    # Check if any filters are active
+    is_filtered = bool(search_term) or bool(column_filters)
+    
+    # Store original products list before filtering
+    original_products = df['Product'].tolist() if 'Product' in df.columns else []
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
-    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # Show filter status
+    if is_filtered:
+        st.caption(f"🔍 Showing {len(filtered_df)} of {len(df)} products (filtered)")
+    else:
+        st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
     for col in [loc1, loc2, loc3]:
@@ -2097,13 +2152,20 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         return
     
     st.markdown("#### ✏️ Inputs")
-    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    if is_filtered:
+        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+    else:
+        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    # Store products in filtered view for tracking
+    filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
     # Show only editable columns in the data editor
+    # Disable adding/deleting rows when filtered to avoid complexity
     edited_df = st.data_editor(
         filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="dynamic",
+        num_rows="fixed" if is_filtered else "dynamic",
         key="editor_spirits_split",
         column_config={
             "Bottle Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -2114,6 +2176,10 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
             loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
         }
     )
+    
+    # Immediately merge edits back to full inventory (so edits persist when filters change)
+    if is_filtered:
+        merge_edits_to_inventory(edited_df, 'spirits_inventory', filtered_products)
     
     # Calculate computed columns from edited data
     calc_df = edited_df.copy()
@@ -2191,14 +2257,18 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         total_value = calc_df["Value"].sum()
         st.metric("💰 Total Inventory Value", format_currency(total_value))
     
-    # Save button
-    if st.button("💾 Save Changes", key="save_spirits_split", type="primary"):
-        # Save the edited data directly (overwrites Google Sheet)
-        st.session_state.spirits_inventory = calc_df.copy()
-        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-        save_all_inventory_data()
-        st.success("✅ Changes saved!")
-        st.rerun()
+    # Save button - disabled when filtered
+    if is_filtered:
+        st.warning("⚠️ Clear all filters before saving to Google Sheets. Your edits are preserved.")
+        st.button("💾 Save Changes", key="save_spirits_split", type="primary", disabled=True)
+    else:
+        if st.button("💾 Save Changes", key="save_spirits_split", type="primary"):
+            # Save the edited data directly (overwrites Google Sheet)
+            st.session_state.spirits_inventory = calc_df.copy()
+            st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+            save_all_inventory_data()
+            st.success("✅ Changes saved!")
+            st.rerun()
 
 
 # =============================================================================
@@ -2230,8 +2300,16 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
                 if selected:
                     column_filters[col_name] = selected
     
+    # Check if any filters are active
+    is_filtered = bool(search_term) or bool(column_filters)
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
-    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # Show filter status
+    if is_filtered:
+        st.caption(f"🔍 Showing {len(filtered_df)} of {len(df)} products (filtered)")
+    else:
+        st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
     for col in [loc1, loc2, loc3]:
@@ -2256,12 +2334,18 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
         return
     
     st.markdown("#### ✏️ Inputs")
-    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    if is_filtered:
+        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+    else:
+        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    # Store products in filtered view for tracking
+    filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
     edited_df = st.data_editor(
         filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="dynamic",
+        num_rows="fixed" if is_filtered else "dynamic",
         key="editor_wine_split",
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -2272,6 +2356,10 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
             loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
         }
     )
+    
+    # Immediately merge edits back to full inventory (so edits persist when filters change)
+    if is_filtered:
+        merge_edits_to_inventory(edited_df, 'wine_inventory', filtered_products)
     
     # Calculate computed columns
     calc_df = edited_df.copy()
@@ -2330,13 +2418,18 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
         total_value = calc_df["Value"].sum()
         st.metric("💰 Total Inventory Value", format_currency(total_value))
     
-    if st.button("💾 Save Changes", key="save_wine_split", type="primary"):
-        # Save the edited data directly (overwrites Google Sheet)
-        st.session_state.wine_inventory = calc_df.copy()
-        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-        save_all_inventory_data()
-        st.success("✅ Changes saved!")
-        st.rerun()
+    # Save button - disabled when filtered
+    if is_filtered:
+        st.warning("⚠️ Clear all filters before saving to Google Sheets. Your edits are preserved.")
+        st.button("💾 Save Changes", key="save_wine_split", type="primary", disabled=True)
+    else:
+        if st.button("💾 Save Changes", key="save_wine_split", type="primary"):
+            # Save the edited data directly (overwrites Google Sheet)
+            st.session_state.wine_inventory = calc_df.copy()
+            st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+            save_all_inventory_data()
+            st.success("✅ Changes saved!")
+            st.rerun()
 
 
 # =============================================================================
@@ -2368,8 +2461,16 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
                 if selected:
                     column_filters[col_name] = selected
     
+    # Check if any filters are active
+    is_filtered = bool(search_term) or bool(column_filters)
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
-    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # Show filter status
+    if is_filtered:
+        st.caption(f"🔍 Showing {len(filtered_df)} of {len(df)} products (filtered)")
+    else:
+        st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
     for col in [loc1, loc2, loc3]:
@@ -2394,12 +2495,18 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
         return
     
     st.markdown("#### ✏️ Inputs")
-    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    if is_filtered:
+        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+    else:
+        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    # Store products in filtered view for tracking
+    filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
     edited_df = st.data_editor(
         filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="dynamic",
+        num_rows="fixed" if is_filtered else "dynamic",
         key="editor_beer_split",
         column_config={
             "Cost per Keg/Case": st.column_config.NumberColumn(format="$%.2f"),
@@ -2410,6 +2517,10 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
             "Target Margin": st.column_config.NumberColumn(format="%.0f%%"),
         }
     )
+    
+    # Immediately merge edits back to full inventory (so edits persist when filters change)
+    if is_filtered:
+        merge_edits_to_inventory(edited_df, 'beer_inventory', filtered_products)
     
     # Calculate computed columns
     calc_df = edited_df.copy()
@@ -2479,13 +2590,18 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
         total_value = calc_df["Value"].sum()
         st.metric("💰 Total Inventory Value", format_currency(total_value))
     
-    if st.button("💾 Save Changes", key="save_beer_split", type="primary"):
-        # Save the edited data directly (overwrites Google Sheet)
-        st.session_state.beer_inventory = calc_df.copy()
-        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-        save_all_inventory_data()
-        st.success("✅ Changes saved!")
-        st.rerun()
+    # Save button - disabled when filtered
+    if is_filtered:
+        st.warning("⚠️ Clear all filters before saving to Google Sheets. Your edits are preserved.")
+        st.button("💾 Save Changes", key="save_beer_split", type="primary", disabled=True)
+    else:
+        if st.button("💾 Save Changes", key="save_beer_split", type="primary"):
+            # Save the edited data directly (overwrites Google Sheet)
+            st.session_state.beer_inventory = calc_df.copy()
+            st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+            save_all_inventory_data()
+            st.success("✅ Changes saved!")
+            st.rerun()
 
 
 # =============================================================================
@@ -2517,8 +2633,16 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
                 if selected:
                     column_filters[col_name] = selected
     
+    # Check if any filters are active
+    is_filtered = bool(search_term) or bool(column_filters)
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
-    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # Show filter status
+    if is_filtered:
+        st.caption(f"🔍 Showing {len(filtered_df)} of {len(df)} products (filtered)")
+    else:
+        st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
     for col in [loc1, loc2, loc3]:
@@ -2543,12 +2667,18 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         return
     
     st.markdown("#### ✏️ Inputs")
-    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    if is_filtered:
+        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+    else:
+        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    # Store products in filtered view for tracking
+    filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
     edited_df = st.data_editor(
         filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="dynamic",
+        num_rows="fixed" if is_filtered else "dynamic",
         key="editor_ingredients_split",
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -2558,6 +2688,10 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
             loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
         }
     )
+    
+    # Immediately merge edits back to full inventory (so edits persist when filters change)
+    if is_filtered:
+        merge_edits_to_inventory(edited_df, 'ingredients_inventory', filtered_products)
     
     # Calculate computed columns
     calc_df = edited_df.copy()
@@ -2611,13 +2745,18 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         total_value = calc_df["Value"].sum()
         st.metric("💰 Total Inventory Value", format_currency(total_value))
     
-    if st.button("💾 Save Changes", key="save_ingredients_split", type="primary"):
-        # Save the edited data directly (overwrites Google Sheet)
-        st.session_state.ingredients_inventory = calc_df.copy()
-        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-        save_all_inventory_data()
-        st.success("✅ Changes saved!")
-        st.rerun()
+    # Save button - disabled when filtered
+    if is_filtered:
+        st.warning("⚠️ Clear all filters before saving to Google Sheets. Your edits are preserved.")
+        st.button("💾 Save Changes", key="save_ingredients_split", type="primary", disabled=True)
+    else:
+        if st.button("💾 Save Changes", key="save_ingredients_split", type="primary"):
+            # Save the edited data directly (overwrites Google Sheet)
+            st.session_state.ingredients_inventory = calc_df.copy()
+            st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+            save_all_inventory_data()
+            st.success("✅ Changes saved!")
+            st.rerun()
 
 
 # =============================================================================
@@ -2649,8 +2788,16 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
                 if selected:
                     column_filters[col_name] = selected
     
+    # Check if any filters are active
+    is_filtered = bool(search_term) or bool(column_filters)
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
-    st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
+    
+    # Show filter status
+    if is_filtered:
+        st.caption(f"🔍 Showing {len(filtered_df)} of {len(df)} products (filtered)")
+    else:
+        st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
     for col in [loc1, loc2, loc3]:
@@ -2675,12 +2822,18 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
         return
     
     st.markdown("#### ✏️ Inputs")
-    st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    if is_filtered:
+        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+    else:
+        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+    
+    # Store products in filtered view for tracking
+    filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
     edited_df = st.data_editor(
         filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="dynamic",
+        num_rows="fixed" if is_filtered else "dynamic",
         key="editor_na_beverages_split",
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -2690,6 +2843,10 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
             loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
         }
     )
+    
+    # Immediately merge edits back to full inventory (so edits persist when filters change)
+    if is_filtered:
+        merge_edits_to_inventory(edited_df, 'na_beverages_inventory', filtered_products)
     
     # Calculate computed columns
     calc_df = edited_df.copy()
@@ -2743,13 +2900,18 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
         total_value = calc_df["Value"].sum()
         st.metric("💰 Total Inventory Value", format_currency(total_value))
     
-    if st.button("💾 Save Changes", key="save_na_beverages_split", type="primary"):
-        # Save the edited data directly (overwrites Google Sheet)
-        st.session_state.na_beverages_inventory = calc_df.copy()
-        st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
-        save_all_inventory_data()
-        st.success("✅ Changes saved!")
-        st.rerun()
+    # Save button - disabled when filtered
+    if is_filtered:
+        st.warning("⚠️ Clear all filters before saving to Google Sheets. Your edits are preserved.")
+        st.button("💾 Save Changes", key="save_na_beverages_split", type="primary", disabled=True)
+    else:
+        if st.button("💾 Save Changes", key="save_na_beverages_split", type="primary"):
+            # Save the edited data directly (overwrites Google Sheet)
+            st.session_state.na_beverages_inventory = calc_df.copy()
+            st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+            save_all_inventory_data()
+            st.success("✅ Changes saved!")
+            st.rerun()
 
 
 # =============================================================================
