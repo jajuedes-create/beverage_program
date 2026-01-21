@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.10
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.11
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -125,6 +125,12 @@
 #           - Dynamic ingredient editing (add/remove ingredients)
 #           - Cancel button to return to view mode without saving
 #           - Duplicate name checking (excludes current recipe being edited)
+#   bb_V2.11 - Batched Cocktails sync to Spirits inventory:
+#           - New batched cocktail recipes auto-add to Spirits inventory
+#           - Added "Sync Batched Cocktails to Spirits" button in Batched Cocktails tab
+#           - Spirits entry includes: Product, Type="Batched Cocktail", Bottle Cost, Size (oz.)
+#           - Pour prices (Shot, Single, Neat Pour, Double) calculated from cost/oz and margin
+#           - Distributor defaults to "House-made", Order Notes to "Bar Prep Recipe"
 #           - Added centralized CLIENT_CONFIG for restaurant customization
 #           - Configurable restaurant name and tagline
 #           - Configurable inventory location names (applied to Master Inventory + Weekly Orders)
@@ -952,6 +958,109 @@ def sync_syrups_to_ingredients() -> Tuple[int, int]:
     
     for recipe in syrups:
         if add_syrup_to_ingredients(recipe):
+            added += 1
+        else:
+            skipped += 1
+    
+    return (added, skipped)
+
+
+def add_batched_cocktail_to_spirits(recipe: dict) -> bool:
+    """
+    Adds a Batched Cocktail recipe to the Spirits inventory.
+    
+    Args:
+        recipe: Dictionary with recipe data including 'name', 'yield_oz', 'ingredients'
+    
+    Returns:
+        True if added successfully, False if already exists
+    """
+    loc1 = get_location_1()
+    loc2 = get_location_2()
+    loc3 = get_location_3()
+    
+    recipe_name = recipe.get('name', '')
+    yield_oz = recipe.get('yield_oz', 0)
+    ingredients_list = recipe.get('ingredients', [])
+    
+    if not recipe_name or yield_oz <= 0:
+        return False
+    
+    # Calculate total batch cost from ingredients
+    total_cost = calculate_recipe_cost(ingredients_list)
+    cost_per_oz = total_cost / yield_oz if yield_oz > 0 else 0
+    
+    # Initialize spirits inventory if needed
+    if 'spirits_inventory' not in st.session_state:
+        st.session_state.spirits_inventory = get_sample_spirits()
+    
+    spirits_df = st.session_state.spirits_inventory
+    
+    # Check if product already exists (case-insensitive)
+    if len(spirits_df) > 0 and 'Product' in spirits_df.columns:
+        existing = spirits_df[spirits_df['Product'].str.lower().str.strip() == recipe_name.lower().strip()]
+        if len(existing) > 0:
+            # Already exists, don't add duplicate
+            return False
+    
+    # Get default margin from config
+    default_margin = CLIENT_CONFIG.get('default_margin', 80)
+    
+    # Calculate pour prices based on cost/oz and margin
+    # Pour price = cost / (1 - margin/100)
+    margin_multiplier = 1 / (1 - default_margin / 100) if default_margin < 100 else 5
+    shot_price = round(cost_per_oz * 1.5 * margin_multiplier, 2)  # 1.5 oz shot
+    single_price = round(cost_per_oz * 1.5 * margin_multiplier, 2)  # 1.5 oz single
+    neat_price = round(cost_per_oz * 2.0 * margin_multiplier, 2)  # 2 oz neat
+    double_price = round(cost_per_oz * 3.0 * margin_multiplier, 2)  # 3 oz double
+    
+    # Create new spirits row
+    new_row = {
+        'Product': recipe_name,
+        'Type': 'Batched Cocktail',
+        'Bottle Cost': round(total_cost, 2),
+        'Size (oz.)': yield_oz,
+        loc1: 0.0,
+        loc2: 0.0,
+        loc3: 0.0,
+        'Target Margin': default_margin,
+        'Use': 'Batched',
+        'Distributor': 'House-made',
+        'Order Notes': 'Bar Prep Recipe',
+        'Cost/Oz': round(cost_per_oz, 4),
+        'Shot': shot_price,
+        'Single': single_price,
+        'Neat Pour': neat_price,
+        'Double': double_price,
+        'Total Inventory': 0.0,
+        'Value': 0.0
+    }
+    
+    # Add to spirits inventory
+    new_df = pd.DataFrame([new_row])
+    st.session_state.spirits_inventory = pd.concat([spirits_df, new_df], ignore_index=True)
+    
+    # Save to Google Sheets
+    save_all_inventory_data()
+    
+    return True
+
+
+def sync_batched_cocktails_to_spirits() -> Tuple[int, int]:
+    """
+    Syncs all existing Batched Cocktail recipes to Spirits inventory.
+    
+    Returns:
+        Tuple of (added_count, skipped_count)
+    """
+    recipes = st.session_state.get('bar_prep_recipes', [])
+    batched = [r for r in recipes if r.get('category') == 'Batched Cocktails']
+    
+    added = 0
+    skipped = 0
+    
+    for recipe in batched:
+        if add_batched_cocktail_to_spirits(recipe):
             added += 1
         else:
             skipped += 1
@@ -4268,6 +4377,20 @@ def show_bar_prep():
         with tab_batched:
             batched = [r for r in recipes if r.get('category') == 'Batched Cocktails']
             if batched:
+                # Sync button for existing recipes
+                with st.expander("🔄 Sync Batched Cocktails to Spirits Inventory", expanded=False):
+                    st.caption("This will add any batched cocktail recipes that aren't already in your Spirits inventory.")
+                    if st.button("Sync All to Spirits", key="sync_batched_btn"):
+                        added, skipped = sync_batched_cocktails_to_spirits()
+                        if added > 0:
+                            st.success(f"✅ Added {added} batched cocktail(s) to Spirits inventory!")
+                        if skipped > 0:
+                            st.info(f"ℹ️ {skipped} batched cocktail(s) already exist in Spirits and were skipped.")
+                        if added == 0 and skipped == 0:
+                            st.info("No batched cocktails to sync.")
+                        if added > 0:
+                            st.rerun()
+                
                 display_recipe_list(recipes, 'bar_prep', category_filter='Batched Cocktails', session_key='bar_prep_recipes')
             else:
                 st.info("No batched cocktail recipes found. Add one in the 'Add New Recipe' tab to get started!")
@@ -4403,9 +4526,13 @@ def show_bar_prep():
                         save_recipes('bar_prep')
                         
                         # If this is a Syrup/Infusion/Garnish recipe, add it to Ingredients inventory
-                        added_to_inventory = False
+                        added_to_ingredients = False
+                        added_to_spirits = False
                         if category == "Syrups, Infusions & Garnishes":
-                            added_to_inventory = add_syrup_to_ingredients(new_recipe)
+                            added_to_ingredients = add_syrup_to_ingredients(new_recipe)
+                        # If this is a Batched Cocktail recipe, add it to Spirits inventory
+                        elif category == "Batched Cocktails":
+                            added_to_spirits = add_batched_cocktail_to_spirits(new_recipe)
                         
                         # Reset form
                         st.session_state.barprep_ingredient_count = 1
@@ -4413,8 +4540,10 @@ def show_bar_prep():
                             if key.startswith("barprep_ing_") or key in ["barprep_recipe_name", "barprep_instructions", "barprep_yield_desc", "barprep_shelf_life", "barprep_storage"]:
                                 del st.session_state[key]
                         
-                        if added_to_inventory:
+                        if added_to_ingredients:
                             st.success(f"✅ '{recipe_name}' added successfully and synced to Ingredients inventory!")
+                        elif added_to_spirits:
+                            st.success(f"✅ '{recipe_name}' added successfully and synced to Spirits inventory!")
                         else:
                             st.success(f"✅ '{recipe_name}' added successfully!")
                         st.rerun()
