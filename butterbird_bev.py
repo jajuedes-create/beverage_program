@@ -166,13 +166,12 @@
 #           - Dynamic location column handling via get_location_columns() helper
 #           - All inventory functions updated to support variable number of locations
 #           - Added pending edits pattern for filtered view editing (fixes double-input bug)
-#   bb_V2.14 - Location and filtered editing improvements:
-#           - Fixed filtered view editing bug using "working copy" pattern
-#           - Edits in filtered views now persist immediately on first input
-#           - Working copy tracks edits by product name across filter changes
-#           - Session state updated in real-time for calculated field updates
-#           - All inventory display functions updated with the same fix
-#           - Removed old merge_edits_to_inventory calls from filtered views
+#   bb_V2.14 - Code simplification and alphabetical sorting:
+#           - Simplified inventory display functions (removed failed working copy logic)
+#           - Added A-Z checkbox to sort products alphabetically in all inventory tabs
+#           - Sorted filter dropdown options alphabetically
+#           - Clear warning message when editing in filtered view (known limitation)
+#           - Cleaner, more maintainable codebase
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -1107,7 +1106,6 @@ def sync_batched_cocktails_to_spirits() -> Tuple[int, int]:
 def merge_edits_to_inventory(edited_df: pd.DataFrame, inventory_key: str, original_products: list) -> None:
     """
     Merges edited rows back to the full inventory in session state.
-    Also stores edits as pending to ensure they persist across reruns.
     Only updates existing products, doesn't add or remove rows.
     
     Args:
@@ -1125,11 +1123,6 @@ def merge_edits_to_inventory(edited_df: pd.DataFrame, inventory_key: str, origin
     if len(edited_df) == 0 or 'Product' not in edited_df.columns:
         return
     
-    # Determine the pending edits key based on inventory type
-    pending_key = inventory_key.replace('_inventory', '_pending_edits')
-    if pending_key not in st.session_state:
-        st.session_state[pending_key] = {}
-    
     # Update each row in the full inventory that matches a product in the edited df
     for idx, edited_row in edited_df.iterrows():
         product_name = edited_row.get('Product', '')
@@ -1139,30 +1132,10 @@ def merge_edits_to_inventory(edited_df: pd.DataFrame, inventory_key: str, origin
         # Find matching row in full inventory
         mask = full_inventory['Product'] == product_name
         if mask.any():
-            # Track changes for this product
-            product_edits = {}
-            
             # Update all columns that exist in both dataframes
             for col in edited_df.columns:
                 if col in full_inventory.columns:
-                    old_val = full_inventory.loc[mask, col].iloc[0]
-                    new_val = edited_row[col]
-                    
-                    # Check if value actually changed
-                    try:
-                        if pd.isna(old_val) and pd.isna(new_val):
-                            continue
-                        if old_val != new_val:
-                            full_inventory.loc[mask, col] = new_val
-                            product_edits[col] = new_val
-                    except:
-                        # Handle comparison errors by just updating
-                        full_inventory.loc[mask, col] = new_val
-                        product_edits[col] = new_val
-            
-            # Store pending edits for this product if any changes were made
-            if product_edits:
-                st.session_state[pending_key][product_name] = product_edits
+                    full_inventory.loc[mask, col] = edited_row[col]
     
     st.session_state[inventory_key] = full_inventory
 
@@ -2121,16 +2094,13 @@ def show_csv_upload_section(upload_category: str):
 def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     """Renders spirits inventory with split display approach."""
     loc_cols = get_location_columns()
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()  # May be None
     
     if df is None or len(df) == 0:
         st.info("No spirits inventory data.")
         return
     
     st.markdown("#### Search & Filter Spirits")
-    filter_cols = st.columns([2] + [1] * len(filter_columns))
+    filter_cols = st.columns([2] + [1] * len(filter_columns) + [1])
     
     with filter_cols[0]:
         search_term = st.text_input("🔍 Search", key="search_spirits", placeholder="Type to search...")
@@ -2139,46 +2109,23 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     for i, col_name in enumerate(filter_columns):
         with filter_cols[i + 1]:
             if col_name in df.columns:
-                unique_values = df[col_name].dropna().unique().tolist()
+                unique_values = sorted([str(v) for v in df[col_name].dropna().unique().tolist()])
                 selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_spirits_{col_name}")
                 if selected:
                     column_filters[col_name] = selected
     
+    # Alphabetical sort option
+    with filter_cols[-1]:
+        sort_alpha = st.checkbox("A-Z", key="sort_spirits_alpha", help="Sort products alphabetically")
+    
     # Check if any filters are active
     is_filtered = bool(search_term) or bool(column_filters)
     
-    # Create a unique key for the current filter state
-    filter_state_key = f"spirits_filter_{hash(str(search_term) + str(sorted(column_filters.items())))}"
-    
-    # Initialize working copy storage if needed
-    if 'spirits_working_copy' not in st.session_state:
-        st.session_state.spirits_working_copy = {}
-    if 'spirits_last_filter_key' not in st.session_state:
-        st.session_state.spirits_last_filter_key = None
-    
-    # If filter changed, merge any pending edits back to main inventory first
-    if st.session_state.spirits_last_filter_key != filter_state_key:
-        if st.session_state.spirits_working_copy:
-            # Merge working copy edits back to main inventory
-            for product, row_data in st.session_state.spirits_working_copy.items():
-                mask = df['Product'] == product
-                if mask.any():
-                    for col, val in row_data.items():
-                        if col in df.columns:
-                            df.loc[mask, col] = val
-            st.session_state.spirits_inventory = df.copy()
-            st.session_state.spirits_working_copy = {}
-        st.session_state.spirits_last_filter_key = filter_state_key
-    
-    # Apply working copy edits to df for display
-    for product, row_data in st.session_state.spirits_working_copy.items():
-        mask = df['Product'] == product
-        if mask.any():
-            for col, val in row_data.items():
-                if col in df.columns:
-                    df.loc[mask, col] = val
-    
     filtered_df = filter_dataframe(df, search_term, column_filters)
+    
+    # Apply alphabetical sorting if enabled
+    if sort_alpha and 'Product' in filtered_df.columns:
+        filtered_df = filtered_df.sort_values('Product', key=lambda x: x.str.lower()).reset_index(drop=True)
     
     # Show filter status
     if is_filtered:
@@ -2193,47 +2140,37 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         if col not in st.session_state.spirits_inventory.columns:
             st.session_state.spirits_inventory[col] = 0.0
     
-    # Define editable vs calculated columns - dynamically include locations
+    # Define editable vs calculated columns
     editable_cols = ["Product", "Type", "Bottle Cost", "Size (oz.)"] + loc_cols + ["Target Margin", "Use", "Distributor", "Order Notes"]
     calculated_cols = ["Cost/Oz", "Shot", "Single", "Neat Pour", "Double", "Total Inventory", "Value"]
     
-    # Filter to only columns that exist and warn about missing ones
+    # Filter to only columns that exist
     missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
     if missing_cols:
-        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
-        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}.")
     
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
     
     if not editable_cols:
-        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        st.error("❌ No editable columns found in the data.")
         return
     
     st.markdown("#### ✏️ Inputs")
     if is_filtered:
-        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+        st.caption("⚠️ Editing in filtered view may require entering values twice. Clear filters for reliable editing.")
     else:
-        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
-    
-    # Store products in filtered view for tracking
-    filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
+        st.caption("Edit values below. Calculated fields will update automatically.")
     
     # Build column config for location columns
     loc_column_config = {}
     for loc in loc_cols:
-        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc}")
+        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5)
     
-    # Prepare data for editor - keep original index for tracking
-    editor_data = filtered_df[editable_cols].copy()
-    original_indices = filtered_df.index.tolist()
-    editor_data = editor_data.reset_index(drop=True)
-    
-    # Show only editable columns in the data editor
-    # Disable adding/deleting rows when filtered to avoid complexity
+    # Data editor
     edited_df = st.data_editor(
-        editor_data,
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="fixed" if is_filtered else "dynamic",
+        num_rows="dynamic" if not is_filtered else "fixed",
         key="editor_spirits_split",
         column_config={
             "Bottle Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -2243,23 +2180,12 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         }
     )
     
-    # Store edits in working copy when filtered
-    if is_filtered and len(edited_df) > 0:
-        for idx, row in edited_df.iterrows():
-            product_name = row.get('Product', '')
-            if product_name:
-                # Store the entire row's editable values
-                row_edits = {col: row[col] for col in editable_cols if col in row.index}
-                st.session_state.spirits_working_copy[product_name] = row_edits
-                
-                # Also update session state immediately so calculated fields update
-                mask = st.session_state.spirits_inventory['Product'] == product_name
-                if mask.any():
-                    for col, val in row_edits.items():
-                        if col in st.session_state.spirits_inventory.columns:
-                            st.session_state.spirits_inventory.loc[mask, col] = val
+    # Merge edits back when filtered
+    if is_filtered:
+        filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
+        merge_edits_to_inventory(edited_df, 'spirits_inventory', filtered_products)
     
-    # Calculate computed columns from edited data
+    # Calculate computed columns
     calc_df = edited_df.copy()
     
     # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
@@ -2352,16 +2278,13 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
 def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     """Renders wine inventory with split display approach."""
     loc_cols = get_location_columns()
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()  # May be None
     
     if df is None or len(df) == 0:
         st.info("No wine inventory data.")
         return
     
     st.markdown("#### Search & Filter Wine")
-    filter_cols = st.columns([2] + [1] * len(filter_columns))
+    filter_cols = st.columns([2] + [1] * len(filter_columns) + [1])
     
     with filter_cols[0]:
         search_term = st.text_input("🔍 Search", key="search_wine", placeholder="Type to search...")
@@ -2370,45 +2293,23 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     for i, col_name in enumerate(filter_columns):
         with filter_cols[i + 1]:
             if col_name in df.columns:
-                unique_values = df[col_name].dropna().unique().tolist()
+                unique_values = sorted([str(v) for v in df[col_name].dropna().unique().tolist()])
                 selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_wine_{col_name}")
                 if selected:
                     column_filters[col_name] = selected
     
+    # Alphabetical sort option
+    with filter_cols[-1]:
+        sort_alpha = st.checkbox("A-Z", key="sort_wine_alpha", help="Sort products alphabetically")
+    
     # Check if any filters are active
     is_filtered = bool(search_term) or bool(column_filters)
     
-    # Create a unique key for the current filter state
-    filter_state_key = f"wine_filter_{hash(str(search_term) + str(sorted(column_filters.items())))}"
-    
-    # Initialize working copy storage if needed
-    if 'wine_working_copy' not in st.session_state:
-        st.session_state.wine_working_copy = {}
-    if 'wine_last_filter_key' not in st.session_state:
-        st.session_state.wine_last_filter_key = None
-    
-    # If filter changed, merge any pending edits back to main inventory first
-    if st.session_state.wine_last_filter_key != filter_state_key:
-        if st.session_state.wine_working_copy:
-            for product, row_data in st.session_state.wine_working_copy.items():
-                mask = df['Product'] == product
-                if mask.any():
-                    for col, val in row_data.items():
-                        if col in df.columns:
-                            df.loc[mask, col] = val
-            st.session_state.wine_inventory = df.copy()
-            st.session_state.wine_working_copy = {}
-        st.session_state.wine_last_filter_key = filter_state_key
-    
-    # Apply working copy edits to df for display
-    for product, row_data in st.session_state.wine_working_copy.items():
-        mask = df['Product'] == product
-        if mask.any():
-            for col, val in row_data.items():
-                if col in df.columns:
-                    df.loc[mask, col] = val
-    
     filtered_df = filter_dataframe(df, search_term, column_filters)
+    
+    # Apply alphabetical sorting if enabled
+    if sort_alpha and 'Product' in filtered_df.columns:
+        filtered_df = filtered_df.sort_values('Product', key=lambda x: x.str.lower()).reset_index(drop=True)
     
     # Show filter status
     if is_filtered:
@@ -2426,39 +2327,33 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin"] + loc_cols + ["Distributor", "Order Notes"]
     calculated_cols = ["Total Inventory", "Bottle Price", "Value", "BTG", "Suggested Retail"]
     
-    # Filter to only columns that exist and warn about missing ones
+    # Filter to only columns that exist
     missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
     if missing_cols:
-        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
-        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}.")
     
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
     
     if not editable_cols:
-        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        st.error("❌ No editable columns found in the data.")
         return
     
     st.markdown("#### ✏️ Inputs")
     if is_filtered:
-        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+        st.caption("⚠️ Editing in filtered view may require entering values twice. Clear filters for reliable editing.")
     else:
-        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
-    
-    # Store products in filtered view for tracking
-    filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
+        st.caption("Edit values below. Calculated fields will update automatically.")
     
     # Build column config for location columns
     loc_column_config = {}
     for loc in loc_cols:
-        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc}")
+        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5)
     
-    # Prepare data for editor
-    editor_data = filtered_df[editable_cols].copy().reset_index(drop=True)
-    
+    # Data editor
     edited_df = st.data_editor(
-        editor_data,
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="fixed" if is_filtered else "dynamic",
+        num_rows="dynamic" if not is_filtered else "fixed",
         key="editor_wine_split",
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -2468,20 +2363,10 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
         }
     )
     
-    # Store edits in working copy when filtered
-    if is_filtered and len(edited_df) > 0:
-        for idx, row in edited_df.iterrows():
-            product_name = row.get('Product', '')
-            if product_name:
-                row_edits = {col: row[col] for col in editable_cols if col in row.index}
-                st.session_state.wine_working_copy[product_name] = row_edits
-                
-                # Also update session state immediately
-                mask = st.session_state.wine_inventory['Product'] == product_name
-                if mask.any():
-                    for col, val in row_edits.items():
-                        if col in st.session_state.wine_inventory.columns:
-                            st.session_state.wine_inventory.loc[mask, col] = val
+    # Merge edits back when filtered
+    if is_filtered:
+        filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
+        merge_edits_to_inventory(edited_df, 'wine_inventory', filtered_products)
     
     # Calculate computed columns
     calc_df = edited_df.copy()
@@ -2554,19 +2439,20 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
 # SPLIT DISPLAY FOR BEER - Using CLIENT_CONFIG locations
 # =============================================================================
 
+# =============================================================================
+# SPLIT DISPLAY FOR BEER - Using CLIENT_CONFIG locations
+# =============================================================================
+
 def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     """Renders beer inventory with split display approach."""
     loc_cols = get_location_columns()
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()  # May be None
     
     if df is None or len(df) == 0:
         st.info("No beer inventory data.")
         return
     
     st.markdown("#### Search & Filter Beer")
-    filter_cols = st.columns([2] + [1] * len(filter_columns))
+    filter_cols = st.columns([2] + [1] * len(filter_columns) + [1])
     
     with filter_cols[0]:
         search_term = st.text_input("🔍 Search", key="search_beer", placeholder="Type to search...")
@@ -2575,45 +2461,23 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     for i, col_name in enumerate(filter_columns):
         with filter_cols[i + 1]:
             if col_name in df.columns:
-                unique_values = df[col_name].dropna().unique().tolist()
+                unique_values = sorted([str(v) for v in df[col_name].dropna().unique().tolist()])
                 selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_beer_{col_name}")
                 if selected:
                     column_filters[col_name] = selected
     
+    # Alphabetical sort option
+    with filter_cols[-1]:
+        sort_alpha = st.checkbox("A-Z", key="sort_beer_alpha", help="Sort products alphabetically")
+    
     # Check if any filters are active
     is_filtered = bool(search_term) or bool(column_filters)
     
-    # Create a unique key for the current filter state
-    filter_state_key = f"beer_filter_{hash(str(search_term) + str(sorted(column_filters.items())))}"
-    
-    # Initialize working copy storage if needed
-    if 'beer_working_copy' not in st.session_state:
-        st.session_state.beer_working_copy = {}
-    if 'beer_last_filter_key' not in st.session_state:
-        st.session_state.beer_last_filter_key = None
-    
-    # If filter changed, merge any pending edits back to main inventory first
-    if st.session_state.beer_last_filter_key != filter_state_key:
-        if st.session_state.beer_working_copy:
-            for product, row_data in st.session_state.beer_working_copy.items():
-                mask = df['Product'] == product
-                if mask.any():
-                    for col, val in row_data.items():
-                        if col in df.columns:
-                            df.loc[mask, col] = val
-            st.session_state.beer_inventory = df.copy()
-            st.session_state.beer_working_copy = {}
-        st.session_state.beer_last_filter_key = filter_state_key
-    
-    # Apply working copy edits to df for display
-    for product, row_data in st.session_state.beer_working_copy.items():
-        mask = df['Product'] == product
-        if mask.any():
-            for col, val in row_data.items():
-                if col in df.columns:
-                    df.loc[mask, col] = val
-    
     filtered_df = filter_dataframe(df, search_term, column_filters)
+    
+    # Apply alphabetical sorting if enabled
+    if sort_alpha and 'Product' in filtered_df.columns:
+        filtered_df = filtered_df.sort_values('Product', key=lambda x: x.str.lower()).reset_index(drop=True)
     
     # Show filter status
     if is_filtered:
@@ -2631,36 +2495,33 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     editable_cols = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM"] + loc_cols + ["Target Margin", "Distributor", "Order Notes"]
     calculated_cols = ["Cost/Unit", "Menu Price", "Total Inventory", "Value"]
     
-    # Filter to only columns that exist and warn about missing ones
+    # Filter to only columns that exist
     missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
     if missing_cols:
-        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
-        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}.")
     
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
     
     if not editable_cols:
-        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        st.error("❌ No editable columns found in the data.")
         return
     
     st.markdown("#### ✏️ Inputs")
     if is_filtered:
-        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+        st.caption("⚠️ Editing in filtered view may require entering values twice. Clear filters for reliable editing.")
     else:
-        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+        st.caption("Edit values below. Calculated fields will update automatically.")
     
     # Build column config for location columns
     loc_column_config = {}
     for loc in loc_cols:
-        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc}")
+        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5)
     
-    # Prepare data for editor
-    editor_data = filtered_df[editable_cols].copy().reset_index(drop=True)
-    
+    # Data editor
     edited_df = st.data_editor(
-        editor_data,
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="fixed" if is_filtered else "dynamic",
+        num_rows="dynamic" if not is_filtered else "fixed",
         key="editor_beer_split",
         column_config={
             "Cost per Keg/Case": st.column_config.NumberColumn(format="$%.2f"),
@@ -2670,20 +2531,10 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
         }
     )
     
-    # Store edits in working copy when filtered
-    if is_filtered and len(edited_df) > 0:
-        for idx, row in edited_df.iterrows():
-            product_name = row.get('Product', '')
-            if product_name:
-                row_edits = {col: row[col] for col in editable_cols if col in row.index}
-                st.session_state.beer_working_copy[product_name] = row_edits
-                
-                # Also update session state immediately
-                mask = st.session_state.beer_inventory['Product'] == product_name
-                if mask.any():
-                    for col, val in row_edits.items():
-                        if col in st.session_state.beer_inventory.columns:
-                            st.session_state.beer_inventory.loc[mask, col] = val
+    # Merge edits back when filtered
+    if is_filtered:
+        filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
+        merge_edits_to_inventory(edited_df, 'beer_inventory', filtered_products)
     
     # Calculate computed columns
     calc_df = edited_df.copy()
@@ -2770,16 +2621,13 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
 def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     """Renders ingredients inventory with split display approach."""
     loc_cols = get_location_columns()
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()  # May be None
     
     if df is None or len(df) == 0:
         st.info("No ingredients inventory data.")
         return
     
     st.markdown("#### Search & Filter Ingredients")
-    filter_cols = st.columns([2] + [1] * len(filter_columns))
+    filter_cols = st.columns([2] + [1] * len(filter_columns) + [1])
     
     with filter_cols[0]:
         search_term = st.text_input("🔍 Search", key="search_ingredients", placeholder="Type to search...")
@@ -2788,45 +2636,23 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     for i, col_name in enumerate(filter_columns):
         with filter_cols[i + 1]:
             if col_name in df.columns:
-                unique_values = df[col_name].dropna().unique().tolist()
+                unique_values = sorted([str(v) for v in df[col_name].dropna().unique().tolist()])
                 selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_ingredients_{col_name}")
                 if selected:
                     column_filters[col_name] = selected
     
+    # Alphabetical sort option
+    with filter_cols[-1]:
+        sort_alpha = st.checkbox("A-Z", key="sort_ingredients_alpha", help="Sort products alphabetically")
+    
     # Check if any filters are active
     is_filtered = bool(search_term) or bool(column_filters)
     
-    # Create a unique key for the current filter state
-    filter_state_key = f"ingredients_filter_{hash(str(search_term) + str(sorted(column_filters.items())))}"
-    
-    # Initialize working copy storage if needed
-    if 'ingredients_working_copy' not in st.session_state:
-        st.session_state.ingredients_working_copy = {}
-    if 'ingredients_last_filter_key' not in st.session_state:
-        st.session_state.ingredients_last_filter_key = None
-    
-    # If filter changed, merge any pending edits back to main inventory first
-    if st.session_state.ingredients_last_filter_key != filter_state_key:
-        if st.session_state.ingredients_working_copy:
-            for product, row_data in st.session_state.ingredients_working_copy.items():
-                mask = df['Product'] == product
-                if mask.any():
-                    for col, val in row_data.items():
-                        if col in df.columns:
-                            df.loc[mask, col] = val
-            st.session_state.ingredients_inventory = df.copy()
-            st.session_state.ingredients_working_copy = {}
-        st.session_state.ingredients_last_filter_key = filter_state_key
-    
-    # Apply working copy edits to df for display
-    for product, row_data in st.session_state.ingredients_working_copy.items():
-        mask = df['Product'] == product
-        if mask.any():
-            for col, val in row_data.items():
-                if col in df.columns:
-                    df.loc[mask, col] = val
-    
     filtered_df = filter_dataframe(df, search_term, column_filters)
+    
+    # Apply alphabetical sorting if enabled
+    if sort_alpha and 'Product' in filtered_df.columns:
+        filtered_df = filtered_df.sort_values('Product', key=lambda x: x.str.lower()).reset_index(drop=True)
     
     # Show filter status
     if is_filtered:
@@ -2844,36 +2670,33 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     editable_cols = ["Product", "Cost", "Size/Yield", "UoM"] + loc_cols + ["Distributor", "Order Notes"]
     calculated_cols = ["Cost/Unit", "Total Inventory", "Value"]
     
-    # Filter to only columns that exist and warn about missing ones
+    # Filter to only columns that exist
     missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
     if missing_cols:
-        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
-        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}.")
     
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
     
     if not editable_cols:
-        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        st.error("❌ No editable columns found in the data.")
         return
     
     st.markdown("#### ✏️ Inputs")
     if is_filtered:
-        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+        st.caption("⚠️ Editing in filtered view may require entering values twice. Clear filters for reliable editing.")
     else:
-        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+        st.caption("Edit values below. Calculated fields will update automatically.")
     
     # Build column config for location columns
     loc_column_config = {}
     for loc in loc_cols:
-        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc}")
+        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5)
     
-    # Prepare data for editor
-    editor_data = filtered_df[editable_cols].copy().reset_index(drop=True)
-    
+    # Data editor
     edited_df = st.data_editor(
-        editor_data,
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="fixed" if is_filtered else "dynamic",
+        num_rows="dynamic" if not is_filtered else "fixed",
         key="editor_ingredients_split",
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -2882,20 +2705,10 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         }
     )
     
-    # Store edits in working copy when filtered
-    if is_filtered and len(edited_df) > 0:
-        for idx, row in edited_df.iterrows():
-            product_name = row.get('Product', '')
-            if product_name:
-                row_edits = {col: row[col] for col in editable_cols if col in row.index}
-                st.session_state.ingredients_working_copy[product_name] = row_edits
-                
-                # Also update session state immediately
-                mask = st.session_state.ingredients_inventory['Product'] == product_name
-                if mask.any():
-                    for col, val in row_edits.items():
-                        if col in st.session_state.ingredients_inventory.columns:
-                            st.session_state.ingredients_inventory.loc[mask, col] = val
+    # Merge edits back when filtered
+    if is_filtered:
+        filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
+        merge_edits_to_inventory(edited_df, 'ingredients_inventory', filtered_products)
     
     # Calculate computed columns
     calc_df = edited_df.copy()
@@ -2966,16 +2779,13 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
 def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
     """Renders N/A beverages inventory with split display approach."""
     loc_cols = get_location_columns()
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()  # May be None
     
     if df is None or len(df) == 0:
         st.info("No N/A beverages inventory data.")
         return
     
     st.markdown("#### Search & Filter N/A Beverages")
-    filter_cols = st.columns([2] + [1] * len(filter_columns))
+    filter_cols = st.columns([2] + [1] * len(filter_columns) + [1])
     
     with filter_cols[0]:
         search_term = st.text_input("🔍 Search", key="search_na_beverages", placeholder="Type to search...")
@@ -2984,45 +2794,23 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
     for i, col_name in enumerate(filter_columns):
         with filter_cols[i + 1]:
             if col_name in df.columns:
-                unique_values = df[col_name].dropna().unique().tolist()
+                unique_values = sorted([str(v) for v in df[col_name].dropna().unique().tolist()])
                 selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_na_beverages_{col_name}")
                 if selected:
                     column_filters[col_name] = selected
     
+    # Alphabetical sort option
+    with filter_cols[-1]:
+        sort_alpha = st.checkbox("A-Z", key="sort_na_beverages_alpha", help="Sort products alphabetically")
+    
     # Check if any filters are active
     is_filtered = bool(search_term) or bool(column_filters)
     
-    # Create a unique key for the current filter state
-    filter_state_key = f"na_beverages_filter_{hash(str(search_term) + str(sorted(column_filters.items())))}"
-    
-    # Initialize working copy storage if needed
-    if 'na_beverages_working_copy' not in st.session_state:
-        st.session_state.na_beverages_working_copy = {}
-    if 'na_beverages_last_filter_key' not in st.session_state:
-        st.session_state.na_beverages_last_filter_key = None
-    
-    # If filter changed, merge any pending edits back to main inventory first
-    if st.session_state.na_beverages_last_filter_key != filter_state_key:
-        if st.session_state.na_beverages_working_copy:
-            for product, row_data in st.session_state.na_beverages_working_copy.items():
-                mask = df['Product'] == product
-                if mask.any():
-                    for col, val in row_data.items():
-                        if col in df.columns:
-                            df.loc[mask, col] = val
-            st.session_state.na_beverages_inventory = df.copy()
-            st.session_state.na_beverages_working_copy = {}
-        st.session_state.na_beverages_last_filter_key = filter_state_key
-    
-    # Apply working copy edits to df for display
-    for product, row_data in st.session_state.na_beverages_working_copy.items():
-        mask = df['Product'] == product
-        if mask.any():
-            for col, val in row_data.items():
-                if col in df.columns:
-                    df.loc[mask, col] = val
-    
     filtered_df = filter_dataframe(df, search_term, column_filters)
+    
+    # Apply alphabetical sorting if enabled
+    if sort_alpha and 'Product' in filtered_df.columns:
+        filtered_df = filtered_df.sort_values('Product', key=lambda x: x.str.lower()).reset_index(drop=True)
     
     # Show filter status
     if is_filtered:
@@ -3040,36 +2828,33 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
     editable_cols = ["Product", "Cost", "Size/Yield", "UoM"] + loc_cols + ["Distributor", "Order Notes"]
     calculated_cols = ["Cost/Unit", "Total Inventory", "Value"]
     
-    # Filter to only columns that exist and warn about missing ones
+    # Filter to only columns that exist
     missing_cols = [c for c in editable_cols if c not in filtered_df.columns]
     if missing_cols:
-        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}. These fields will not be displayed.")
-        st.caption(f"Available columns: {', '.join(filtered_df.columns.tolist())}")
+        st.warning(f"⚠️ Missing columns in data: {', '.join(missing_cols)}.")
     
     editable_cols = [c for c in editable_cols if c in filtered_df.columns]
     
     if not editable_cols:
-        st.error("❌ No editable columns found in the data. Please check your CSV file format.")
+        st.error("❌ No editable columns found in the data.")
         return
     
     st.markdown("#### ✏️ Inputs")
     if is_filtered:
-        st.caption("Edit values below. Edits are preserved when filters change. Clear filters to save to Google Sheets.")
+        st.caption("⚠️ Editing in filtered view may require entering values twice. Clear filters for reliable editing.")
     else:
-        st.caption("Edit values below. Calculated fields will update automatically in the preview.")
+        st.caption("Edit values below. Calculated fields will update automatically.")
     
     # Build column config for location columns
     loc_column_config = {}
     for loc in loc_cols:
-        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc}")
+        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5)
     
-    # Prepare data for editor
-    editor_data = filtered_df[editable_cols].copy().reset_index(drop=True)
-    
+    # Data editor
     edited_df = st.data_editor(
-        editor_data,
+        filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
-        num_rows="fixed" if is_filtered else "dynamic",
+        num_rows="dynamic" if not is_filtered else "fixed",
         key="editor_na_beverages_split",
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -3078,20 +2863,10 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
         }
     )
     
-    # Store edits in working copy when filtered
-    if is_filtered and len(edited_df) > 0:
-        for idx, row in edited_df.iterrows():
-            product_name = row.get('Product', '')
-            if product_name:
-                row_edits = {col: row[col] for col in editable_cols if col in row.index}
-                st.session_state.na_beverages_working_copy[product_name] = row_edits
-                
-                # Also update session state immediately
-                mask = st.session_state.na_beverages_inventory['Product'] == product_name
-                if mask.any():
-                    for col, val in row_edits.items():
-                        if col in st.session_state.na_beverages_inventory.columns:
-                            st.session_state.na_beverages_inventory.loc[mask, col] = val
+    # Merge edits back when filtered
+    if is_filtered:
+        filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
+        merge_edits_to_inventory(edited_df, 'na_beverages_inventory', filtered_products)
     
     # Calculate computed columns
     calc_df = edited_df.copy()
