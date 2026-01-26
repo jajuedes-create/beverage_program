@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.14
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.15
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -172,6 +172,14 @@
 #           - Sorted filter dropdown options alphabetically
 #           - Clear warning message when editing in filtered view (known limitation)
 #           - Cleaner, more maintainable codebase
+#   bb_V2.15 - Enhanced Order Analytics tab:
+#           - Added Top Products by Category expandable dropdowns (top 10 per category)
+#           - Added Price Change Tracker with reviewed checkbox and Google Sheets persistence
+#           - Added Product Analysis section with multi-select, quantity/spend trend charts
+#           - Added Product Summary Statistics table (total qty, avg qty/week, std dev, spend)
+#           - Added Distributor Analytics with donut chart and summary table
+#           - Added Export Analytics section (CSV order data + text summary report)
+#           - Replaced bar chart with Top Products dropdowns for cleaner UX
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -3853,17 +3861,22 @@ def show_ordering():
     with tab_analytics:
         st.markdown("### 📈 Order Analytics")
         if len(order_history) > 0:
-            # Category colors
+            # =================================================================
+            # CONSISTENT CATEGORY COLORS
+            # =================================================================
             category_colors = {
-                'Spirits': '#8B5CF6',
-                'Wine': '#EC4899',
-                'Beer': '#F59E0B',
-                'Ingredients': '#10B981'
+                'Spirits': '#8B5CF6',    # Purple
+                'Wine': '#EC4899',       # Pink
+                'Beer': '#F59E0B',       # Amber
+                'Ingredients': '#10B981' # Emerald
             }
             
-            # Date range filter
+            # =================================================================
+            # DATE RANGE FILTER
+            # =================================================================
             st.markdown("#### 📅 Date Range Filter")
             
+            # Convert Week to datetime for filtering
             analytics_data = order_history.copy()
             analytics_data['Week'] = pd.to_datetime(analytics_data['Week'])
             
@@ -3896,7 +3909,7 @@ def show_ordering():
                 (analytics_data['Week'].dt.date <= end_date)
             ].copy()
             
-            # Calculate comparison period
+            # Calculate comparison period (same length, immediately prior)
             date_range_days = (end_date - start_date).days
             prior_start = start_date - timedelta(days=date_range_days + 1)
             prior_end = start_date - timedelta(days=1)
@@ -3910,18 +3923,27 @@ def show_ordering():
             
             st.markdown("---")
             
-            # Key metrics
+            # =================================================================
+            # KEY METRICS DASHBOARD
+            # =================================================================
             st.markdown("#### 📊 Key Metrics")
             
+            # Calculate current period metrics
             total_spend = filtered_analytics['Total Cost'].sum()
             num_orders = len(filtered_analytics['Week'].unique())
             avg_weekly_spend = total_spend / max(num_orders, 1)
             total_items_ordered = len(filtered_analytics)
             
+            # Calculate top category and product (used in export report)
+            top_category = filtered_analytics.groupby('Category')['Total Cost'].sum().idxmax() if len(filtered_analytics) > 0 else "N/A"
+            top_product = filtered_analytics.groupby('Product')['Total Cost'].sum().idxmax() if len(filtered_analytics) > 0 else "N/A"
+            
+            # Calculate prior period metrics for trend indicators
             prior_total_spend = prior_period_data['Total Cost'].sum() if len(prior_period_data) > 0 else 0
             prior_num_orders = len(prior_period_data['Week'].unique()) if len(prior_period_data) > 0 else 0
             prior_avg_weekly = prior_total_spend / max(prior_num_orders, 1) if prior_num_orders > 0 else 0
             
+            # Calculate deltas
             spend_delta = total_spend - prior_total_spend
             spend_delta_pct = (spend_delta / prior_total_spend * 100) if prior_total_spend > 0 else 0
             avg_delta = avg_weekly_spend - prior_avg_weekly
@@ -3934,7 +3956,7 @@ def show_ordering():
                     "💰 Total Spend",
                     f"${total_spend:,.2f}",
                     delta=delta_str,
-                    delta_color="inverse"
+                    delta_color="inverse"  # Red for increase (spending), green for decrease
                 )
             
             with col_m2:
@@ -3950,6 +3972,7 @@ def show_ordering():
                 st.metric("📦 Total Orders", f"{total_items_ordered:,}")
             
             with col_m4:
+                # Spend Comparison to previous period
                 if prior_total_spend > 0:
                     comparison_pct = spend_delta_pct
                     comparison_color = "🔴" if comparison_pct > 0 else "🟢"
@@ -3964,13 +3987,15 @@ def show_ordering():
             
             st.markdown("---")
             
-            # Spending by category
+            # =================================================================
+            # SPENDING BY CATEGORY - Pie chart with Top Products dropdowns
+            # =================================================================
             st.markdown("#### 📊 Spending by Category")
             
             cat_spend = filtered_analytics.groupby('Category')['Total Cost'].sum().reset_index()
             cat_spend = cat_spend.sort_values('Total Cost', ascending=False)
             
-            col_cat_pie, col_cat_bar = st.columns([1, 1])
+            col_cat_pie, col_cat_dropdowns = st.columns([1, 1])
             
             with col_cat_pie:
                 fig_pie = px.pie(
@@ -3984,40 +4009,286 @@ def show_ordering():
                 fig_pie.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig_pie, use_container_width=True)
             
-            with col_cat_bar:
-                fig_bar = px.bar(
-                    cat_spend,
-                    x='Category',
-                    y='Total Cost',
-                    title='Spending by Category',
-                    color='Category',
-                    color_discrete_map=category_colors
+            with col_cat_dropdowns:
+                st.markdown("**🏆 Top Products by Category**")
+                st.markdown("Expand each category to see top 10 products by spend.")
+                
+                categories = sorted(filtered_analytics['Category'].unique())
+                
+                for category in categories:
+                    category_data = filtered_analytics[filtered_analytics['Category'] == category]
+                    category_total = category_data['Total Cost'].sum()
+                    
+                    with st.expander(f"**{category}** - ${category_total:,.2f}", expanded=False):
+                        top_in_category = category_data.groupby('Product').agg({
+                            'Quantity Ordered': 'sum',
+                            'Total Cost': 'sum'
+                        }).sort_values('Total Cost', ascending=False).head(10)
+                        
+                        if len(top_in_category) > 0:
+                            st.dataframe(
+                                top_in_category.reset_index().rename(columns={
+                                    'Product': 'Product', 
+                                    'Quantity Ordered': 'Units', 
+                                    'Total Cost': 'Spend'
+                                }),
+                                use_container_width=True, 
+                                hide_index=True,
+                                column_config={
+                                    "Spend": st.column_config.NumberColumn(format="$%.2f")
+                                }
+                            )
+                        else:
+                            st.info(f"No orders found for {category}.")
+            
+            st.markdown("---")
+            
+            # =================================================================
+            # PRICE CHANGE TRACKER - Enhanced with date and acknowledgment
+            # =================================================================
+            st.markdown("#### 💲 Price Change Tracker")
+            st.markdown("Products with unit cost changes from their first recorded order. Check the box when you've reviewed and updated Master Inventory if needed.")
+            
+            # Find price changes
+            price_changes = []
+            for product in analytics_data['Product'].unique():
+                product_data = analytics_data[analytics_data['Product'] == product].sort_values('Week')
+                if len(product_data) >= 2:
+                    first_price = product_data.iloc[0]['Unit Cost']
+                    latest_price = product_data.iloc[-1]['Unit Cost']
+                    
+                    if first_price != latest_price:
+                        change = latest_price - first_price
+                        change_pct = (change / first_price * 100) if first_price > 0 else 0
+                        # Get the date when the price change was recorded (latest order date)
+                        change_date = product_data.iloc[-1]['Week']
+                        if hasattr(change_date, 'strftime'):
+                            change_date_str = change_date.strftime('%Y-%m-%d')
+                        else:
+                            change_date_str = str(change_date)[:10]
+                        
+                        # Check if this price change has been acknowledged
+                        ack_key = f"{product}_{change_date_str}"
+                        acknowledged = st.session_state.price_change_acks.get(ack_key, False)
+                        
+                        price_changes.append({
+                            'Product': product,
+                            'Category': product_data.iloc[0]['Category'],
+                            'First Price': first_price,
+                            'Current Price': latest_price,
+                            'Change ($)': change,
+                            'Change (%)': change_pct,
+                            'Direction': '🔺 Increase' if change > 0 else '🔻 Decrease',
+                            'Date Recorded': change_date_str,
+                            'Reviewed': acknowledged,
+                            '_ack_key': ack_key
+                        })
+            
+            if price_changes:
+                price_df = pd.DataFrame(price_changes)
+                price_df = price_df.sort_values('Change (%)', ascending=False, key=abs)
+                
+                # Display columns without the internal ack_key
+                display_cols = ['Reviewed', 'Product', 'Category', 'First Price', 'Current Price', 
+                               'Change ($)', 'Change (%)', 'Direction', 'Date Recorded']
+                
+                edited_price_df = st.data_editor(
+                    price_df[display_cols],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Reviewed": st.column_config.CheckboxColumn("✅ Reviewed", help="Check when you've reviewed and updated Master Inventory", width="small"),
+                        "First Price": st.column_config.NumberColumn(format="$%.2f"),
+                        "Current Price": st.column_config.NumberColumn(format="$%.2f"),
+                        "Change ($)": st.column_config.NumberColumn(format="$%.2f"),
+                        "Change (%)": st.column_config.NumberColumn(format="%.1f%%"),
+                        "Date Recorded": st.column_config.TextColumn("Date Recorded", width="small")
+                    },
+                    disabled=['Product', 'Category', 'First Price', 'Current Price', 'Change ($)', 'Change (%)', 'Direction', 'Date Recorded'],
+                    key="price_change_editor"
                 )
-                fig_bar.update_layout(
-                    yaxis_tickprefix='$',
-                    yaxis_tickformat=',.0f',
-                    showlegend=False
+                
+                # Save acknowledgments back to session state and Google Sheets
+                for idx, row in edited_price_df.iterrows():
+                    original_row = price_df.iloc[idx]
+                    ack_key = original_row['_ack_key']
+                    st.session_state.price_change_acks[ack_key] = row['Reviewed']
+                
+                # Persist to Google Sheets
+                save_price_change_acks()
+                
+                # Show summary and download button
+                col_summary, col_download = st.columns([2, 1])
+                
+                with col_summary:
+                    reviewed_count = edited_price_df['Reviewed'].sum()
+                    total_count = len(edited_price_df)
+                    if reviewed_count == total_count:
+                        st.success(f"✅ All {total_count} price changes have been reviewed!")
+                    else:
+                        st.info(f"📋 {reviewed_count} of {total_count} price changes reviewed.")
+                
+                with col_download:
+                    price_csv = pd.DataFrame(price_changes).to_csv(index=False)
+                    st.download_button(
+                        label="💲 Download Price Changes",
+                        data=price_csv,
+                        file_name=f"price_changes_{start_date}_{end_date}.csv",
+                        mime="text/csv",
+                        key="download_price_changes"
+                    )
+            else:
+                st.info("✅ No price changes detected in your order history.")
+            
+            st.markdown("---")
+            
+            # =================================================================
+            # PRODUCT ANALYSIS
+            # =================================================================
+            st.markdown("#### 📈 Product Analysis")
+            st.markdown("Select products below to view order trends, spending patterns, and summary statistics over time.")
+            
+            products = sorted(filtered_analytics['Product'].unique())
+            selected_products = st.multiselect("Select products:", options=products,
+                default=products[:3] if len(products) >= 3 else products, key="analytics_products")
+            
+            if selected_products:
+                plot_data = filtered_analytics[filtered_analytics['Product'].isin(selected_products)]
+                
+                col_qty_chart, col_cost_chart = st.columns(2)
+                
+                with col_qty_chart:
+                    st.markdown("**Quantity Ordered Over Time**")
+                    fig_qty = px.line(plot_data, x='Week', y='Quantity Ordered', color='Product',
+                                     markers=True)
+                    fig_qty.update_layout(height=350)
+                    st.plotly_chart(fig_qty, use_container_width=True)
+                
+                with col_cost_chart:
+                    st.markdown("**Spending Over Time**")
+                    fig_cost = px.line(plot_data, x='Week', y='Total Cost', color='Product',
+                                      markers=True)
+                    fig_cost.update_layout(
+                        yaxis_tickprefix='$', 
+                        yaxis_tickformat=',.2f',
+                        height=350
+                    )
+                    st.plotly_chart(fig_cost, use_container_width=True)
+                
+                st.markdown("**Product Summary Statistics**")
+                summary = plot_data.groupby('Product').agg({
+                    'Quantity Ordered': ['sum', 'mean', 'std'],
+                    'Total Cost': ['sum', 'mean']
+                }).round(2)
+                summary.columns = ['Total Qty', 'Avg Qty/Week', 'Std Dev', 'Total Spend', 'Avg Spend/Week']
+                st.dataframe(summary.reset_index(), use_container_width=True, hide_index=True,
+                            column_config={
+                                "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
+                                "Avg Spend/Week": st.column_config.NumberColumn(format="$%.2f")
+                            })
+            
+            st.markdown("---")
+            
+            # =================================================================
+            # DISTRIBUTOR ANALYTICS
+            # =================================================================
+            st.markdown("#### 🚚 Distributor Analytics")
+            
+            dist_spend = filtered_analytics.groupby('Distributor').agg({
+                'Total Cost': 'sum',
+                'Quantity Ordered': 'sum',
+                'Product': 'nunique'
+            }).reset_index()
+            dist_spend.columns = ['Distributor', 'Total Spend', 'Total Units', '# Products']
+            dist_spend = dist_spend.sort_values('Total Spend', ascending=False)
+            
+            col_dist_chart, col_dist_table = st.columns([1, 1])
+            
+            with col_dist_chart:
+                fig_dist = px.pie(
+                    dist_spend, 
+                    values='Total Spend', 
+                    names='Distributor', 
+                    title='Spend by Distributor',
+                    hole=0.4  # Donut chart
                 )
-                st.plotly_chart(fig_bar, use_container_width=True)
+                fig_dist.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig_dist, use_container_width=True)
             
-            # Spending over time
-            st.markdown("#### 📈 Spending Over Time")
+            with col_dist_table:
+                st.dataframe(
+                    dist_spend,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Total Spend": st.column_config.NumberColumn(format="$%.2f"),
+                        "Total Units": st.column_config.NumberColumn(format="%.1f")
+                    }
+                )
             
-            weekly_spend = filtered_analytics.groupby('Week')['Total Cost'].sum().reset_index()
-            weekly_spend = weekly_spend.sort_values('Week')
+            st.markdown("---")
             
-            fig_time = px.line(
-                weekly_spend,
-                x='Week',
-                y='Total Cost',
-                title='Weekly Spending Trend',
-                markers=True
-            )
-            fig_time.update_layout(
-                yaxis_tickprefix='$',
-                yaxis_tickformat=',.0f'
-            )
-            st.plotly_chart(fig_time, use_container_width=True)
+            # =================================================================
+            # DOWNLOAD ANALYTICS REPORT
+            # =================================================================
+            st.markdown("#### 📥 Export Analytics")
+            
+            col_export1, col_export2 = st.columns(2)
+            
+            with col_export1:
+                # Export filtered order data
+                csv_orders = filtered_analytics.to_csv(index=False)
+                st.download_button(
+                    label="📊 Download Order Data (CSV)",
+                    data=csv_orders,
+                    file_name=f"order_analytics_{start_date}_{end_date}.csv",
+                    mime="text/csv",
+                    key="download_analytics_csv"
+                )
+            
+            with col_export2:
+                # Export summary report
+                summary_report = f"""BEVERAGE ORDER ANALYTICS REPORT
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+Period: {start_date} to {end_date}
+{'='*50}
+
+KEY METRICS
+-----------
+Total Spend: ${total_spend:,.2f}
+Average Weekly Spend: ${avg_weekly_spend:,.2f}
+Number of Order Weeks: {num_orders}
+Top Category: {top_category}
+Top Product: {top_product}
+
+SPENDING BY CATEGORY
+--------------------
+"""
+                for _, row in cat_spend.iterrows():
+                    summary_report += f"{row['Category']}: ${row['Total Cost']:,.2f}\n"
+                
+                summary_report += f"""
+SPENDING BY DISTRIBUTOR
+-----------------------
+"""
+                for _, row in dist_spend.iterrows():
+                    summary_report += f"{row['Distributor']}: ${row['Total Spend']:,.2f} ({row['# Products']} products)\n"
+                
+                if price_changes:
+                    summary_report += f"""
+PRICE CHANGES DETECTED
+----------------------
+"""
+                    for pc in price_changes:
+                        summary_report += f"{pc['Product']}: ${pc['First Price']:.2f} → ${pc['Current Price']:.2f} ({pc['Change (%)']:.1f}%)\n"
+                
+                st.download_button(
+                    label="📝 Download Summary Report",
+                    data=summary_report,
+                    file_name=f"analytics_summary_{start_date}_{end_date}.txt",
+                    mime="text/plain",
+                    key="download_analytics_summary"
+                )
             
         else:
             st.info("No order history available for analytics. Complete orders to see trends.")
