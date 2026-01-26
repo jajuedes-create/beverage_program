@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.13
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.14
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -162,6 +162,15 @@
 #           - Export COGS report as formatted text file
 #           - Trends tab: COGS over time, category trends, percentage trends with target lines
 #           - History tab: view all saved calculations, export as CSV
+#           - Removed "Upstairs Bar" location column (now 2 locations: Main Bar, Storage)
+#           - Dynamic location column handling via get_location_columns() helper
+#           - All inventory functions updated to support variable number of locations
+#           - Added pending edits pattern for filtered view editing (fixes double-input bug)
+#   bb_V2.14 - Location and filtered editing improvements:
+#           - Fixed filtered view editing bug (values now persist on first input)
+#           - Enhanced merge_edits_to_inventory() to track and apply pending edits
+#           - All process_uploaded_* functions now use dynamic location columns
+#           - Improved handling for 2-location configuration (Main Bar, Storage)
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -195,9 +204,8 @@ CLIENT_CONFIG = {
     # Customize these to match the restaurant's physical layout.
     # These names appear in Master Inventory and Weekly Order Builder.
     "locations": {
-        "location_1": "Upstairs Bar",
-        "location_2": "Main Bar",
-        "location_3": "Storage",
+        "location_1": "Main Bar",
+        "location_2": "Storage",
     },
     
     # -------------------------------------------------------------------------
@@ -299,9 +307,18 @@ def get_location_2() -> str:
     return CLIENT_CONFIG["locations"]["location_2"]
 
 
-def get_location_3() -> str:
-    """Returns the name of location 3."""
-    return CLIENT_CONFIG["locations"]["location_3"]
+def get_location_3() -> Optional[str]:
+    """Returns the name of location 3, or None if not configured."""
+    return CLIENT_CONFIG["locations"].get("location_3", None)
+
+
+def get_location_columns() -> list:
+    """Returns list of configured location column names."""
+    locations = [get_location_1(), get_location_2()]
+    loc3 = get_location_3()
+    if loc3:
+        locations.append(loc3)
+    return locations
 
 
 def get_sheet_name(key: str) -> str:
@@ -911,9 +928,7 @@ def add_syrup_to_ingredients(recipe: dict) -> bool:
     Returns:
         True if added successfully, False if already exists
     """
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
     recipe_name = recipe.get('name', '')
     yield_oz = recipe.get('yield_oz', 0)
@@ -938,20 +953,20 @@ def add_syrup_to_ingredients(recipe: dict) -> bool:
             # Already exists, don't add duplicate
             return False
     
-    # Create new ingredient row
+    # Create new ingredient row with dynamic location columns
     new_row = {
         'Product': recipe_name,
         'Cost': round(total_cost, 2),
         'Size/Yield': yield_oz,
         'UoM': 'oz',
         'Cost/Unit': round(total_cost / yield_oz, 4) if yield_oz > 0 else 0,
-        loc1: 0.0,
-        loc2: 0.0,
-        loc3: 0.0,
         'Total Inventory': 0.0,
         'Distributor': 'House-made',
         'Order Notes': 'Bar Prep Recipe'
     }
+    # Add location columns dynamically
+    for loc in loc_cols:
+        new_row[loc] = 0.0
     
     # Add to ingredients inventory
     new_df = pd.DataFrame([new_row])
@@ -996,9 +1011,7 @@ def add_batched_cocktail_to_spirits(recipe: dict) -> bool:
     Returns:
         True if added successfully, False if already exists
     """
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
     recipe_name = recipe.get('name', '')
     yield_oz = recipe.get('yield_oz', 0)
@@ -1035,15 +1048,12 @@ def add_batched_cocktail_to_spirits(recipe: dict) -> bool:
     neat_price = round(cost_per_oz * 2.0 * margin_multiplier, 2)  # 2 oz neat
     double_price = round(cost_per_oz * 3.0 * margin_multiplier, 2)  # 3 oz double
     
-    # Create new spirits row
+    # Create new spirits row with dynamic location columns
     new_row = {
         'Product': recipe_name,
         'Type': 'Batched Cocktail',
         'Bottle Cost': round(total_cost, 2),
         'Size (oz.)': yield_oz,
-        loc1: 0.0,
-        loc2: 0.0,
-        loc3: 0.0,
         'Target Margin': default_margin,
         'Use': 'Batched',
         'Distributor': 'House-made',
@@ -1056,6 +1066,9 @@ def add_batched_cocktail_to_spirits(recipe: dict) -> bool:
         'Total Inventory': 0.0,
         'Value': 0.0
     }
+    # Add location columns dynamically
+    for loc in loc_cols:
+        new_row[loc] = 0.0
     
     # Add to spirits inventory
     new_df = pd.DataFrame([new_row])
@@ -1092,6 +1105,7 @@ def sync_batched_cocktails_to_spirits() -> Tuple[int, int]:
 def merge_edits_to_inventory(edited_df: pd.DataFrame, inventory_key: str, original_products: list) -> None:
     """
     Merges edited rows back to the full inventory in session state.
+    Also stores edits as pending to ensure they persist across reruns.
     Only updates existing products, doesn't add or remove rows.
     
     Args:
@@ -1109,6 +1123,11 @@ def merge_edits_to_inventory(edited_df: pd.DataFrame, inventory_key: str, origin
     if len(edited_df) == 0 or 'Product' not in edited_df.columns:
         return
     
+    # Determine the pending edits key based on inventory type
+    pending_key = inventory_key.replace('_inventory', '_pending_edits')
+    if pending_key not in st.session_state:
+        st.session_state[pending_key] = {}
+    
     # Update each row in the full inventory that matches a product in the edited df
     for idx, edited_row in edited_df.iterrows():
         product_name = edited_row.get('Product', '')
@@ -1118,10 +1137,30 @@ def merge_edits_to_inventory(edited_df: pd.DataFrame, inventory_key: str, origin
         # Find matching row in full inventory
         mask = full_inventory['Product'] == product_name
         if mask.any():
+            # Track changes for this product
+            product_edits = {}
+            
             # Update all columns that exist in both dataframes
             for col in edited_df.columns:
                 if col in full_inventory.columns:
-                    full_inventory.loc[mask, col] = edited_row[col]
+                    old_val = full_inventory.loc[mask, col].iloc[0]
+                    new_val = edited_row[col]
+                    
+                    # Check if value actually changed
+                    try:
+                        if pd.isna(old_val) and pd.isna(new_val):
+                            continue
+                        if old_val != new_val:
+                            full_inventory.loc[mask, col] = new_val
+                            product_edits[col] = new_val
+                    except:
+                        # Handle comparison errors by just updating
+                        full_inventory.loc[mask, col] = new_val
+                        product_edits[col] = new_val
+            
+            # Store pending edits for this product if any changes were made
+            if product_edits:
+                st.session_state[pending_key][product_name] = product_edits
     
     st.session_state[inventory_key] = full_inventory
 
@@ -1182,23 +1221,23 @@ def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
     if len(weekly_inv) == 0:
         return pd.DataFrame()
     
-    # V3.8: Get configurable location names
+    # Get configurable location names
+    loc_cols = get_location_columns()
     loc1 = get_location_1()
     loc2 = get_location_2()
-    loc3 = get_location_3()
     
     orders = []
     for _, row in weekly_inv.iterrows():
         par = row.get('Par', row.get('Par Level', 0))
         
-        # V3.8: Calculate total inventory from configurable location columns
+        # Calculate total inventory from configurable location columns
         # First try the new location column names, then fall back to old names
         loc1_val = row.get(loc1, row.get('Bar Inventory', 0))
         loc2_val = row.get(loc2, row.get('Storage Inventory', 0))
-        loc3_val = row.get(loc3, 0)
         
+        # Sum all configured locations
         total_inv = row.get('Total Current Inventory', 
-                          row.get('Total Inventory', loc1_val + loc2_val + loc3_val))
+                          row.get('Total Inventory', sum(row.get(loc, 0) for loc in loc_cols)))
         
         if total_inv < par:
             order_qty = par - total_inv
@@ -1225,11 +1264,9 @@ def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
 @st.cache_data
 def get_sample_spirits():
     """Returns empty spirit inventory DataFrame with proper columns."""
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
-    columns = ["Product", "Type", "Bottle Cost", "Size (oz.)", loc1, loc2, loc3, "Target Margin", 
+    columns = ["Product", "Type", "Bottle Cost", "Size (oz.)"] + loc_cols + ["Target Margin", 
                "Use", "Distributor", "Order Notes", "Cost/Oz", "Shot", "Single", "Neat Pour", "Double", "Total Inventory", "Value"]
     return pd.DataFrame(columns=columns)
 
@@ -1237,12 +1274,9 @@ def get_sample_spirits():
 @st.cache_data
 def get_sample_wines():
     """Returns empty wine inventory DataFrame with proper columns."""
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
-    columns = ["Product", "Type", "Cost", "Size (oz.)", "Margin", "Bottle Price", 
-               loc1, loc2, loc3, "Total Inventory",
+    columns = ["Product", "Type", "Cost", "Size (oz.)", "Margin", "Bottle Price"] + loc_cols + ["Total Inventory",
                "Value", "Distributor", "Order Notes", "BTG", "Suggested Retail"]
     return pd.DataFrame(columns=columns)
 
@@ -1250,12 +1284,9 @@ def get_sample_wines():
 @st.cache_data
 def get_sample_beers():
     """Returns empty beer inventory DataFrame with proper columns."""
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
-    columns = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", 
-               loc1, loc2, loc3, "Target Margin", "Distributor", "Order Notes",
+    columns = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM"] + loc_cols + ["Target Margin", "Distributor", "Order Notes",
                "Total Inventory", "Cost/Unit", "Menu Price", "Value"]
     return pd.DataFrame(columns=columns)
 
@@ -1263,12 +1294,9 @@ def get_sample_beers():
 @st.cache_data
 def get_sample_ingredients():
     """Returns empty ingredient inventory DataFrame with proper columns."""
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
-    columns = ["Product", "Cost", "Size/Yield", "UoM", "Cost/Unit", 
-               loc1, loc2, loc3, "Total Inventory",
+    columns = ["Product", "Cost", "Size/Yield", "UoM", "Cost/Unit"] + loc_cols + ["Total Inventory",
                "Distributor", "Order Notes"]
     return pd.DataFrame(columns=columns)
 
@@ -1276,12 +1304,9 @@ def get_sample_ingredients():
 @st.cache_data
 def get_sample_na_beverages():
     """Returns empty N/A beverages inventory DataFrame with proper columns."""
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
-    columns = ["Product", "Cost", "Size/Yield", "UoM", "Cost/Unit", 
-               loc1, loc2, loc3, "Total Inventory",
+    columns = ["Product", "Cost", "Size/Yield", "UoM", "Cost/Unit"] + loc_cols + ["Total Inventory",
                "Distributor", "Order Notes"]
     return pd.DataFrame(columns=columns)
 
@@ -1289,12 +1314,9 @@ def get_sample_na_beverages():
 @st.cache_data
 def get_sample_weekly_inventory():
     """Returns empty weekly inventory DataFrame with proper columns."""
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
-    columns = ["Product", "Category", "Par", loc1, loc2, loc3, 
-               "Total Current Inventory", "Unit", "Unit Cost", "Distributor", "Order Notes"]
+    columns = ["Product", "Category", "Par"] + loc_cols + ["Total Current Inventory", "Unit", "Unit Cost", "Distributor", "Order Notes"]
     return pd.DataFrame(columns=columns)
 
 
@@ -1611,9 +1633,7 @@ def display_recipe_list(recipes: list, recipe_type: str, category_filter: str = 
 
 def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
     """Processes an uploaded Spirits inventory CSV."""
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
     try:
         df = df.copy()
@@ -1625,15 +1645,15 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # Handle location columns
-        for col in [loc1, loc2, loc3]:
+        # Handle location columns dynamically
+        for col in loc_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             else:
                 df[col] = 0.0
         
         # Calculate Total Inventory from location columns
-        df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
+        df['Total Inventory'] = sum(df[col] for col in loc_cols)
         
         # Recalculate all calculated fields
         if 'Bottle Cost' in df.columns and 'Size (oz.)' in df.columns:
@@ -1664,9 +1684,7 @@ def process_uploaded_spirits(df: pd.DataFrame) -> pd.DataFrame:
 
 def process_uploaded_wine(df: pd.DataFrame) -> pd.DataFrame:
     """Processes an uploaded Wine inventory CSV."""
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
     try:
         df = df.copy()
@@ -1678,15 +1696,15 @@ def process_uploaded_wine(df: pd.DataFrame) -> pd.DataFrame:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # Handle location columns
-        for col in [loc1, loc2, loc3]:
+        # Handle location columns dynamically
+        for col in loc_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             else:
                 df[col] = 0.0
         
         # Calculate Total Inventory from location columns
-        df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
+        df['Total Inventory'] = sum(df[col] for col in loc_cols)
         
         # Recalculate all calculated fields
         if 'Cost' in df.columns and 'Margin' in df.columns:
@@ -1705,9 +1723,7 @@ def process_uploaded_wine(df: pd.DataFrame) -> pd.DataFrame:
 
 def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
     """Processes an uploaded Beer inventory CSV."""
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
     try:
         df = df.copy()
@@ -1719,15 +1735,15 @@ def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # Handle location columns
-        for col in [loc1, loc2, loc3]:
+        # Handle location columns dynamically
+        for col in loc_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             else:
                 df[col] = 0.0
         
         # Calculate Total Inventory from location columns
-        df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
+        df['Total Inventory'] = sum(df[col] for col in loc_cols)
         
         # Recalculate all calculated fields
         if 'Cost per Keg/Case' in df.columns and 'Size' in df.columns:
@@ -1759,9 +1775,7 @@ def process_uploaded_beer(df: pd.DataFrame) -> pd.DataFrame:
 
 def process_uploaded_ingredients(df: pd.DataFrame) -> pd.DataFrame:
     """Processes an uploaded Ingredients inventory CSV."""
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
     try:
         df = df.copy()
@@ -1770,15 +1784,15 @@ def process_uploaded_ingredients(df: pd.DataFrame) -> pd.DataFrame:
         if 'Size/Yield' in df.columns:
             df['Size/Yield'] = pd.to_numeric(df['Size/Yield'], errors='coerce').fillna(0)
         
-        # Handle location columns
-        for col in [loc1, loc2, loc3]:
+        # Handle location columns dynamically
+        for col in loc_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             else:
                 df[col] = 0.0
         
         # Calculate Total Inventory from location columns
-        df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
+        df['Total Inventory'] = sum(df[col] for col in loc_cols)
         
         if 'Cost' in df.columns and 'Size/Yield' in df.columns:
             df['Cost/Unit'] = df.apply(
@@ -1791,9 +1805,7 @@ def process_uploaded_ingredients(df: pd.DataFrame) -> pd.DataFrame:
 
 def process_uploaded_na_beverages(df: pd.DataFrame) -> pd.DataFrame:
     """Processes an uploaded N/A Beverages inventory CSV."""
-    loc1 = get_location_1()
-    loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_cols = get_location_columns()
     
     try:
         df = df.copy()
@@ -1802,15 +1814,15 @@ def process_uploaded_na_beverages(df: pd.DataFrame) -> pd.DataFrame:
         if 'Size/Yield' in df.columns:
             df['Size/Yield'] = pd.to_numeric(df['Size/Yield'], errors='coerce').fillna(0)
         
-        # Handle location columns
-        for col in [loc1, loc2, loc3]:
+        # Handle location columns dynamically
+        for col in loc_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             else:
                 df[col] = 0.0
         
         # Calculate Total Inventory from location columns
-        df['Total Inventory'] = df[loc1] + df[loc2] + df[loc3]
+        df['Total Inventory'] = sum(df[col] for col in loc_cols)
         
         if 'Cost' in df.columns and 'Size/Yield' in df.columns:
             df['Cost/Unit'] = df.apply(
@@ -1997,43 +2009,44 @@ def show_inventory():
 
 def show_csv_upload_section(upload_category: str):
     """Shows the CSV upload section with instructions and column validation for a specific category."""
+    loc_cols = get_location_columns()
     loc1 = get_location_1()
     loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc_names = ", ".join(loc_cols)
     
     # Required columns for each category (used for validation)
     required_columns = {
-        "Spirits": ["Product", "Type", "Bottle Cost", "Size (oz.)", loc1, loc2, loc3, "Target Margin", "Use", "Distributor", "Order Notes"],
-        "Wine": ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"],
-        "Beer": ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", loc1, loc2, loc3, "Target Margin", "Distributor", "Order Notes"],
-        "Ingredients": ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"],
-        "N/A Beverages": ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"],
+        "Spirits": ["Product", "Type", "Bottle Cost", "Size (oz.)"] + loc_cols + ["Target Margin", "Use", "Distributor", "Order Notes"],
+        "Wine": ["Product", "Type", "Cost", "Size (oz.)", "Margin"] + loc_cols + ["Distributor", "Order Notes"],
+        "Beer": ["Product", "Type", "Cost per Keg/Case", "Size", "UoM"] + loc_cols + ["Target Margin", "Distributor", "Order Notes"],
+        "Ingredients": ["Product", "Cost", "Size/Yield", "UoM"] + loc_cols + ["Distributor", "Order Notes"],
+        "N/A Beverages": ["Product", "Cost", "Size/Yield", "UoM"] + loc_cols + ["Distributor", "Order Notes"],
     }
     
     # CSV Upload Instructions
     instructions = {
         "Spirits": f"""
-**Required columns:** Product, Type, Bottle Cost, Size (oz.), {loc1}, {loc2}, {loc3}, Target Margin, Use, Distributor, Order Notes
+**Required columns:** Product, Type, Bottle Cost, Size (oz.), {loc_names}, Target Margin, Use, Distributor, Order Notes
 
 **Calculated columns (auto-generated):** Cost/Oz, Shot, Single, Neat Pour, Double, Total Inventory, Value
 """,
         "Wine": f"""
-**Required columns:** Product, Type, Cost, Size (oz.), Margin, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
+**Required columns:** Product, Type, Cost, Size (oz.), Margin, {loc_names}, Distributor, Order Notes
 
 **Calculated columns (auto-generated):** Total Inventory, Bottle Price, Value, BTG, Suggested Retail
 """,
         "Beer": f"""
-**Required columns:** Product, Type, Cost per Keg/Case, Size, UoM, {loc1}, {loc2}, {loc3}, Target Margin, Distributor, Order Notes
+**Required columns:** Product, Type, Cost per Keg/Case, Size, UoM, {loc_names}, Target Margin, Distributor, Order Notes
 
 **Calculated columns (auto-generated):** Cost/Unit, Menu Price, Total Inventory, Value
 """,
         "Ingredients": f"""
-**Required columns:** Product, Cost, Size/Yield, UoM, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
+**Required columns:** Product, Cost, Size/Yield, UoM, {loc_names}, Distributor, Order Notes
 
 **Calculated columns (auto-generated):** Total Inventory, Cost/Unit
 """,
         "N/A Beverages": f"""
-**Required columns:** Product, Cost, Size/Yield, UoM, {loc1}, {loc2}, {loc3}, Distributor, Order Notes
+**Required columns:** Product, Cost, Size/Yield, UoM, {loc_names}, Distributor, Order Notes
 
 **Calculated columns (auto-generated):** Total Inventory, Cost/Unit
 """,
@@ -2105,9 +2118,10 @@ def show_csv_upload_section(upload_category: str):
 
 def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     """Renders spirits inventory with split display approach."""
+    loc_cols = get_location_columns()
     loc1 = get_location_1()
     loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc3 = get_location_3()  # May be None
     
     if df is None or len(df) == 0:
         st.info("No spirits inventory data.")
@@ -2134,6 +2148,20 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     # Store original products list before filtering
     original_products = df['Product'].tolist() if 'Product' in df.columns else []
     
+    # Apply any pending edits from previous interactions BEFORE filtering
+    pending_key = 'spirits_pending_edits'
+    if pending_key in st.session_state and st.session_state[pending_key]:
+        for product, edits in st.session_state[pending_key].items():
+            mask = df['Product'] == product
+            if mask.any():
+                for col, val in edits.items():
+                    if col in df.columns:
+                        df.loc[mask, col] = val
+        # Also update the session state inventory
+        st.session_state.spirits_inventory = df.copy()
+        # Clear pending edits after applying
+        st.session_state[pending_key] = {}
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
     
     # Show filter status
@@ -2143,14 +2171,14 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
         st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
-    for col in [loc1, loc2, loc3]:
+    for col in loc_cols:
         if col not in filtered_df.columns:
             filtered_df[col] = 0.0
         if col not in st.session_state.spirits_inventory.columns:
             st.session_state.spirits_inventory[col] = 0.0
     
-    # Define editable vs calculated columns
-    editable_cols = ["Product", "Type", "Bottle Cost", "Size (oz.)", loc1, loc2, loc3, "Target Margin", "Use", "Distributor", "Order Notes"]
+    # Define editable vs calculated columns - dynamically include locations
+    editable_cols = ["Product", "Type", "Bottle Cost", "Size (oz.)"] + loc_cols + ["Target Margin", "Use", "Distributor", "Order Notes"]
     calculated_cols = ["Cost/Oz", "Shot", "Single", "Neat Pour", "Double", "Total Inventory", "Value"]
     
     # Filter to only columns that exist and warn about missing ones
@@ -2174,6 +2202,11 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     # Store products in filtered view for tracking
     filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
+    # Build column config for location columns
+    loc_column_config = {}
+    for loc in loc_cols:
+        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc}")
+    
     # Show only editable columns in the data editor
     # Disable adding/deleting rows when filtered to avoid complexity
     edited_df = st.data_editor(
@@ -2185,9 +2218,7 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
             "Bottle Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Size (oz.)": st.column_config.NumberColumn(format="%.1f"),
             "Target Margin": st.column_config.NumberColumn(format="%.0f%%"),
-            loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
-            loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
-            loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
+            **loc_column_config
         }
     )
     
@@ -2199,7 +2230,7 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
     calc_df = edited_df.copy()
     
     # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
-    numeric_cols = ["Bottle Cost", "Size (oz.)", "Target Margin", loc1, loc2, loc3]
+    numeric_cols = ["Bottle Cost", "Size (oz.)", "Target Margin"] + loc_cols
     for col in numeric_cols:
         if col in calc_df.columns:
             # Remove currency symbols and convert to numeric
@@ -2209,11 +2240,7 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
             ).fillna(0)
     
     # Total Inventory = sum of all locations
-    calc_df["Total Inventory"] = (
-        calc_df[loc1].fillna(0) + 
-        calc_df[loc2].fillna(0) + 
-        calc_df[loc3].fillna(0)
-    )
+    calc_df["Total Inventory"] = sum(calc_df[loc].fillna(0) for loc in loc_cols if loc in calc_df.columns)
     
     # Cost/Oz calculation
     if "Bottle Cost" in calc_df.columns and "Size (oz.)" in calc_df.columns:
@@ -2291,9 +2318,10 @@ def show_spirits_inventory_split(df: pd.DataFrame, filter_columns: list):
 
 def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     """Renders wine inventory with split display approach."""
+    loc_cols = get_location_columns()
     loc1 = get_location_1()
     loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc3 = get_location_3()  # May be None
     
     if df is None or len(df) == 0:
         st.info("No wine inventory data.")
@@ -2317,6 +2345,18 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     # Check if any filters are active
     is_filtered = bool(search_term) or bool(column_filters)
     
+    # Apply any pending edits from previous interactions BEFORE filtering
+    pending_key = 'wine_pending_edits'
+    if pending_key in st.session_state and st.session_state[pending_key]:
+        for product, edits in st.session_state[pending_key].items():
+            mask = df['Product'] == product
+            if mask.any():
+                for col, val in edits.items():
+                    if col in df.columns:
+                        df.loc[mask, col] = val
+        st.session_state.wine_inventory = df.copy()
+        st.session_state[pending_key] = {}
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
     
     # Show filter status
@@ -2326,13 +2366,13 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
         st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
-    for col in [loc1, loc2, loc3]:
+    for col in loc_cols:
         if col not in filtered_df.columns:
             filtered_df[col] = 0.0
         if col not in st.session_state.wine_inventory.columns:
             st.session_state.wine_inventory[col] = 0.0
     
-    editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin", loc1, loc2, loc3, "Distributor", "Order Notes"]
+    editable_cols = ["Product", "Type", "Cost", "Size (oz.)", "Margin"] + loc_cols + ["Distributor", "Order Notes"]
     calculated_cols = ["Total Inventory", "Bottle Price", "Value", "BTG", "Suggested Retail"]
     
     # Filter to only columns that exist and warn about missing ones
@@ -2356,6 +2396,11 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     # Store products in filtered view for tracking
     filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
+    # Build column config for location columns
+    loc_column_config = {}
+    for loc in loc_cols:
+        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc}")
+    
     edited_df = st.data_editor(
         filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
@@ -2365,9 +2410,7 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Size (oz.)": st.column_config.NumberColumn(format="%.1f"),
             "Margin": st.column_config.NumberColumn(format="%.0f%%"),
-            loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
-            loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
-            loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
+            **loc_column_config
         }
     )
     
@@ -2379,7 +2422,7 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
     calc_df = edited_df.copy()
     
     # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
-    numeric_cols = ["Cost", "Size (oz.)", "Margin", loc1, loc2, loc3]
+    numeric_cols = ["Cost", "Size (oz.)", "Margin"] + loc_cols
     for col in numeric_cols:
         if col in calc_df.columns:
             # Remove currency symbols and convert to numeric
@@ -2388,11 +2431,7 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
                 errors='coerce'
             ).fillna(0)
     
-    calc_df["Total Inventory"] = (
-        calc_df[loc1].fillna(0) + 
-        calc_df[loc2].fillna(0) + 
-        calc_df[loc3].fillna(0)
-    )
+    calc_df["Total Inventory"] = sum(calc_df[loc].fillna(0) for loc in loc_cols if loc in calc_df.columns)
     
     if "Cost" in calc_df.columns and "Margin" in calc_df.columns:
         calc_df["Bottle Price"] = calc_df.apply(
@@ -2452,9 +2491,10 @@ def show_wine_inventory_split(df: pd.DataFrame, filter_columns: list):
 
 def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     """Renders beer inventory with split display approach."""
+    loc_cols = get_location_columns()
     loc1 = get_location_1()
     loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc3 = get_location_3()  # May be None
     
     if df is None or len(df) == 0:
         st.info("No beer inventory data.")
@@ -2478,6 +2518,18 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     # Check if any filters are active
     is_filtered = bool(search_term) or bool(column_filters)
     
+    # Apply any pending edits from previous interactions BEFORE filtering
+    pending_key = 'beer_pending_edits'
+    if pending_key in st.session_state and st.session_state[pending_key]:
+        for product, edits in st.session_state[pending_key].items():
+            mask = df['Product'] == product
+            if mask.any():
+                for col, val in edits.items():
+                    if col in df.columns:
+                        df.loc[mask, col] = val
+        st.session_state.beer_inventory = df.copy()
+        st.session_state[pending_key] = {}
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
     
     # Show filter status
@@ -2487,13 +2539,13 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
         st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
-    for col in [loc1, loc2, loc3]:
+    for col in loc_cols:
         if col not in filtered_df.columns:
             filtered_df[col] = 0.0
         if col not in st.session_state.beer_inventory.columns:
             st.session_state.beer_inventory[col] = 0.0
     
-    editable_cols = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM", loc1, loc2, loc3, "Target Margin", "Distributor", "Order Notes"]
+    editable_cols = ["Product", "Type", "Cost per Keg/Case", "Size", "UoM"] + loc_cols + ["Target Margin", "Distributor", "Order Notes"]
     calculated_cols = ["Cost/Unit", "Menu Price", "Total Inventory", "Value"]
     
     # Filter to only columns that exist and warn about missing ones
@@ -2517,6 +2569,11 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     # Store products in filtered view for tracking
     filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
+    # Build column config for location columns
+    loc_column_config = {}
+    for loc in loc_cols:
+        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc}")
+    
     edited_df = st.data_editor(
         filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
@@ -2525,10 +2582,8 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
         column_config={
             "Cost per Keg/Case": st.column_config.NumberColumn(format="$%.2f"),
             "Size": st.column_config.NumberColumn(format="%.1f"),
-            loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
-            loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
-            loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
             "Target Margin": st.column_config.NumberColumn(format="%.0f%%"),
+            **loc_column_config
         }
     )
     
@@ -2540,7 +2595,7 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
     calc_df = edited_df.copy()
     
     # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
-    numeric_cols = ["Cost per Keg/Case", "Size", loc1, loc2, loc3, "Target Margin"]
+    numeric_cols = ["Cost per Keg/Case", "Size", "Target Margin"] + loc_cols
     for col in numeric_cols:
         if col in calc_df.columns:
             # Remove currency symbols and convert to numeric
@@ -2549,11 +2604,7 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
                 errors='coerce'
             ).fillna(0)
     
-    calc_df["Total Inventory"] = (
-        calc_df[loc1].fillna(0) + 
-        calc_df[loc2].fillna(0) + 
-        calc_df[loc3].fillna(0)
-    )
+    calc_df["Total Inventory"] = sum(calc_df[loc].fillna(0) for loc in loc_cols if loc in calc_df.columns)
     
     if "Cost per Keg/Case" in calc_df.columns and "Size" in calc_df.columns:
         calc_df["Cost/Unit"] = calc_df.apply(
@@ -2624,9 +2675,10 @@ def show_beer_inventory_split(df: pd.DataFrame, filter_columns: list):
 
 def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     """Renders ingredients inventory with split display approach."""
+    loc_cols = get_location_columns()
     loc1 = get_location_1()
     loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc3 = get_location_3()  # May be None
     
     if df is None or len(df) == 0:
         st.info("No ingredients inventory data.")
@@ -2650,6 +2702,18 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     # Check if any filters are active
     is_filtered = bool(search_term) or bool(column_filters)
     
+    # Apply any pending edits from previous interactions BEFORE filtering
+    pending_key = 'ingredients_pending_edits'
+    if pending_key in st.session_state and st.session_state[pending_key]:
+        for product, edits in st.session_state[pending_key].items():
+            mask = df['Product'] == product
+            if mask.any():
+                for col, val in edits.items():
+                    if col in df.columns:
+                        df.loc[mask, col] = val
+        st.session_state.ingredients_inventory = df.copy()
+        st.session_state[pending_key] = {}
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
     
     # Show filter status
@@ -2659,13 +2723,13 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
-    for col in [loc1, loc2, loc3]:
+    for col in loc_cols:
         if col not in filtered_df.columns:
             filtered_df[col] = 0.0
         if col not in st.session_state.ingredients_inventory.columns:
             st.session_state.ingredients_inventory[col] = 0.0
     
-    editable_cols = ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"]
+    editable_cols = ["Product", "Cost", "Size/Yield", "UoM"] + loc_cols + ["Distributor", "Order Notes"]
     calculated_cols = ["Cost/Unit", "Total Inventory", "Value"]
     
     # Filter to only columns that exist and warn about missing ones
@@ -2689,6 +2753,11 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     # Store products in filtered view for tracking
     filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
+    # Build column config for location columns
+    loc_column_config = {}
+    for loc in loc_cols:
+        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc}")
+    
     edited_df = st.data_editor(
         filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
@@ -2697,9 +2766,7 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Size/Yield": st.column_config.NumberColumn(format="%.1f"),
-            loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
-            loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
-            loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
+            **loc_column_config
         }
     )
     
@@ -2711,7 +2778,7 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
     calc_df = edited_df.copy()
     
     # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
-    numeric_cols = ["Cost", "Size/Yield", loc1, loc2, loc3]
+    numeric_cols = ["Cost", "Size/Yield"] + loc_cols
     for col in numeric_cols:
         if col in calc_df.columns:
             # Remove currency symbols and convert to numeric
@@ -2720,11 +2787,7 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
                 errors='coerce'
             ).fillna(0)
     
-    calc_df["Total Inventory"] = (
-        calc_df[loc1].fillna(0) + 
-        calc_df[loc2].fillna(0) + 
-        calc_df[loc3].fillna(0)
-    )
+    calc_df["Total Inventory"] = sum(calc_df[loc].fillna(0) for loc in loc_cols if loc in calc_df.columns)
     
     if "Cost" in calc_df.columns and "Size/Yield" in calc_df.columns:
         calc_df["Cost/Unit"] = calc_df.apply(
@@ -2779,9 +2842,10 @@ def show_ingredients_inventory_split(df: pd.DataFrame, filter_columns: list):
 
 def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
     """Renders N/A beverages inventory with split display approach."""
+    loc_cols = get_location_columns()
     loc1 = get_location_1()
     loc2 = get_location_2()
-    loc3 = get_location_3()
+    loc3 = get_location_3()  # May be None
     
     if df is None or len(df) == 0:
         st.info("No N/A beverages inventory data.")
@@ -2805,6 +2869,18 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
     # Check if any filters are active
     is_filtered = bool(search_term) or bool(column_filters)
     
+    # Apply any pending edits from previous interactions BEFORE filtering
+    pending_key = 'na_beverages_pending_edits'
+    if pending_key in st.session_state and st.session_state[pending_key]:
+        for product, edits in st.session_state[pending_key].items():
+            mask = df['Product'] == product
+            if mask.any():
+                for col, val in edits.items():
+                    if col in df.columns:
+                        df.loc[mask, col] = val
+        st.session_state.na_beverages_inventory = df.copy()
+        st.session_state[pending_key] = {}
+    
     filtered_df = filter_dataframe(df, search_term, column_filters)
     
     # Show filter status
@@ -2814,13 +2890,13 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
         st.caption(f"Showing {len(filtered_df)} of {len(df)} products")
     
     # Add location columns if they don't exist
-    for col in [loc1, loc2, loc3]:
+    for col in loc_cols:
         if col not in filtered_df.columns:
             filtered_df[col] = 0.0
         if col not in st.session_state.na_beverages_inventory.columns:
             st.session_state.na_beverages_inventory[col] = 0.0
     
-    editable_cols = ["Product", "Cost", "Size/Yield", "UoM", loc1, loc2, loc3, "Distributor", "Order Notes"]
+    editable_cols = ["Product", "Cost", "Size/Yield", "UoM"] + loc_cols + ["Distributor", "Order Notes"]
     calculated_cols = ["Cost/Unit", "Total Inventory", "Value"]
     
     # Filter to only columns that exist and warn about missing ones
@@ -2844,6 +2920,11 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
     # Store products in filtered view for tracking
     filtered_products = filtered_df['Product'].tolist() if 'Product' in filtered_df.columns else []
     
+    # Build column config for location columns
+    loc_column_config = {}
+    for loc in loc_cols:
+        loc_column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc}")
+    
     edited_df = st.data_editor(
         filtered_df[editable_cols].copy().reset_index(drop=True),
         use_container_width=True,
@@ -2852,9 +2933,7 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
         column_config={
             "Cost": st.column_config.NumberColumn(format="$%.2f"),
             "Size/Yield": st.column_config.NumberColumn(format="%.1f"),
-            loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc1}"),
-            loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory at {loc2}"),
-            loc3: st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f", min_value=0.0, step=0.5, help=f"Inventory in {loc3}"),
+            **loc_column_config
         }
     )
     
@@ -2866,7 +2945,7 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
     calc_df = edited_df.copy()
     
     # Convert numeric columns to proper numeric types (handles strings from Google Sheets)
-    numeric_cols = ["Cost", "Size/Yield", loc1, loc2, loc3]
+    numeric_cols = ["Cost", "Size/Yield"] + loc_cols
     for col in numeric_cols:
         if col in calc_df.columns:
             # Remove currency symbols and convert to numeric
@@ -2875,11 +2954,7 @@ def show_na_beverages_inventory_split(df: pd.DataFrame, filter_columns: list):
                 errors='coerce'
             ).fillna(0)
     
-    calc_df["Total Inventory"] = (
-        calc_df[loc1].fillna(0) + 
-        calc_df[loc2].fillna(0) + 
-        calc_df[loc3].fillna(0)
-    )
+    calc_df["Total Inventory"] = sum(calc_df[loc].fillna(0) for loc in loc_cols if loc in calc_df.columns)
     
     if "Cost" in calc_df.columns and "Size/Yield" in calc_df.columns:
         calc_df["Cost/Unit"] = calc_df.apply(
