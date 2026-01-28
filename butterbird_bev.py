@@ -192,6 +192,11 @@
 #           - Added "Record Inventory Values" button to save snapshot for COGS calculations
 #           - Kept Value Dashboard, category tabs, date tracking, and Type/Distributor filters
 #           - Removed A-Z sorting checkbox from inventory filters
+#           - Modified Bar Prep sync functions to only add essential data + batch cost
+#           - Calculated fields (Cost/Unit, Cost/Oz, pour prices, Value) now populated by Google Sheets
+#           - Fixed inventory value calculation to handle currency formatting from Google Sheets
+#           - Fixed display of Target Margin and other numeric fields with Google Sheets formatting
+#           - Fixed Bar Prep/Cocktail Builds cost lookup to handle currency formatting (e.g., '$0.18')
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -879,12 +884,14 @@ def clean_percentage_column(df: pd.DataFrame, column_name: str) -> pd.DataFrame:
 
 
 def calculate_total_value(df: pd.DataFrame) -> float:
-    """Calculates total value from a DataFrame."""
+    """Calculates total value from a DataFrame, handling currency formatting from Google Sheets."""
     if df is None or len(df) == 0:
         return 0.0
     if 'Value' in df.columns:
         try:
-            return float(df['Value'].sum())
+            # Clean currency formatting (e.g., "$1,234.56" -> 1234.56)
+            cleaned_values = df['Value'].apply(lambda x: clean_currency_value(x) if pd.notna(x) else 0)
+            return float(cleaned_values.sum())
         except:
             return 0.0
     return 0.0
@@ -911,6 +918,7 @@ def get_product_cost(product_name: str, amount: float = 1.0, unit: str = 'oz') -
     Returns (cost_per_unit, total_cost)
     
     Checks: Spirits (Cost/Oz), Ingredients (Cost/Unit)
+    Handles currency formatting from Google Sheets (e.g., '$0.18')
     """
     product_lower = product_name.lower().strip()
     
@@ -919,7 +927,7 @@ def get_product_cost(product_name: str, amount: float = 1.0, unit: str = 'oz') -
     if len(spirits_df) > 0 and 'Product' in spirits_df.columns:
         match = spirits_df[spirits_df['Product'].str.lower().str.strip() == product_lower]
         if len(match) > 0 and 'Cost/Oz' in match.columns:
-            cost_per_oz = float(match['Cost/Oz'].iloc[0] or 0)
+            cost_per_oz = clean_currency_value(match['Cost/Oz'].iloc[0])
             return (cost_per_oz, cost_per_oz * amount)
     
     # Check Ingredients inventory
@@ -927,7 +935,7 @@ def get_product_cost(product_name: str, amount: float = 1.0, unit: str = 'oz') -
     if len(ingredients_df) > 0 and 'Product' in ingredients_df.columns:
         match = ingredients_df[ingredients_df['Product'].str.lower().str.strip() == product_lower]
         if len(match) > 0 and 'Cost/Unit' in match.columns:
-            cost_per_unit = float(match['Cost/Unit'].iloc[0] or 0)
+            cost_per_unit = clean_currency_value(match['Cost/Unit'].iloc[0])
             return (cost_per_unit, cost_per_unit * amount)
     
     return (0.0, 0.0)
@@ -948,6 +956,9 @@ def add_syrup_to_ingredients(recipe: dict) -> bool:
     
     Returns:
         True if added successfully, False if already exists
+    
+    Note: Only adds essential data + batch cost. Calculated fields (Cost/Unit, Total Inventory, Value)
+          should be populated by Google Sheets formulas.
     """
     loc_cols = get_location_columns()
     
@@ -974,18 +985,17 @@ def add_syrup_to_ingredients(recipe: dict) -> bool:
             # Already exists, don't add duplicate
             return False
     
-    # Create new ingredient row with dynamic location columns
+    # Create new ingredient row - only essential data + batch cost
+    # Calculated fields (Cost/Unit, Total Inventory, Value) left blank for Google Sheets formulas
     new_row = {
         'Product': recipe_name,
         'Cost': round(total_cost, 2),
         'Size/Yield': yield_oz,
         'UoM': 'oz',
-        'Cost/Unit': round(total_cost / yield_oz, 4) if yield_oz > 0 else 0,
-        'Total Inventory': 0.0,
         'Distributor': 'House-made',
         'Order Notes': 'Bar Prep Recipe'
     }
-    # Add location columns dynamically
+    # Add location columns dynamically (set to 0)
     for loc in loc_cols:
         new_row[loc] = 0.0
     
@@ -1031,6 +1041,9 @@ def add_batched_cocktail_to_spirits(recipe: dict) -> bool:
     
     Returns:
         True if added successfully, False if already exists
+    
+    Note: Only adds essential data + batch cost. Calculated fields (Cost/Oz, Shot, Single, 
+          Neat Pour, Double, Total Inventory, Value) should be populated by Google Sheets formulas.
     """
     loc_cols = get_location_columns()
     
@@ -1043,7 +1056,6 @@ def add_batched_cocktail_to_spirits(recipe: dict) -> bool:
     
     # Calculate total batch cost from ingredients
     total_cost = calculate_recipe_cost(ingredients_list)
-    cost_per_oz = total_cost / yield_oz if yield_oz > 0 else 0
     
     # Initialize spirits inventory if needed
     if 'spirits_inventory' not in st.session_state:
@@ -1059,17 +1071,11 @@ def add_batched_cocktail_to_spirits(recipe: dict) -> bool:
             return False
     
     # Get default margin from config
-    default_margin = CLIENT_CONFIG.get('default_margin', 80)
+    default_margin = get_default_margin('spirits')
     
-    # Calculate pour prices based on cost/oz and margin
-    # Pour price = cost / (1 - margin/100)
-    margin_multiplier = 1 / (1 - default_margin / 100) if default_margin < 100 else 5
-    shot_price = round(cost_per_oz * 1.5 * margin_multiplier, 2)  # 1.5 oz shot
-    single_price = round(cost_per_oz * 1.5 * margin_multiplier, 2)  # 1.5 oz single
-    neat_price = round(cost_per_oz * 2.0 * margin_multiplier, 2)  # 2 oz neat
-    double_price = round(cost_per_oz * 3.0 * margin_multiplier, 2)  # 3 oz double
-    
-    # Create new spirits row with dynamic location columns
+    # Create new spirits row - only essential data + batch cost
+    # Calculated fields (Cost/Oz, Shot, Single, Neat Pour, Double, Total Inventory, Value) 
+    # left blank for Google Sheets formulas
     new_row = {
         'Product': recipe_name,
         'Type': 'Batched Cocktail',
@@ -1078,16 +1084,9 @@ def add_batched_cocktail_to_spirits(recipe: dict) -> bool:
         'Target Margin': default_margin,
         'Use': 'Batched',
         'Distributor': 'House-made',
-        'Order Notes': 'Bar Prep Recipe',
-        'Cost/Oz': round(cost_per_oz, 4),
-        'Shot': shot_price,
-        'Single': single_price,
-        'Neat Pour': neat_price,
-        'Double': double_price,
-        'Total Inventory': 0.0,
-        'Value': 0.0
+        'Order Notes': 'Bar Prep Recipe'
     }
-    # Add location columns dynamically
+    # Add location columns dynamically (set to 0)
     for loc in loc_cols:
         new_row[loc] = 0.0
     
@@ -2079,6 +2078,28 @@ def show_inventory_readonly(df: pd.DataFrame, category_name: str, filter_columns
         st.info(f"No {category_name.lower()} inventory data. Add products in Google Sheets and click 'Refresh Data'.")
         return
     
+    # Create a copy to avoid modifying original data
+    df = df.copy()
+    
+    # Clean numeric columns that may have formatting from Google Sheets
+    currency_columns = ['Bottle Cost', 'Cost', 'Cost per Keg/Case', 'Cost/Oz', 'Cost/Unit', 
+                       'Shot', 'Single', 'Neat Pour', 'Double', 'Bottle Price', 'BTG', 
+                       'Menu Price', 'Value']
+    percentage_columns = ['Target Margin', 'Margin']
+    numeric_columns = ['Size (oz.)', 'Size', 'Size/Yield', 'Total Inventory'] + loc_cols
+    
+    for col in currency_columns:
+        if col in df.columns:
+            df[col] = df[col].apply(clean_currency_value)
+    
+    for col in percentage_columns:
+        if col in df.columns:
+            df[col] = df[col].apply(clean_percentage_value)
+    
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    
     # Build filter UI
     st.markdown(f"#### Search & Filter {category_name}")
     filter_cols = st.columns([2] + [1] * len(filter_columns))
@@ -2138,6 +2159,7 @@ def show_inventory_readonly(df: pd.DataFrame, category_name: str, filter_columns
         "Menu Price": st.column_config.NumberColumn(format="$%.2f"),
         "Value": st.column_config.NumberColumn(format="$%.2f"),
         "Size (oz.)": st.column_config.NumberColumn(format="%.1f"),
+        "Size/Yield": st.column_config.NumberColumn(format="%.1f"),
         "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
         "Target Margin": st.column_config.NumberColumn(format="%.0f%%"),
         "Margin": st.column_config.NumberColumn(format="%.0f%%"),
@@ -2157,7 +2179,7 @@ def show_inventory_readonly(df: pd.DataFrame, category_name: str, filter_columns
     
     # Show total value
     if "Value" in filtered_df.columns:
-        total_value = pd.to_numeric(filtered_df["Value"], errors='coerce').fillna(0).sum()
+        total_value = filtered_df["Value"].sum()
         st.metric(f"💰 Total {category_name} Value", format_currency(total_value))
 
 
