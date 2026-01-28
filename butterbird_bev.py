@@ -180,6 +180,9 @@
 #           - Added Distributor Analytics with donut chart and summary table
 #           - Added Export Analytics section (CSV order data + text summary report)
 #           - Replaced bar chart with Top Products dropdowns for cleaner UX
+#           - Added backwards compatibility check for 'Quantity Ordered' column in order history
+#           - Fixed None column display when only 2 locations configured (loc3 handling)
+#           - Reordered Weekly Inventory columns: Product, Category, Locations, Par, Total, Status, Unit, Unit Cost, Distributor, Order Deals
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -3080,20 +3083,24 @@ def show_ordering():
                                 # Get the product details from filtered_available
                                 selected_row = filtered_available[filtered_available['Display'] == selected_display].iloc[0]
                                 
-                                # V3.8: Create new row with configurable location column names
-                                new_row = pd.DataFrame([{
+                                # Create new row with configurable location column names
+                                new_row_data = {
                                     'Product': selected_row['Product'],
                                     'Category': selected_row['Category'],
                                     'Par': new_par,
                                     loc1: 0,
                                     loc2: 0,
-                                    loc3: 0,
                                     'Total Current Inventory': 0,
                                     'Unit': new_unit,
                                     'Unit Cost': selected_row['Cost'],
                                     'Distributor': selected_row['Distributor'],
                                     'Order Notes': ''
-                                }])
+                                }
+                                # Only add loc3 if it's configured
+                                if loc3:
+                                    new_row_data[loc3] = 0
+                                
+                                new_row = pd.DataFrame([new_row_data])
                                 
                                 # Add to weekly inventory
                                 st.session_state.weekly_inventory = pd.concat(
@@ -3120,6 +3127,13 @@ def show_ordering():
             st.markdown("**📤 Upload CSV to populate Weekly Inventory:**")
             
             with st.expander("ℹ️ CSV Format Requirements", expanded=False):
+                # Build location rows for documentation
+                loc_docs = f"""| {loc1} | Optional | Inventory at {loc1} (default: 0) |
+                | {loc2} | Optional | Inventory at {loc2} (default: 0) |"""
+                if loc3:
+                    loc_docs += f"""
+                | {loc3} | Optional | Inventory in {loc3} (default: 0) |"""
+                
                 st.markdown(f"""
                 Your CSV file should include the following columns:
                 
@@ -3128,9 +3142,7 @@ def show_ordering():
                 | Product | ✅ Yes | Product name |
                 | Category | ✅ Yes | Spirits, Wine, Beer, or Ingredients |
                 | Par | ✅ Yes | Par level (number) |
-                | {loc1} | Optional | Inventory at {loc1} (default: 0) |
-                | {loc2} | Optional | Inventory at {loc2} (default: 0) |
-                | {loc3} | Optional | Inventory in {loc3} (default: 0) |
+                {loc_docs}
                 | Unit | Optional | Bottle, Case, Sixtel, Keg, Each, Quart, Gallon (default: Bottle) |
                 | Unit Cost | Optional | Cost per unit (default: 0) |
                 | Distributor | Optional | Distributor name (default: blank) |
@@ -3140,18 +3152,21 @@ def show_ordering():
                 """)
                 
                 # Download template button with configurable location names
-                template_df = pd.DataFrame({
+                template_data = {
                     'Product': ['Example Product 1', 'Example Product 2'],
                     'Category': ['Spirits', 'Beer'],
                     'Par': [3, 2],
                     loc1: [1, 0.5],
                     loc2: [1, 0.5],
-                    loc3: [0, 0],
                     'Unit': ['Bottle', 'Case'],
                     'Unit Cost': [25.00, 24.00],
                     'Distributor': ['Breakthru', 'Frank Beer'],
                     'Order Notes': ['', '']
-                })
+                }
+                if loc3:
+                    template_data[loc3] = [0, 0]
+                
+                template_df = pd.DataFrame(template_data)
                 
                 csv_template = template_df.to_csv(index=False)
                 st.download_button(
@@ -3200,12 +3215,12 @@ def show_ordering():
                                     # Prepare the data with all required columns
                                     import_df = new_products.copy()
                                     
-                                    # V3.8: Add default values for configurable location columns
+                                    # Add default values for configurable location columns
                                     if loc1 not in import_df.columns:
                                         import_df[loc1] = 0
                                     if loc2 not in import_df.columns:
                                         import_df[loc2] = 0
-                                    if loc3 not in import_df.columns:
+                                    if loc3 and loc3 not in import_df.columns:
                                         import_df[loc3] = 0
                                     if 'Unit' not in import_df.columns:
                                         import_df['Unit'] = 'Bottle'
@@ -3220,18 +3235,26 @@ def show_ordering():
                                         import_df['Order Notes'] = ''
                                     
                                     # Calculate Total Current Inventory from configurable locations
-                                    import_df['Total Current Inventory'] = import_df[loc1] + import_df[loc2] + import_df[loc3]
+                                    if loc3 and loc3 in import_df.columns:
+                                        import_df['Total Current Inventory'] = import_df[loc1] + import_df[loc2] + import_df[loc3]
+                                    else:
+                                        import_df['Total Current Inventory'] = import_df[loc1] + import_df[loc2]
                                     
                                     # Ensure numeric columns are proper types
                                     import_df['Par'] = pd.to_numeric(import_df['Par'], errors='coerce').fillna(0)
                                     import_df[loc1] = pd.to_numeric(import_df[loc1], errors='coerce').fillna(0)
                                     import_df[loc2] = pd.to_numeric(import_df[loc2], errors='coerce').fillna(0)
-                                    import_df[loc3] = pd.to_numeric(import_df[loc3], errors='coerce').fillna(0)
+                                    if loc3 and loc3 in import_df.columns:
+                                        import_df[loc3] = pd.to_numeric(import_df[loc3], errors='coerce').fillna(0)
                                     import_df['Unit Cost'] = pd.to_numeric(import_df['Unit Cost'], errors='coerce').fillna(0)
                                     
                                     # Select and order columns to match existing structure
-                                    cols_to_keep = ['Product', 'Category', 'Par', loc1, loc2, loc3,
-                                                   'Total Current Inventory', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
+                                    cols_to_keep = ['Product', 'Category', 'Par', loc1, loc2]
+                                    if loc3:
+                                        cols_to_keep.append(loc3)
+                                    cols_to_keep.extend(['Total Current Inventory', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes'])
+                                    # Only keep columns that exist
+                                    cols_to_keep = [c for c in cols_to_keep if c in import_df.columns]
                                     import_df = import_df[cols_to_keep]
                                     
                                     # Append to weekly inventory
@@ -3276,11 +3299,14 @@ def show_ordering():
                 weekly_inv[loc1] = 0
         if loc2 not in weekly_inv.columns:
             weekly_inv[loc2] = 0
-        if loc3 not in weekly_inv.columns:
+        if loc3 and loc3 not in weekly_inv.columns:
             weekly_inv[loc3] = 0
         
         # Calculate Total Current Inventory from configurable locations
-        weekly_inv['Total Current Inventory'] = weekly_inv[loc1] + weekly_inv[loc2] + weekly_inv[loc3]
+        if loc3 and loc3 in weekly_inv.columns:
+            weekly_inv['Total Current Inventory'] = weekly_inv[loc1] + weekly_inv[loc2] + weekly_inv[loc3]
+        else:
+            weekly_inv['Total Current Inventory'] = weekly_inv[loc1] + weekly_inv[loc2]
         
         # Status based on Total Current Inventory vs Par
         weekly_inv['Status'] = weekly_inv.apply(
@@ -3322,41 +3348,51 @@ def show_ordering():
             st.caption(f"Showing {len(filtered_weekly_inv)} of {len(weekly_inv)} products")
         
         # =====================================================================
-        # V3.8: DISPLAY TABLE WITH CONFIGURABLE LOCATION COLUMNS
+        # DISPLAY TABLE WITH CONFIGURABLE LOCATION COLUMNS
         # =====================================================================
         
         display_df = filtered_weekly_inv.copy()
         display_df.insert(0, 'Select', False)  # Add checkbox column at the beginning
         
-        # V3.8: Use configurable location names in display columns
-        display_cols = ['Select', 'Product', 'Category', 'Par', loc1, loc2, loc3,
-                       'Total Current Inventory', 'Status', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes']
+        # Build display columns list, excluding None locations
+        # Order: Select, Product, Category, loc1, loc2, Par, Total, Status, Unit, Unit Cost, Distributor, Order Notes
+        display_cols = ['Select', 'Product', 'Category', loc1, loc2]
+        if loc3:  # Only add loc3 if it's configured (not None)
+            display_cols.append(loc3)
+        display_cols.extend(['Par', 'Total Current Inventory', 'Status', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes'])
         
-        # Only include columns that exist
-        display_cols = [c for c in display_cols if c in display_df.columns]
+        # Only include columns that exist in the dataframe
+        display_cols = [c for c in display_cols if c is not None and c in display_df.columns]
+        
+        # Build column config dynamically
+        column_config = {
+            "Select": st.column_config.CheckboxColumn("🗑️", help="Select rows to delete", width="small"),
+            "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
+            loc1: st.column_config.NumberColumn(f"📍 {loc1}", min_value=0, step=0.5),
+            loc2: st.column_config.NumberColumn(f"📍 {loc2}", min_value=0, step=0.5),
+            "Total Current Inventory": st.column_config.NumberColumn("Total", disabled=True),
+            "Par": st.column_config.NumberColumn(min_value=0, step=1),
+            "Status": st.column_config.TextColumn(disabled=True),
+            "Order Notes": st.column_config.TextColumn("Order Deals", disabled=True),
+        }
+        # Only add loc3 config if it exists
+        if loc3:
+            column_config[loc3] = st.column_config.NumberColumn(f"📍 {loc3}", min_value=0, step=0.5)
         
         edited_weekly = st.data_editor(
             display_df[display_cols],
             use_container_width=True,
             hide_index=True,
             key="weekly_inv_editor",
-            column_config={
-                "Select": st.column_config.CheckboxColumn("🗑️", help="Select rows to delete", width="small"),
-                "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
-                # V3.8: Configurable location column labels
-                loc1: st.column_config.NumberColumn(f"📍 {loc1}", min_value=0, step=0.5),
-                loc2: st.column_config.NumberColumn(f"📍 {loc2}", min_value=0, step=0.5),
-                loc3: st.column_config.NumberColumn(f"📍 {loc3}", min_value=0, step=0.5),
-                "Total Current Inventory": st.column_config.NumberColumn("Total", disabled=True),
-                "Par": st.column_config.NumberColumn(min_value=0, step=1),
-                "Status": st.column_config.TextColumn(disabled=True),
-                "Order Notes": st.column_config.TextColumn("Order Deals", disabled=True),
-            },
+            column_config=column_config,
             disabled=["Product", "Category", "Status", "Total Current Inventory", "Unit", "Unit Cost", "Distributor", "Order Notes"]
         )
         
         # Recalculate Total Current Inventory in real-time from edited values
-        edited_weekly['Total Current Inventory'] = edited_weekly[loc1] + edited_weekly[loc2] + edited_weekly[loc3]
+        if loc3 and loc3 in edited_weekly.columns:
+            edited_weekly['Total Current Inventory'] = edited_weekly[loc1] + edited_weekly[loc2] + edited_weekly[loc3]
+        else:
+            edited_weekly['Total Current Inventory'] = edited_weekly[loc1] + edited_weekly[loc2]
         edited_weekly['Status'] = edited_weekly.apply(
             lambda row: "🔴 Order" if row['Total Current Inventory'] < row['Par'] else "✅ OK", axis=1
         )
@@ -3374,8 +3410,12 @@ def show_ordering():
                     mask = st.session_state.weekly_inventory['Product'] == row['Product']
                     st.session_state.weekly_inventory.loc[mask, loc1] = row[loc1]
                     st.session_state.weekly_inventory.loc[mask, loc2] = row[loc2]
-                    st.session_state.weekly_inventory.loc[mask, loc3] = row[loc3]
-                    st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = row[loc1] + row[loc2] + row[loc3]
+                    if loc3 and loc3 in row:
+                        st.session_state.weekly_inventory.loc[mask, loc3] = row[loc3]
+                        total_inv = row[loc1] + row[loc2] + row[loc3]
+                    else:
+                        total_inv = row[loc1] + row[loc2]
+                    st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = total_inv
                     st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
                 
                 # Save weekly inventory to Google Sheets for persistence
@@ -3391,8 +3431,12 @@ def show_ordering():
                     mask = st.session_state.weekly_inventory['Product'] == row['Product']
                     st.session_state.weekly_inventory.loc[mask, loc1] = row[loc1]
                     st.session_state.weekly_inventory.loc[mask, loc2] = row[loc2]
-                    st.session_state.weekly_inventory.loc[mask, loc3] = row[loc3]
-                    st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = row[loc1] + row[loc2] + row[loc3]
+                    if loc3 and loc3 in row:
+                        st.session_state.weekly_inventory.loc[mask, loc3] = row[loc3]
+                        total_inv = row[loc1] + row[loc2] + row[loc3]
+                    else:
+                        total_inv = row[loc1] + row[loc2]
+                    st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = total_inv
                     st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
                 
                 # Generate order based on updated inventory
@@ -3878,6 +3922,17 @@ def show_ordering():
             
             # Convert Week to datetime for filtering
             analytics_data = order_history.copy()
+            
+            # Ensure Quantity Ordered column exists (backwards compatibility)
+            if 'Quantity Ordered' not in analytics_data.columns:
+                # Try to derive from other possible column names
+                if 'Order Quantity' in analytics_data.columns:
+                    analytics_data['Quantity Ordered'] = analytics_data['Order Quantity']
+                elif 'Qty' in analytics_data.columns:
+                    analytics_data['Quantity Ordered'] = analytics_data['Qty']
+                else:
+                    # Default to 0 if no quantity column found
+                    analytics_data['Quantity Ordered'] = 0
             analytics_data['Week'] = pd.to_datetime(analytics_data['Week'])
             
             min_date = analytics_data['Week'].min().date()
