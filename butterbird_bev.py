@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.15
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.16
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -183,6 +183,15 @@
 #           - Added backwards compatibility check for 'Quantity Ordered' column in order history
 #           - Fixed None column display when only 2 locations configured (loc3 handling)
 #           - Reordered Weekly Inventory columns: Product, Category, Locations, Par, Total, Status, Unit, Unit Cost, Distributor, Order Deals
+#   bb_V2.16 - Simplified Master Inventory module:
+#           - Master Inventory now displays read-only data from Google Sheets
+#           - Removed CSV upload functionality (manage data directly in Google Sheets)
+#           - Removed Add/Delete rows functionality
+#           - Removed in-app calculation logic (calculations now done in Google Sheets)
+#           - Added "Refresh Data" button to reload inventory from Google Sheets
+#           - Added "Record Inventory Values" button to save snapshot for COGS calculations
+#           - Kept Value Dashboard, category tabs, date tracking, and Type/Distributor filters
+#           - Removed A-Z sorting checkbox from inventory filters
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -1927,11 +1936,33 @@ def show_home():
 
 
 # =============================================================================
-# PAGE: MASTER INVENTORY - Using CLIENT_CONFIG locations
+# PAGE: MASTER INVENTORY - Read-Only Display with Google Sheets Integration
 # =============================================================================
 
+def refresh_inventory_from_sheets():
+    """Refreshes all inventory data from Google Sheets."""
+    if not is_google_sheets_configured():
+        st.warning("Google Sheets not configured.")
+        return False
+    
+    inventory_loaders = {
+        'spirits_inventory': get_sheet_name('spirits_inventory'),
+        'wine_inventory': get_sheet_name('wine_inventory'),
+        'beer_inventory': get_sheet_name('beer_inventory'),
+        'ingredients_inventory': get_sheet_name('ingredients_inventory'),
+        'na_beverages_inventory': get_sheet_name('na_beverages_inventory'),
+    }
+    
+    for key, sheet_name in inventory_loaders.items():
+        saved_data = load_dataframe_from_sheets(sheet_name)
+        if saved_data is not None and len(saved_data) > 0:
+            st.session_state[key] = saved_data
+    
+    return True
+
+
 def show_inventory():
-    """Renders the Master Inventory module."""
+    """Renders the Master Inventory module (read-only display)."""
     show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
@@ -1962,35 +1993,172 @@ def show_inventory():
             st.metric(label=label, value=format_currency(val))
     
     st.caption(f"Last inventory recorded: {st.session_state.get('last_inventory_date', 'N/A')}")
+    
+    # Action buttons
+    col_refresh, col_record, col_spacer = st.columns([1, 1, 4])
+    
+    with col_refresh:
+        if st.button("🔄 Refresh Data", key="refresh_inventory", help="Reload inventory data from Google Sheets"):
+            if refresh_inventory_from_sheets():
+                st.success("✅ Data refreshed from Google Sheets!")
+                st.rerun()
+    
+    with col_record:
+        if st.button("📊 Record Inventory Values", key="record_inventory", type="primary", help="Save current inventory values for COGS calculations"):
+            save_inventory_snapshot()
+            st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
+            st.success(f"✅ Inventory values recorded for {datetime.now().strftime('%Y-%m-%d')}!")
+            st.rerun()
+    
     st.markdown("---")
     
     # Tabs
     tab_spirits, tab_wine, tab_beer, tab_ingredients, tab_na_beverages = st.tabs(["🥃 Spirits", "🍷 Wine", "🍺 Beer", "🧴 Ingredients", "🥤 N/A Beverages"])
     
     with tab_spirits:
-        show_spirits_inventory_split(st.session_state.get('spirits_inventory', pd.DataFrame()), ["Type", "Distributor", "Use"])
-        with st.expander("📤 Upload Spirits Inventory (CSV)", expanded=False):
-            show_csv_upload_section("Spirits")
+        show_inventory_readonly(
+            df=st.session_state.get('spirits_inventory', pd.DataFrame()),
+            category_name="Spirits",
+            filter_columns=["Type", "Distributor", "Use"],
+            display_columns=["Product", "Type", "Bottle Cost", "Size (oz.)", "Main Bar", "Storage", 
+                           "Target Margin", "Use", "Distributor", "Order Notes", "Cost/Oz", 
+                           "Shot", "Single", "Neat Pour", "Double", "Total Inventory", "Value"]
+        )
     
     with tab_wine:
-        show_wine_inventory_split(st.session_state.get('wine_inventory', pd.DataFrame()), ["Type", "Distributor"])
-        with st.expander("📤 Upload Wine Inventory (CSV)", expanded=False):
-            show_csv_upload_section("Wine")
+        show_inventory_readonly(
+            df=st.session_state.get('wine_inventory', pd.DataFrame()),
+            category_name="Wine",
+            filter_columns=["Type", "Distributor"],
+            display_columns=["Product", "Type", "Cost", "Size (oz.)", "Margin", "Main Bar", "Storage",
+                           "Distributor", "Order Notes", "Total Inventory", "Bottle Price", "Value", "BTG"]
+        )
     
     with tab_beer:
-        show_beer_inventory_split(st.session_state.get('beer_inventory', pd.DataFrame()), ["Type", "Distributor"])
-        with st.expander("📤 Upload Beer Inventory (CSV)", expanded=False):
-            show_csv_upload_section("Beer")
+        show_inventory_readonly(
+            df=st.session_state.get('beer_inventory', pd.DataFrame()),
+            category_name="Beer",
+            filter_columns=["Type", "Distributor"],
+            display_columns=["Product", "Type", "Cost per Keg/Case", "Size", "UoM", "Main Bar", "Storage",
+                           "Target Margin", "Distributor", "Order Notes", "Cost/Unit", "Menu Price", 
+                           "Total Inventory", "Value"]
+        )
     
     with tab_ingredients:
-        show_ingredients_inventory_split(st.session_state.get('ingredients_inventory', pd.DataFrame()), ["Distributor"])
-        with st.expander("📤 Upload Ingredients Inventory (CSV)", expanded=False):
-            show_csv_upload_section("Ingredients")
+        show_inventory_readonly(
+            df=st.session_state.get('ingredients_inventory', pd.DataFrame()),
+            category_name="Ingredients",
+            filter_columns=["Distributor"],
+            display_columns=["Product", "Cost", "Size/Yield", "UoM", "Main Bar", "Storage",
+                           "Distributor", "Order Notes", "Cost/Unit", "Total Inventory", "Value"]
+        )
     
     with tab_na_beverages:
-        show_na_beverages_inventory_split(st.session_state.get('na_beverages_inventory', pd.DataFrame()), ["Distributor"])
-        with st.expander("📤 Upload N/A Beverages Inventory (CSV)", expanded=False):
-            show_csv_upload_section("N/A Beverages")
+        show_inventory_readonly(
+            df=st.session_state.get('na_beverages_inventory', pd.DataFrame()),
+            category_name="N/A Beverages",
+            filter_columns=["Distributor"],
+            display_columns=["Product", "Cost", "Size/Yield", "UoM", "Main Bar", "Storage",
+                           "Distributor", "Order Notes", "Cost/Unit", "Total Inventory", "Value"]
+        )
+
+
+def show_inventory_readonly(df: pd.DataFrame, category_name: str, filter_columns: list, display_columns: list):
+    """
+    Renders a read-only inventory display with filters.
+    
+    Args:
+        df: The inventory DataFrame
+        category_name: Name of the category (for unique keys)
+        filter_columns: List of columns to create filters for
+        display_columns: List of columns to display (in order)
+    """
+    loc_cols = get_location_columns()
+    
+    if df is None or len(df) == 0:
+        st.info(f"No {category_name.lower()} inventory data. Add products in Google Sheets and click 'Refresh Data'.")
+        return
+    
+    # Build filter UI
+    st.markdown(f"#### Search & Filter {category_name}")
+    filter_cols = st.columns([2] + [1] * len(filter_columns))
+    
+    with filter_cols[0]:
+        search_term = st.text_input("🔍 Search", key=f"search_{category_name.lower()}", placeholder="Type to search...")
+    
+    column_filters = {}
+    for i, col_name in enumerate(filter_columns):
+        with filter_cols[i + 1]:
+            if col_name in df.columns:
+                unique_values = sorted([str(v) for v in df[col_name].dropna().unique().tolist()])
+                selected = st.multiselect(f"Filter by {col_name}", options=unique_values, key=f"filter_{category_name.lower()}_{col_name}")
+                if selected:
+                    column_filters[col_name] = selected
+    
+    # Check if any filters are active
+    is_filtered = bool(search_term) or bool(column_filters)
+    
+    # Apply filters
+    filtered_df = filter_dataframe(df, search_term, column_filters)
+    
+    # Show filter status
+    if is_filtered:
+        st.caption(f"🔍 Showing {len(filtered_df)} of {len(df)} products (filtered)")
+    else:
+        st.caption(f"Showing {len(filtered_df)} products")
+    
+    # Determine which columns to display (only those that exist in the dataframe)
+    # Also handle dynamic location column names
+    actual_display_cols = []
+    for col in display_columns:
+        if col in filtered_df.columns:
+            actual_display_cols.append(col)
+        elif col == "Main Bar" and loc_cols[0] in filtered_df.columns:
+            actual_display_cols.append(loc_cols[0])
+        elif col == "Storage" and len(loc_cols) > 1 and loc_cols[1] in filtered_df.columns:
+            actual_display_cols.append(loc_cols[1])
+    
+    if not actual_display_cols:
+        st.warning("No displayable columns found in the data.")
+        return
+    
+    # Build column config for formatting
+    column_config = {
+        "Bottle Cost": st.column_config.NumberColumn(format="$%.2f"),
+        "Cost": st.column_config.NumberColumn(format="$%.2f"),
+        "Cost per Keg/Case": st.column_config.NumberColumn(format="$%.2f"),
+        "Cost/Oz": st.column_config.NumberColumn(format="$%.2f"),
+        "Cost/Unit": st.column_config.NumberColumn(format="$%.2f"),
+        "Shot": st.column_config.NumberColumn(format="$%.0f"),
+        "Single": st.column_config.NumberColumn(format="$%.0f"),
+        "Neat Pour": st.column_config.NumberColumn(format="$%.0f"),
+        "Double": st.column_config.NumberColumn(format="$%.0f"),
+        "Bottle Price": st.column_config.NumberColumn(format="$%.2f"),
+        "BTG": st.column_config.NumberColumn(format="$%.2f"),
+        "Menu Price": st.column_config.NumberColumn(format="$%.2f"),
+        "Value": st.column_config.NumberColumn(format="$%.2f"),
+        "Size (oz.)": st.column_config.NumberColumn(format="%.1f"),
+        "Total Inventory": st.column_config.NumberColumn(format="%.1f"),
+        "Target Margin": st.column_config.NumberColumn(format="%.0f%%"),
+        "Margin": st.column_config.NumberColumn(format="%.0f%%"),
+    }
+    
+    # Add location column configs
+    for loc in loc_cols:
+        column_config[loc] = st.column_config.NumberColumn(f"📍 {loc}", format="%.1f")
+    
+    # Display read-only dataframe
+    st.dataframe(
+        filtered_df[actual_display_cols].reset_index(drop=True),
+        use_container_width=True,
+        hide_index=True,
+        column_config=column_config
+    )
+    
+    # Show total value
+    if "Value" in filtered_df.columns:
+        total_value = pd.to_numeric(filtered_df["Value"], errors='coerce').fillna(0).sum()
+        st.metric(f"💰 Total {category_name} Value", format_currency(total_value))
 
 
 def show_csv_upload_section(upload_category: str):
