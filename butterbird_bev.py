@@ -197,6 +197,13 @@
 #           - Fixed inventory value calculation to handle currency formatting from Google Sheets
 #           - Fixed display of Target Margin and other numeric fields with Google Sheets formatting
 #           - Fixed Bar Prep/Cocktail Builds cost lookup to handle currency formatting (e.g., '$0.18')
+#           - Weekly Order Step 1 now read-only view of Google Sheets data
+#           - Added "Refresh Order Data" button in Step 1
+#           - Removed Add Products expander, CSV upload, Update Table, and Delete buttons from Step 1
+#           - Step 2 Order Quantity is the only editable field
+#           - Added "Add Items to Order" expander in Step 2 (from Master Inventory or New Product)
+#           - New Products automatically marked with 🆕 flag in Step 2 and Step 3
+#           - Fixed currency formatting handling in generate_order_from_inventory
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -1222,20 +1229,15 @@ def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
     
     orders = []
     for _, row in weekly_inv.iterrows():
-        par = row.get('Par', row.get('Par Level', 0))
+        par = clean_currency_value(row.get('Par', row.get('Par Level', 0)))
         
         # Calculate total inventory from configurable location columns
-        # First try the new location column names, then fall back to old names
-        loc1_val = row.get(loc1, row.get('Bar Inventory', 0))
-        loc2_val = row.get(loc2, row.get('Storage Inventory', 0))
-        
-        # Sum all configured locations
-        total_inv = row.get('Total Current Inventory', 
-                          row.get('Total Inventory', sum(row.get(loc, 0) for loc in loc_cols)))
+        total_inv = clean_currency_value(row.get('Total Current Inventory', 
+                          row.get('Total Inventory', sum(clean_currency_value(row.get(loc, 0)) for loc in loc_cols))))
         
         if total_inv < par:
             order_qty = par - total_inv
-            unit_cost = row.get('Unit Cost', 0)
+            unit_cost = clean_currency_value(row.get('Unit Cost', 0))
             orders.append({
                 'Product': row['Product'],
                 'Category': row.get('Category', 'Unknown'),
@@ -1246,6 +1248,7 @@ def generate_order_from_inventory(weekly_inv: pd.DataFrame) -> pd.DataFrame:
                 'Unit Cost': unit_cost,
                 'Order Value': order_qty * unit_cost,
                 'Distributor': row.get('Distributor', 'N/A'),
+                'New Product': False,
             })
     
     return pd.DataFrame(orders) if orders else pd.DataFrame()
@@ -3204,278 +3207,24 @@ def show_ordering():
     ])
     
     with tab_build:
-        st.markdown("### Step 1: Update Weekly Inventory")
-        st.markdown("Enter your current inventory counts below. Products below par will be added to the order.")
+        st.markdown("### Step 1: Weekly Inventory Review")
+        st.markdown("Review your current weekly inventory from Google Sheets. Products below par will be added to the order.")
         
         # =====================================================================
-        # ADD/REMOVE PRODUCTS FROM WEEKLY INVENTORY
-        # =====================================================================
-        
-        with st.expander("➕ Add Products to your Weekly Order Inventory", expanded=False):
-            st.markdown("**Add a product from Master Inventory:**")
-            
-            # Get products not already in weekly inventory
-            available_products = get_products_not_in_weekly_inventory()
-            
-            if len(available_products) > 0:
-                add_categories = sorted(available_products['Category'].unique().tolist())
-                
-                col_cat_filter, col_spacer = st.columns([2, 4])
-                with col_cat_filter:
-                    add_category_filter = st.selectbox(
-                        "🔍 Filter by Category:",
-                        options=["All Categories"] + add_categories,
-                        key="add_product_category_filter"
-                    )
-                
-                # Filter available products by selected category
-                if add_category_filter != "All Categories":
-                    filtered_available = available_products[available_products['Category'] == add_category_filter].copy()
-                else:
-                    filtered_available = available_products.copy()
-                
-                if len(filtered_available) > 0:
-                    col_select, col_par, col_unit, col_add = st.columns([3, 1, 1, 1])
-                    
-                    with col_select:
-                        # Create display options with category
-                        filtered_available['Display'] = filtered_available['Product'] + " (" + filtered_available['Category'] + ")"
-                        product_options = filtered_available['Display'].tolist()
-                        
-                        selected_display = st.selectbox(
-                            "Select Product:",
-                            options=[""] + product_options,
-                            key="add_weekly_product"
-                        )
-                    
-                    with col_par:
-                        new_par = st.number_input(
-                            "Par Level:",
-                            min_value=1,
-                            value=2,
-                            step=1,
-                            key="add_weekly_par"
-                        )
-                    
-                    with col_unit:
-                        unit_options = ["Bottle", "Case", "Sixtel", "Keg", "Each", "Quart", "Gallon"]
-                        new_unit = st.selectbox(
-                            "Unit:",
-                            options=unit_options,
-                            key="add_weekly_unit"
-                        )
-                    
-                    with col_add:
-                        st.write("")  # Spacer
-                        st.write("")  # Spacer
-                        if st.button("➕ Add", key="btn_add_weekly_product"):
-                            if selected_display:
-                                # Get the product details from filtered_available
-                                selected_row = filtered_available[filtered_available['Display'] == selected_display].iloc[0]
-                                
-                                # Create new row with configurable location column names
-                                new_row_data = {
-                                    'Product': selected_row['Product'],
-                                    'Category': selected_row['Category'],
-                                    'Par': new_par,
-                                    loc1: 0,
-                                    loc2: 0,
-                                    'Total Current Inventory': 0,
-                                    'Unit': new_unit,
-                                    'Unit Cost': selected_row['Cost'],
-                                    'Distributor': selected_row['Distributor'],
-                                    'Order Notes': ''
-                                }
-                                # Only add loc3 if it's configured
-                                if loc3:
-                                    new_row_data[loc3] = 0
-                                
-                                new_row = pd.DataFrame([new_row_data])
-                                
-                                # Add to weekly inventory
-                                st.session_state.weekly_inventory = pd.concat(
-                                    [st.session_state.weekly_inventory, new_row],
-                                    ignore_index=True
-                                )
-                                
-                                # Save changes
-                                save_all_inventory_data()
-                                
-                                st.success(f"✅ Added {selected_row['Product']} to Weekly Inventory!")
-                                st.rerun()
-                            else:
-                                st.warning("Please select a product to add.")
-                else:
-                    st.info(f"No products available in {add_category_filter} category.")
-            else:
-                st.info("All Master Inventory products are already in Weekly Inventory.")
-            
-            # =================================================================
-            # CSV UPLOAD FOR WEEKLY INVENTORY
-            # =================================================================
-            st.markdown("---")
-            st.markdown("**📤 Upload CSV to populate Weekly Inventory:**")
-            
-            with st.expander("ℹ️ CSV Format Requirements", expanded=False):
-                # Build location rows for documentation
-                loc_docs = f"""| {loc1} | Optional | Inventory at {loc1} (default: 0) |
-                | {loc2} | Optional | Inventory at {loc2} (default: 0) |"""
-                if loc3:
-                    loc_docs += f"""
-                | {loc3} | Optional | Inventory in {loc3} (default: 0) |"""
-                
-                st.markdown(f"""
-                Your CSV file should include the following columns:
-                
-                | Column | Required | Description |
-                |--------|----------|-------------|
-                | Product | ✅ Yes | Product name |
-                | Category | ✅ Yes | Spirits, Wine, Beer, or Ingredients |
-                | Par | ✅ Yes | Par level (number) |
-                {loc_docs}
-                | Unit | Optional | Bottle, Case, Sixtel, Keg, Each, Quart, Gallon (default: Bottle) |
-                | Unit Cost | Optional | Cost per unit (default: 0) |
-                | Distributor | Optional | Distributor name (default: blank) |
-                | Order Notes | Optional | Notes for ordering (default: blank) |
-                
-                **Note:** Products already in Weekly Inventory will be skipped.
-                """)
-                
-                # Download template button with configurable location names
-                template_data = {
-                    'Product': ['Example Product 1', 'Example Product 2'],
-                    'Category': ['Spirits', 'Beer'],
-                    'Par': [3, 2],
-                    loc1: [1, 0.5],
-                    loc2: [1, 0.5],
-                    'Unit': ['Bottle', 'Case'],
-                    'Unit Cost': [25.00, 24.00],
-                    'Distributor': ['Breakthru', 'Frank Beer'],
-                    'Order Notes': ['', '']
-                }
-                if loc3:
-                    template_data[loc3] = [0, 0]
-                
-                template_df = pd.DataFrame(template_data)
-                
-                csv_template = template_df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download CSV Template",
-                    data=csv_template,
-                    file_name="weekly_inventory_template.csv",
-                    mime="text/csv",
-                    key="download_weekly_template"
-                )
-            
-            uploaded_csv = st.file_uploader(
-                "Choose a CSV file:",
-                type=['csv'],
-                key="weekly_inventory_csv_upload"
-            )
-            
-            if uploaded_csv is not None:
-                try:
-                    # Read CSV
-                    upload_df = pd.read_csv(uploaded_csv)
-                    
-                    # Validate required columns
-                    required_cols = ['Product', 'Category', 'Par']
-                    missing_cols = [col for col in required_cols if col not in upload_df.columns]
-                    
-                    if missing_cols:
-                        st.error(f"❌ Missing required columns: {', '.join(missing_cols)}")
-                    else:
-                        # Preview the data
-                        st.markdown(f"**Preview ({len(upload_df)} products):**")
-                        st.dataframe(upload_df.head(10), use_container_width=True, hide_index=True)
-                        
-                        # Check for duplicates with existing inventory
-                        existing_products = st.session_state.weekly_inventory['Product'].tolist()
-                        new_products = upload_df[~upload_df['Product'].isin(existing_products)]
-                        duplicate_products = upload_df[upload_df['Product'].isin(existing_products)]
-                        
-                        if len(duplicate_products) > 0:
-                            st.warning(f"⚠️ {len(duplicate_products)} product(s) already exist and will be skipped: {', '.join(duplicate_products['Product'].tolist()[:5])}{'...' if len(duplicate_products) > 5 else ''}")
-                        
-                        if len(new_products) > 0:
-                            col_upload_btn, col_upload_info = st.columns([1, 2])
-                            
-                            with col_upload_btn:
-                                if st.button(f"✅ Import {len(new_products)} Product(s)", key="btn_import_csv", type="primary"):
-                                    # Prepare the data with all required columns
-                                    import_df = new_products.copy()
-                                    
-                                    # Add default values for configurable location columns
-                                    if loc1 not in import_df.columns:
-                                        import_df[loc1] = 0
-                                    if loc2 not in import_df.columns:
-                                        import_df[loc2] = 0
-                                    if loc3 and loc3 not in import_df.columns:
-                                        import_df[loc3] = 0
-                                    if 'Unit' not in import_df.columns:
-                                        import_df['Unit'] = 'Bottle'
-                                    if 'Unit Cost' not in import_df.columns:
-                                        import_df['Unit Cost'] = 0
-                                    else:
-                                        # Clean currency values
-                                        import_df['Unit Cost'] = import_df['Unit Cost'].apply(clean_currency_value)
-                                    if 'Distributor' not in import_df.columns:
-                                        import_df['Distributor'] = ''
-                                    if 'Order Notes' not in import_df.columns:
-                                        import_df['Order Notes'] = ''
-                                    
-                                    # Calculate Total Current Inventory from configurable locations
-                                    if loc3 and loc3 in import_df.columns:
-                                        import_df['Total Current Inventory'] = import_df[loc1] + import_df[loc2] + import_df[loc3]
-                                    else:
-                                        import_df['Total Current Inventory'] = import_df[loc1] + import_df[loc2]
-                                    
-                                    # Ensure numeric columns are proper types
-                                    import_df['Par'] = pd.to_numeric(import_df['Par'], errors='coerce').fillna(0)
-                                    import_df[loc1] = pd.to_numeric(import_df[loc1], errors='coerce').fillna(0)
-                                    import_df[loc2] = pd.to_numeric(import_df[loc2], errors='coerce').fillna(0)
-                                    if loc3 and loc3 in import_df.columns:
-                                        import_df[loc3] = pd.to_numeric(import_df[loc3], errors='coerce').fillna(0)
-                                    import_df['Unit Cost'] = pd.to_numeric(import_df['Unit Cost'], errors='coerce').fillna(0)
-                                    
-                                    # Select and order columns to match existing structure
-                                    cols_to_keep = ['Product', 'Category', 'Par', loc1, loc2]
-                                    if loc3:
-                                        cols_to_keep.append(loc3)
-                                    cols_to_keep.extend(['Total Current Inventory', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes'])
-                                    # Only keep columns that exist
-                                    cols_to_keep = [c for c in cols_to_keep if c in import_df.columns]
-                                    import_df = import_df[cols_to_keep]
-                                    
-                                    # Append to weekly inventory
-                                    st.session_state.weekly_inventory = pd.concat(
-                                        [st.session_state.weekly_inventory, import_df],
-                                        ignore_index=True
-                                    )
-                                    
-                                    # Save changes
-                                    save_all_inventory_data()
-                                    
-                                    st.success(f"✅ Successfully imported {len(new_products)} product(s)!")
-                                    st.rerun()
-                            
-                            with col_upload_info:
-                                st.caption(f"Ready to import {len(new_products)} new product(s)")
-                        else:
-                            st.info("All products in the CSV already exist in Weekly Inventory.")
-                
-                except Exception as e:
-                    st.error(f"❌ Error reading CSV: {str(e)}")
-        
-        # =====================================================================
-        # CATEGORY AND DISTRIBUTOR FILTERS FOR WEEKLY INVENTORY
-        # V3.8: Uses configurable location columns
+        # REFRESH BUTTON AND FILTERS
         # =====================================================================
         
         weekly_inv = st.session_state.weekly_inventory.copy()
         
-        # V3.8: Ensure configurable location columns exist (backwards compatibility)
-        # First check for old column names and migrate if needed
+        # Clean numeric columns that may have formatting from Google Sheets
+        numeric_weekly_cols = ['Par', 'Total Current Inventory', 'Unit Cost'] + [loc1, loc2]
+        if loc3:
+            numeric_weekly_cols.append(loc3)
+        for col in numeric_weekly_cols:
+            if col in weekly_inv.columns:
+                weekly_inv[col] = weekly_inv[col].apply(lambda x: clean_currency_value(x) if isinstance(x, str) else (float(x) if pd.notna(x) else 0))
+        
+        # Ensure configurable location columns exist (backwards compatibility)
         if 'Bar Inventory' in weekly_inv.columns and loc1 not in weekly_inv.columns:
             weekly_inv[loc1] = weekly_inv['Bar Inventory']
         if 'Storage Inventory' in weekly_inv.columns and loc2 not in weekly_inv.columns:
@@ -3504,8 +3253,8 @@ def show_ordering():
         )
         
         # Get unique categories and distributors for filters
-        all_categories = weekly_inv['Category'].unique().tolist()
-        all_distributors = weekly_inv['Distributor'].unique().tolist()
+        all_categories = weekly_inv['Category'].unique().tolist() if 'Category' in weekly_inv.columns and len(weekly_inv) > 0 else []
+        all_distributors = weekly_inv['Distributor'].unique().tolist() if 'Distributor' in weekly_inv.columns and len(weekly_inv) > 0 else []
         
         # Filter row
         col_cat_filter, col_dist_filter, col_count = st.columns([2, 2, 2])
@@ -3538,122 +3287,72 @@ def show_ordering():
             st.caption(f"Showing {len(filtered_weekly_inv)} of {len(weekly_inv)} products")
         
         # =====================================================================
-        # DISPLAY TABLE WITH CONFIGURABLE LOCATION COLUMNS
+        # READ-ONLY DISPLAY TABLE
         # =====================================================================
         
-        display_df = filtered_weekly_inv.copy()
-        display_df.insert(0, 'Select', False)  # Add checkbox column at the beginning
-        
-        # Build display columns list, excluding None locations
-        # Order: Select, Product, Category, loc1, loc2, Par, Total, Status, Unit, Unit Cost, Distributor, Order Notes
-        display_cols = ['Select', 'Product', 'Category', loc1, loc2]
-        if loc3:  # Only add loc3 if it's configured (not None)
-            display_cols.append(loc3)
-        display_cols.extend(['Par', 'Total Current Inventory', 'Status', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes'])
-        
-        # Only include columns that exist in the dataframe
-        display_cols = [c for c in display_cols if c is not None and c in display_df.columns]
-        
-        # Build column config dynamically
-        column_config = {
-            "Select": st.column_config.CheckboxColumn("🗑️", help="Select rows to delete", width="small"),
-            "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
-            loc1: st.column_config.NumberColumn(f"📍 {loc1}", min_value=0, step=0.5),
-            loc2: st.column_config.NumberColumn(f"📍 {loc2}", min_value=0, step=0.5),
-            "Total Current Inventory": st.column_config.NumberColumn("Total", disabled=True),
-            "Par": st.column_config.NumberColumn(min_value=0, step=1),
-            "Status": st.column_config.TextColumn(disabled=True),
-            "Order Notes": st.column_config.TextColumn("Order Deals", disabled=True),
-        }
-        # Only add loc3 config if it exists
-        if loc3:
-            column_config[loc3] = st.column_config.NumberColumn(f"📍 {loc3}", min_value=0, step=0.5)
-        
-        edited_weekly = st.data_editor(
-            display_df[display_cols],
-            use_container_width=True,
-            hide_index=True,
-            key="weekly_inv_editor",
-            column_config=column_config,
-            disabled=["Product", "Category", "Status", "Total Current Inventory", "Unit", "Unit Cost", "Distributor", "Order Notes"]
-        )
-        
-        # Recalculate Total Current Inventory in real-time from edited values
-        if loc3 and loc3 in edited_weekly.columns:
-            edited_weekly['Total Current Inventory'] = edited_weekly[loc1] + edited_weekly[loc2] + edited_weekly[loc3]
+        if len(filtered_weekly_inv) > 0:
+            # Build display columns list, excluding None locations
+            display_cols = ['Product', 'Category', loc1, loc2]
+            if loc3:
+                display_cols.append(loc3)
+            display_cols.extend(['Par', 'Total Current Inventory', 'Status', 'Unit', 'Unit Cost', 'Distributor', 'Order Notes'])
+            
+            # Only include columns that exist in the dataframe
+            display_cols = [c for c in display_cols if c is not None and c in filtered_weekly_inv.columns]
+            
+            # Build column config
+            column_config = {
+                "Unit Cost": st.column_config.NumberColumn(format="$%.2f"),
+                loc1: st.column_config.NumberColumn(f"📍 {loc1}", format="%.1f"),
+                loc2: st.column_config.NumberColumn(f"📍 {loc2}", format="%.1f"),
+                "Total Current Inventory": st.column_config.NumberColumn("Total", format="%.1f"),
+                "Par": st.column_config.NumberColumn(format="%.0f"),
+                "Order Notes": st.column_config.TextColumn("Order Deals"),
+            }
+            if loc3:
+                column_config[loc3] = st.column_config.NumberColumn(f"📍 {loc3}", format="%.1f")
+            
+            st.dataframe(
+                filtered_weekly_inv[display_cols].reset_index(drop=True),
+                use_container_width=True,
+                hide_index=True,
+                column_config=column_config
+            )
         else:
-            edited_weekly['Total Current Inventory'] = edited_weekly[loc1] + edited_weekly[loc2]
-        edited_weekly['Status'] = edited_weekly.apply(
-            lambda row: "🔴 Order" if row['Total Current Inventory'] < row['Par'] else "✅ OK", axis=1
-        )
+            st.info("No products in weekly inventory. Add products in Google Sheets and click 'Refresh Order Data'.")
         
-        # Check for selected rows to delete
-        selected_for_deletion = edited_weekly[edited_weekly['Select'] == True]['Product'].tolist()
+        # =====================================================================
+        # ACTION BUTTONS - Refresh and Generate Orders
+        # =====================================================================
         
-        # Action buttons - Save, Generate Order, and Delete
-        col_save, col_update, col_delete, col_spacer = st.columns([1, 1, 1, 3])
+        col_refresh, col_generate, col_spacer = st.columns([1, 1, 4])
         
-        with col_save:
-            if st.button("💾 Update Table", key="save_weekly_only", help="Save inventory changes without generating an order"):
-                # Update values only for products that were displayed (filtered view)
-                for idx, row in edited_weekly.iterrows():
-                    mask = st.session_state.weekly_inventory['Product'] == row['Product']
-                    st.session_state.weekly_inventory.loc[mask, loc1] = row[loc1]
-                    st.session_state.weekly_inventory.loc[mask, loc2] = row[loc2]
-                    if loc3 and loc3 in row:
-                        st.session_state.weekly_inventory.loc[mask, loc3] = row[loc3]
-                        total_inv = row[loc1] + row[loc2] + row[loc3]
-                    else:
-                        total_inv = row[loc1] + row[loc2]
-                    st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = total_inv
-                    st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
-                
-                # Save weekly inventory to Google Sheets for persistence
-                save_all_inventory_data()
-                
-                st.success("✅ Table updated!")
-                st.rerun()
-        
-        with col_update:
-            if st.button("🔄 Generate Orders", key="update_weekly"):
-                # Update values only for products that were displayed (filtered view)
-                for idx, row in edited_weekly.iterrows():
-                    mask = st.session_state.weekly_inventory['Product'] == row['Product']
-                    st.session_state.weekly_inventory.loc[mask, loc1] = row[loc1]
-                    st.session_state.weekly_inventory.loc[mask, loc2] = row[loc2]
-                    if loc3 and loc3 in row:
-                        st.session_state.weekly_inventory.loc[mask, loc3] = row[loc3]
-                        total_inv = row[loc1] + row[loc2] + row[loc3]
-                    else:
-                        total_inv = row[loc1] + row[loc2]
-                    st.session_state.weekly_inventory.loc[mask, 'Total Current Inventory'] = total_inv
-                    st.session_state.weekly_inventory.loc[mask, 'Par'] = row['Par']
-                
-                # Generate order based on updated inventory
-                st.session_state.current_order = generate_order_from_inventory(st.session_state.weekly_inventory)
-                save_all_inventory_data()
-                st.rerun()
-        
-        with col_delete:
-            if st.button("🗑️ Delete Selected", key="delete_selected_weekly", disabled=len(selected_for_deletion) == 0):
-                if selected_for_deletion:
-                    st.session_state.weekly_inventory = st.session_state.weekly_inventory[
-                        ~st.session_state.weekly_inventory['Product'].isin(selected_for_deletion)
-                    ].reset_index(drop=True)
-                    
-                    save_all_inventory_data()
-                    st.success(f"✅ Deleted {len(selected_for_deletion)} product(s)!")
+        with col_refresh:
+            if st.button("🔄 Refresh Order Data", key="refresh_weekly_inv", help="Reload weekly inventory from Google Sheets"):
+                saved_data = load_dataframe_from_sheets(get_sheet_name('weekly_inventory'))
+                if saved_data is not None and len(saved_data) > 0:
+                    st.session_state.weekly_inventory = saved_data
+                    st.success("✅ Weekly inventory refreshed from Google Sheets!")
                     st.rerun()
+                else:
+                    st.warning("No weekly inventory data found in Google Sheets.")
         
-        # Show count of selected items
-        if len(selected_for_deletion) > 0:
-            st.caption(f"🗑️ {len(selected_for_deletion)} row(s) selected for deletion")
+        with col_generate:
+            if st.button("🔄 Generate Orders", key="generate_weekly_orders", type="primary"):
+                # Generate order based on current weekly inventory
+                st.session_state.current_order = generate_order_from_inventory(weekly_inv)
+                
+                if len(st.session_state.current_order) > 0:
+                    st.success(f"✅ Generated order with {len(st.session_state.current_order)} items!")
+                else:
+                    st.info("All items are at or above par. No orders needed.")
+                st.rerun()
         
         st.markdown("---")
         st.markdown("### Step 2: Review & Adjust This Week's Order")
         
         # =====================================================================
-        # STEP 2: ORDER REVIEW (Uses Total Current Inventory only - no location columns)
+        # STEP 2: ORDER REVIEW WITH ADD ITEMS CAPABILITY
         # =====================================================================
         
         if 'current_order' in st.session_state and len(st.session_state.current_order) > 0:
@@ -3664,7 +3363,17 @@ def show_ordering():
                 order_df = order_df.rename(columns={'Order Qty': 'Order Quantity'})
                 st.session_state.current_order = order_df
             
-            st.markdown(f"**{len(order_df)} items need ordering:**")
+            # Clean currency formatting in order data
+            if 'Unit Cost' in order_df.columns:
+                order_df['Unit Cost'] = order_df['Unit Cost'].apply(clean_currency_value)
+            if 'Order Value' in order_df.columns:
+                order_df['Order Value'] = order_df['Order Value'].apply(clean_currency_value)
+            
+            # Ensure New Product flag column exists
+            if 'New Product' not in order_df.columns:
+                order_df['New Product'] = False
+            
+            st.markdown(f"**{len(order_df)} items in current order:**")
             
             edited_order = st.data_editor(
                 order_df,
@@ -3677,12 +3386,13 @@ def show_ordering():
                     "Order Quantity": st.column_config.NumberColumn(min_value=0, step=0.5),
                     "Unit Cost": st.column_config.NumberColumn(format="$%.2f", disabled=True),
                     "Order Value": st.column_config.NumberColumn(format="$%.2f", disabled=True),
+                    "New Product": st.column_config.CheckboxColumn("🆕", disabled=True, width="small"),
                 },
                 disabled=["Product", "Category", "Current Stock", "Par Level", 
-                         "Unit Cost", "Distributor"]
+                         "Unit", "Unit Cost", "Distributor", "New Product"]
             )
             
-            # Action buttons row with Recalculate and Copy options
+            # Action buttons row
             col_recalc, col_copy_order, col_spacer = st.columns([1, 1, 3])
             
             with col_recalc:
@@ -3709,6 +3419,150 @@ def show_ordering():
                     key="download_order_text"
                 )
             
+            # =================================================================
+            # ADD ITEMS TO ORDER
+            # =================================================================
+            
+            with st.expander("➕ Add Items to Order", expanded=False):
+                add_tab_master, add_tab_new = st.tabs(["📦 From Master Inventory", "🆕 New Product"])
+                
+                with add_tab_master:
+                    st.markdown("**Add a product from Master Inventory:**")
+                    master_products = get_master_inventory_products()
+                    
+                    if len(master_products) > 0:
+                        # Filter out products already in the order
+                        existing_order_products = order_df['Product'].tolist()
+                        available_to_add = master_products[~master_products['Product'].isin(existing_order_products)]
+                        
+                        if len(available_to_add) > 0:
+                            add_categories = sorted(available_to_add['Category'].unique().tolist())
+                            
+                            col_cat, col_spacer2 = st.columns([2, 4])
+                            with col_cat:
+                                add_cat_filter = st.selectbox(
+                                    "Filter by Category:",
+                                    options=["All Categories"] + add_categories,
+                                    key="order_add_cat_filter"
+                                )
+                            
+                            if add_cat_filter != "All Categories":
+                                filtered_master = available_to_add[available_to_add['Category'] == add_cat_filter].copy()
+                            else:
+                                filtered_master = available_to_add.copy()
+                            
+                            if len(filtered_master) > 0:
+                                filtered_master['Display'] = filtered_master['Product'] + " (" + filtered_master['Category'] + ")"
+                                
+                                col_prod, col_qty, col_unit, col_btn = st.columns([3, 1, 1, 1])
+                                
+                                with col_prod:
+                                    selected_master = st.selectbox(
+                                        "Select Product:",
+                                        options=[""] + filtered_master['Display'].tolist(),
+                                        key="order_add_master_product"
+                                    )
+                                
+                                with col_qty:
+                                    add_qty = st.number_input("Quantity:", min_value=0.5, value=1.0, step=0.5, key="order_add_qty")
+                                
+                                with col_unit:
+                                    add_unit = st.selectbox("Unit:", options=["Bottle", "Case", "Sixtel", "Keg", "Each", "Quart", "Gallon"], key="order_add_unit")
+                                
+                                with col_btn:
+                                    st.write("")
+                                    st.write("")
+                                    if st.button("➕ Add", key="btn_add_to_order"):
+                                        if selected_master:
+                                            sel_row = filtered_master[filtered_master['Display'] == selected_master].iloc[0]
+                                            unit_cost = clean_currency_value(sel_row.get('Cost', 0))
+                                            
+                                            new_order_row = pd.DataFrame([{
+                                                'Product': sel_row['Product'],
+                                                'Category': sel_row['Category'],
+                                                'Current Stock': 0,
+                                                'Par Level': 0,
+                                                'Order Quantity': add_qty,
+                                                'Unit': add_unit,
+                                                'Unit Cost': unit_cost,
+                                                'Order Value': add_qty * unit_cost,
+                                                'Distributor': sel_row.get('Distributor', 'N/A'),
+                                                'New Product': False,
+                                            }])
+                                            
+                                            st.session_state.current_order = pd.concat(
+                                                [st.session_state.current_order, new_order_row], ignore_index=True
+                                            )
+                                            st.success(f"✅ Added {sel_row['Product']} to order!")
+                                            st.rerun()
+                                        else:
+                                            st.warning("Please select a product.")
+                            else:
+                                st.info(f"No products available in {add_cat_filter}.")
+                        else:
+                            st.info("All Master Inventory products are already in the order.")
+                    else:
+                        st.warning("No products found in Master Inventory.")
+                
+                with add_tab_new:
+                    st.markdown("**Add a new product not yet in inventory:**")
+                    st.caption("This product will be marked as 🆕 New Product in the order and verification.")
+                    
+                    col_name, col_cat2, col_dist = st.columns([2, 1, 1])
+                    
+                    with col_name:
+                        new_prod_name = st.text_input("Product Name:", key="new_prod_name", placeholder="Enter product name...")
+                    
+                    with col_cat2:
+                        new_prod_cat = st.selectbox("Category:", options=["Spirits", "Wine", "Beer", "Ingredients", "N/A Beverages"], key="new_prod_cat")
+                    
+                    with col_dist:
+                        # Get distributor options from config
+                        config_distributors = CLIENT_CONFIG.get('distributors', [])
+                        dist_options = config_distributors if config_distributors else ["Other"]
+                        new_prod_dist = st.selectbox("Distributor:", options=dist_options + ["Other"], key="new_prod_dist")
+                    
+                    col_qty2, col_unit2, col_cost, col_btn2 = st.columns([1, 1, 1, 1])
+                    
+                    with col_qty2:
+                        new_prod_qty = st.number_input("Quantity:", min_value=0.5, value=1.0, step=0.5, key="new_prod_qty")
+                    
+                    with col_unit2:
+                        new_prod_unit = st.selectbox("Unit:", options=["Bottle", "Case", "Sixtel", "Keg", "Each", "Quart", "Gallon"], key="new_prod_unit")
+                    
+                    with col_cost:
+                        new_prod_cost = st.number_input("Unit Cost ($):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="new_prod_cost")
+                    
+                    with col_btn2:
+                        st.write("")
+                        st.write("")
+                        if st.button("➕ Add New", key="btn_add_new_product", type="primary"):
+                            if new_prod_name.strip():
+                                # Check for duplicates in current order
+                                if new_prod_name.strip() in order_df['Product'].tolist():
+                                    st.warning(f"'{new_prod_name.strip()}' is already in the order.")
+                                else:
+                                    new_order_row = pd.DataFrame([{
+                                        'Product': new_prod_name.strip(),
+                                        'Category': new_prod_cat,
+                                        'Current Stock': 0,
+                                        'Par Level': 0,
+                                        'Order Quantity': new_prod_qty,
+                                        'Unit': new_prod_unit,
+                                        'Unit Cost': new_prod_cost,
+                                        'Order Value': new_prod_qty * new_prod_cost,
+                                        'Distributor': new_prod_dist,
+                                        'New Product': True,
+                                    }])
+                                    
+                                    st.session_state.current_order = pd.concat(
+                                        [st.session_state.current_order, new_order_row], ignore_index=True
+                                    )
+                                    st.success(f"✅ Added new product '{new_prod_name.strip()}' to order!")
+                                    st.rerun()
+                            else:
+                                st.warning("Please enter a product name.")
+            
             st.markdown("---")
             # Send to Verification
             if st.button("📋 Send to Verification", key="send_to_verification", type="primary"):
@@ -3720,6 +3574,10 @@ def show_ordering():
                 pending_df['Verification Notes'] = pending_df['Verification Notes'].astype(str)
                 pending_df['Modified'] = False
                 pending_df['Order Date'] = datetime.now().strftime("%Y-%m-%d")
+                
+                # Preserve New Product flag for Step 3
+                if 'New Product' not in pending_df.columns:
+                    pending_df['New Product'] = False
                 
                 st.session_state.pending_order = pending_df
                 st.session_state.current_order = pd.DataFrame()  # Clear current order
@@ -3735,7 +3593,7 @@ def show_ordering():
             if 'pending_order' in st.session_state and len(st.session_state.pending_order) > 0:
                 st.info("📋 An order is pending verification. Complete Step 3 below to finalize.")
             else:
-                st.info("👆 Update inventory counts above and click 'Generate Orders' to see what needs ordering.")
+                st.info("👆 Review inventory above and click 'Generate Orders' to see what needs ordering.")
         
         # =====================================================================
         # STEP 3: ORDER VERIFICATION (Uses totals only - no location columns)
@@ -3797,10 +3655,15 @@ def show_ordering():
                 (pending_df['Order Quantity'] != pending_df['Original Order Quantity'])
             )
             
+            # Ensure New Product flag exists
+            if 'New Product' not in pending_df.columns:
+                pending_df['New Product'] = False
+            
             # Red flag for modified rows with change details
             def get_status_with_changes(row):
+                prefix = '🆕 ' if row.get('New Product', False) else ''
                 if not row['Modified']:
-                    return '✅'
+                    return prefix + '✅'
                 
                 changes = []
                 if row['Unit Cost'] != row['Original Unit Cost']:
@@ -3808,7 +3671,7 @@ def show_ordering():
                 if row['Order Quantity'] != row['Original Order Quantity']:
                     changes.append(f"Qty: {row['Original Order Quantity']}→{row['Order Quantity']}")
                 
-                return '🚩 ' + ', '.join(changes)
+                return prefix + '🚩 ' + ', '.join(changes)
             
             pending_df['Status'] = pending_df.apply(get_status_with_changes, axis=1)
             
