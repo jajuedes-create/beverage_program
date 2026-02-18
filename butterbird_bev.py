@@ -4,7 +4,7 @@
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
 #   - Weekly Order Builder
-#   - Cocktail Builds Book
+#   - Price Builder (Cocktails, Spirit Pricing, Beer Pricing, Wine Pricing)
 #   - Cost of Goods Sold (COGS) Calculator
 #   - Bar Prep Recipe Book
 #
@@ -204,6 +204,12 @@
 #           - Added "Add Items to Order" expander in Step 2 (from Master Inventory or New Product)
 #           - New Products automatically marked with 🆕 flag in Step 2 and Step 3
 #           - Fixed currency formatting handling in generate_order_from_inventory
+#           - RENAMED: "Cocktail Builds Book" → "Price Builder" module
+#           - Price Builder tabs: Cocktail Pricing, Spirit Pricing, Beer Pricing, Wine Pricing, Add New Product
+#           - Spirit/Beer/Wine Pricing: Pull products from Master Inventory, set menu prices based on target COGS %
+#           - Pricing stored as JSON in Google Sheets (spirit_pricing, beer_pricing, wine_pricing)
+#           - Products sorted alphabetically in all pricing tabs
+#           - Add New Product tab: Create cocktail recipes OR add inventory items to pricing
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -276,7 +282,7 @@ CLIENT_CONFIG = {
     "features": {
         "master_inventory": True,
         "weekly_orders": True,
-        "cocktail_builds": True,
+        "price_builder": True,
         "bar_prep": True,
         "cogs_calculator": True,
     },
@@ -317,6 +323,9 @@ CLIENT_CONFIG = {
         "inventory_history": "inventory_history",
         "cogs_history": "cogs_history",
         "price_change_acks": "price_change_acks",
+        "spirit_pricing": "spirit_pricing",
+        "beer_pricing": "beer_pricing",
+        "wine_pricing": "wine_pricing",
     },
 }
 
@@ -626,6 +635,15 @@ def save_recipes(recipe_type: str):
     if not is_google_sheets_configured():
         return
     key = f'{recipe_type}_recipes'
+    if key in st.session_state:
+        save_json_to_sheets(st.session_state[key], get_sheet_name(key))
+
+
+def save_pricing(pricing_type: str):
+    """Saves pricing data (spirit, beer, or wine) to Google Sheets."""
+    if not is_google_sheets_configured():
+        return
+    key = f'{pricing_type}_pricing'
     if key in st.session_state:
         save_json_to_sheets(st.session_state[key], get_sheet_name(key))
 
@@ -1376,6 +1394,13 @@ def init_session_state():
             saved_data = load_json_from_sheets(sheet_name) if sheets_configured else None
             st.session_state[key] = saved_data if saved_data and len(saved_data) > 0 else sample_func()
     
+    # Pricing data (stored as JSON lists)
+    pricing_keys = ['spirit_pricing', 'beer_pricing', 'wine_pricing']
+    for key in pricing_keys:
+        if key not in st.session_state:
+            saved_data = load_json_from_sheets(get_sheet_name(key)) if sheets_configured else None
+            st.session_state[key] = saved_data if saved_data and len(saved_data) > 0 else []
+    
     # Other state
     if 'last_inventory_date' not in st.session_state:
         st.session_state.last_inventory_date = datetime.now().strftime("%Y-%m-%d")
@@ -1414,7 +1439,7 @@ def show_sidebar_navigation():
         nav_items = [
             ('inventory', '📦 Master Inventory', 'master_inventory'),
             ('ordering', '📋 Weekly Orders', 'weekly_orders'),
-            ('cocktails', '🍹 Cocktail Builds', 'cocktail_builds'),
+            ('cocktails', '💰 Price Builder', 'price_builder'),
             ('bar_prep', '🧪 Bar Prep', 'bar_prep'),
             ('cogs', '📊 COGS Calculator', 'cogs_calculator'),
         ]
@@ -1867,12 +1892,12 @@ def show_home():
             'card_class': 'card-ordering',
         })
     
-    if is_feature_enabled('cocktail_builds'):
+    if is_feature_enabled('price_builder'):
         enabled_modules.append({
             'id': 'cocktails',
-            'icon': '🍹',
-            'title': 'Cocktail Builds Book',
-            'description': 'Store and cost cocktail recipes.<br>Calculate margins and pricing.',
+            'icon': '💰',
+            'title': 'Price Builder',
+            'description': 'Build menu pricing for cocktails, spirits,<br>beer, and wine based on target COGS.',
             'card_class': 'card-cocktails',
         })
     
@@ -4402,8 +4427,9 @@ PRICE CHANGES DETECTED
             st.info("No order history available for analytics. Complete orders to see trends.")
 
 
+
 def show_cocktails():
-    """Cocktail Builds Book with view, add, and edit recipe functionality."""
+    """Price Builder module with cocktail recipes and menu pricing for spirits, beer, and wine."""
     show_sidebar_navigation()
     
     col_back, col_title = st.columns([1, 11])
@@ -4412,29 +4438,26 @@ def show_cocktails():
             navigate_to('home')
             st.rerun()
     with col_title:
-        st.title("🍹 Cocktail Builds Book")
+        st.title("💰 Price Builder")
     
     recipes = st.session_state.get('cocktail_recipes', [])
     available_products = get_all_available_products()
     
-    # Check if we're in edit mode
+    # Check if we're in edit mode for cocktails
     editing_recipe_name = st.session_state.get('editing_cocktail', None)
     editing_recipe = None
     if editing_recipe_name:
         editing_recipe = next((r for r in recipes if r['name'] == editing_recipe_name), None)
         if not editing_recipe:
-            # Recipe not found, clear edit mode
             del st.session_state['editing_cocktail']
             editing_recipe_name = None
     
-    # Show edit form if editing
+    # Show edit form if editing cocktail recipe
     if editing_recipe:
         st.markdown(f"### ✏️ Editing: {editing_recipe['name']}")
         
-        # Cancel button
         if st.button("← Cancel Edit", key="cancel_cocktail_edit"):
             del st.session_state['editing_cocktail']
-            # Clear edit form state
             for key in list(st.session_state.keys()):
                 if key.startswith("edit_cocktail_"):
                     del st.session_state[key]
@@ -4442,13 +4465,11 @@ def show_cocktails():
         
         st.markdown("---")
         
-        # Initialize edit form state if not exists
         edit_prefix = "edit_cocktail_"
         if f"{edit_prefix}initialized" not in st.session_state:
             st.session_state[f"{edit_prefix}ingredient_count"] = len(editing_recipe.get('ingredients', []))
             if st.session_state[f"{edit_prefix}ingredient_count"] == 0:
                 st.session_state[f"{edit_prefix}ingredient_count"] = 1
-            # Pre-populate ingredients
             for i, ing in enumerate(editing_recipe.get('ingredients', [])):
                 st.session_state[f"{edit_prefix}ing_prod_{i}"] = ing.get('product', '')
                 st.session_state[f"{edit_prefix}ing_amt_{i}"] = ing.get('amount', 0.0)
@@ -4470,7 +4491,6 @@ def show_cocktails():
         
         st.markdown("#### Ingredients")
         
-        # Column headers
         col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
         with col_prod:
             st.caption("Product")
@@ -4483,12 +4503,10 @@ def show_cocktails():
         
         unit_options = ["oz", "dashes", "barspoon", "drops", "rinse", "each", "ml"]
         
-        # Dynamic ingredient rows
         ingredients_to_remove = []
         for i in range(st.session_state[f"{edit_prefix}ingredient_count"]):
             col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
             
-            # Get current values or defaults
             current_prod = st.session_state.get(f"{edit_prefix}ing_prod_{i}", "")
             current_amt = st.session_state.get(f"{edit_prefix}ing_amt_{i}", 0.0)
             current_unit = st.session_state.get(f"{edit_prefix}ing_unit_{i}", "oz")
@@ -4505,10 +4523,9 @@ def show_cocktails():
                 st.selectbox(f"Unit {i+1}", options=unit_options, index=unit_index, key=f"{edit_prefix}ing_unit_{i}", label_visibility="collapsed")
             with col_remove:
                 if st.session_state[f"{edit_prefix}ingredient_count"] > 1:
-                    if st.button("🗑️", key=f"{edit_prefix}remove_ing_{i}", help="Remove ingredient"):
+                    if st.button("🗑️", key=f"{edit_prefix}remove_ing_{i}"):
                         ingredients_to_remove.append(i)
         
-        # Handle ingredient removal
         if ingredients_to_remove:
             for remove_idx in sorted(ingredients_to_remove, reverse=True):
                 for j in range(remove_idx, st.session_state[f"{edit_prefix}ingredient_count"] - 1):
@@ -4519,7 +4536,6 @@ def show_cocktails():
                 st.session_state[f"{edit_prefix}ingredient_count"] -= 1
             st.rerun()
         
-        # Add ingredient button
         if st.button("➕ Add Ingredient", key=f"{edit_prefix}add_ingredient"):
             st.session_state[f"{edit_prefix}ingredient_count"] += 1
             st.rerun()
@@ -4529,9 +4545,7 @@ def show_cocktails():
         
         st.markdown("---")
         
-        # Save button
         if st.button("💾 Save Changes", type="primary", use_container_width=True, key=f"{edit_prefix}save_btn"):
-            # Collect ingredient data
             ingredients_data = []
             for i in range(st.session_state[f"{edit_prefix}ingredient_count"]):
                 product = st.session_state.get(f"{edit_prefix}ing_prod_{i}", "")
@@ -4547,174 +4561,555 @@ def show_cocktails():
             elif sale_price <= 0:
                 st.error("❌ Sale price must be greater than $0.")
             else:
-                # Check for duplicate name (excluding current recipe)
-                other_names = [r['name'].lower() for r in recipes if r['name'] != editing_recipe_name]
-                if recipe_name.lower() in other_names:
-                    st.error(f"❌ A recipe named '{recipe_name}' already exists.")
-                else:
-                    # Update the recipe
-                    for r in st.session_state.cocktail_recipes:
-                        if r['name'] == editing_recipe_name:
-                            r['name'] = recipe_name
-                            r['glass'] = glass_type
-                            r['sale_price'] = sale_price
-                            r['ingredients'] = ingredients_data
-                            r['instructions'] = instructions
-                            break
-                    
-                    save_recipes('cocktail')
-                    
-                    # Clear edit mode
-                    del st.session_state['editing_cocktail']
-                    for key in list(st.session_state.keys()):
-                        if key.startswith(edit_prefix):
-                            del st.session_state[key]
-                    
-                    st.success(f"✅ '{recipe_name}' updated successfully!")
-                    st.rerun()
+                for r in st.session_state.cocktail_recipes:
+                    if r['name'] == editing_recipe['name']:
+                        r['name'] = recipe_name
+                        r['glass'] = glass_type
+                        r['sale_price'] = sale_price
+                        r['ingredients'] = ingredients_data
+                        r['instructions'] = instructions
+                        break
+                
+                save_recipes('cocktail')
+                del st.session_state['editing_cocktail']
+                for key in list(st.session_state.keys()):
+                    if key.startswith(edit_prefix):
+                        del st.session_state[key]
+                
+                st.success(f"✅ '{recipe_name}' updated successfully!")
+                st.rerun()
     
     else:
-        # Normal view/add mode
-        tab_view, tab_add = st.tabs(["📖 View Recipes", "➕ Add New Recipe"])
+        # Normal view mode with tabs
+        tab_cocktail, tab_spirit, tab_beer, tab_wine, tab_add = st.tabs([
+            "🍹 Cocktail Pricing", "🥃 Spirit Pricing", "🍺 Beer Pricing", "🍷 Wine Pricing", "➕ Add New Product"
+        ])
         
-        with tab_view:
+        # =====================================================================
+        # COCKTAIL PRICING TAB (existing View Recipes code - unchanged)
+        # =====================================================================
+        with tab_cocktail:
             if recipes:
                 display_recipe_list(recipes, 'cocktail', session_key='cocktail_recipes')
             else:
-                st.info("No cocktail recipes found. Add one in the 'Add New Recipe' tab to get started!")
+                st.info("No cocktail recipes found. Add one in the 'Add New Product' tab to get started!")
         
+        # =====================================================================
+        # SPIRIT PRICING TAB
+        # =====================================================================
+        with tab_spirit:
+            st.markdown("### 🥃 Spirit Menu Pricing")
+            st.markdown("Set menu prices for spirits based on target COGS %. Products are pulled from Master Inventory.")
+            
+            spirit_pricing = st.session_state.get('spirit_pricing', [])
+            spirits_inventory = st.session_state.get('spirits_inventory', pd.DataFrame())
+            
+            if len(spirit_pricing) > 0:
+                # Sort alphabetically
+                spirit_pricing_sorted = sorted(spirit_pricing, key=lambda x: x.get('product', '').lower())
+                
+                st.markdown(f"**{len(spirit_pricing_sorted)} products with menu pricing:**")
+                
+                # Display as editable expanders
+                for idx, item in enumerate(spirit_pricing_sorted):
+                    with st.expander(f"**{item['product']}**", expanded=False):
+                        # Get cost from inventory
+                        inv_cost = 0
+                        inv_size = 0
+                        if len(spirits_inventory) > 0 and 'Product' in spirits_inventory.columns:
+                            match = spirits_inventory[spirits_inventory['Product'] == item['product']]
+                            if len(match) > 0:
+                                inv_cost = clean_currency_value(match['Bottle Cost'].iloc[0]) if 'Bottle Cost' in match.columns else 0
+                                inv_size = clean_currency_value(match['Size (oz.)'].iloc[0]) if 'Size (oz.)' in match.columns else 0
+                        
+                        cost_per_oz = inv_cost / inv_size if inv_size > 0 else 0
+                        
+                        st.caption(f"Bottle Cost: ${inv_cost:.2f} | Size: {inv_size} oz | Cost/oz: ${cost_per_oz:.4f}")
+                        
+                        # Pour sizes
+                        pour_sizes = {'shot': 1.0, 'single': 1.5, 'neat': 2.0, 'double': 3.0}
+                        
+                        st.markdown("**Pour Pricing:**")
+                        price_cols = st.columns(4)
+                        
+                        updated_prices = {}
+                        for i, (pour_type, pour_oz) in enumerate(pour_sizes.items()):
+                            with price_cols[i]:
+                                pour_cost = cost_per_oz * pour_oz
+                                current_price = item.get(f'{pour_type}_price', 0)
+                                actual_cogs = (pour_cost / current_price * 100) if current_price > 0 else 0
+                                
+                                new_price = st.number_input(
+                                    f"{pour_type.title()} ({pour_oz}oz)",
+                                    min_value=0.0, 
+                                    value=float(current_price),
+                                    step=1.0,
+                                    key=f"spirit_price_{item['product']}_{pour_type}"
+                                )
+                                st.caption(f"Cost: ${pour_cost:.2f} | COGS: {actual_cogs:.1f}%")
+                                updated_prices[f'{pour_type}_price'] = new_price
+                        
+                        col_save, col_delete = st.columns(2)
+                        with col_save:
+                            if st.button("💾 Save Prices", key=f"save_spirit_{item['product']}"):
+                                for p in st.session_state.spirit_pricing:
+                                    if p['product'] == item['product']:
+                                        for key, val in updated_prices.items():
+                                            p[key] = val
+                                        break
+                                save_pricing('spirit')
+                                st.success(f"✅ Prices saved!")
+                                st.rerun()
+                        
+                        with col_delete:
+                            if st.button("🗑️ Remove", key=f"delete_spirit_{item['product']}"):
+                                st.session_state.spirit_pricing = [p for p in st.session_state.spirit_pricing if p['product'] != item['product']]
+                                save_pricing('spirit')
+                                st.success(f"✅ Removed!")
+                                st.rerun()
+            else:
+                st.info("No spirit pricing set up yet. Add products from the 'Add New Product' tab.")
+        
+        # =====================================================================
+        # BEER PRICING TAB
+        # =====================================================================
+        with tab_beer:
+            st.markdown("### 🍺 Beer Menu Pricing")
+            st.markdown("Set menu prices for beer based on target COGS %. Products are pulled from Master Inventory.")
+            
+            beer_pricing = st.session_state.get('beer_pricing', [])
+            beer_inventory = st.session_state.get('beer_inventory', pd.DataFrame())
+            
+            if len(beer_pricing) > 0:
+                beer_pricing_sorted = sorted(beer_pricing, key=lambda x: x.get('product', '').lower())
+                
+                st.markdown(f"**{len(beer_pricing_sorted)} products with menu pricing:**")
+                
+                for idx, item in enumerate(beer_pricing_sorted):
+                    with st.expander(f"**{item['product']}**", expanded=False):
+                        # Get cost from inventory
+                        inv_cost = 0
+                        inv_size = 0
+                        inv_uom = ''
+                        if len(beer_inventory) > 0 and 'Product' in beer_inventory.columns:
+                            match = beer_inventory[beer_inventory['Product'] == item['product']]
+                            if len(match) > 0:
+                                inv_cost = clean_currency_value(match['Cost per Keg/Case'].iloc[0]) if 'Cost per Keg/Case' in match.columns else 0
+                                inv_size = clean_currency_value(match['Size'].iloc[0]) if 'Size' in match.columns else 0
+                                inv_uom = match['UoM'].iloc[0] if 'UoM' in match.columns else ''
+                        
+                        cost_per_unit = inv_cost / inv_size if inv_size > 0 else 0
+                        
+                        st.caption(f"Cost per Keg/Case: ${inv_cost:.2f} | Size: {inv_size} {inv_uom} | Cost/Unit: ${cost_per_unit:.2f}")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            target_cogs = st.number_input(
+                                "Target COGS %",
+                                min_value=1.0, max_value=100.0,
+                                value=float(item.get('target_cogs', get_default_margin('beer'))),
+                                step=1.0,
+                                key=f"beer_cogs_{item['product']}"
+                            )
+                            suggested_price = cost_per_unit / (target_cogs / 100) if target_cogs > 0 else 0
+                            st.caption(f"Suggested: ${suggested_price:.2f}")
+                        
+                        with col2:
+                            menu_price = st.number_input(
+                                "Menu Price ($)",
+                                min_value=0.0,
+                                value=float(item.get('menu_price', round(suggested_price, 2))),
+                                step=0.50,
+                                key=f"beer_price_{item['product']}"
+                            )
+                        
+                        with col3:
+                            actual_cogs = (cost_per_unit / menu_price * 100) if menu_price > 0 else 0
+                            st.metric("Actual COGS %", f"{actual_cogs:.1f}%")
+                        
+                        col_save, col_delete = st.columns(2)
+                        with col_save:
+                            if st.button("💾 Save", key=f"save_beer_{item['product']}"):
+                                for p in st.session_state.beer_pricing:
+                                    if p['product'] == item['product']:
+                                        p['target_cogs'] = target_cogs
+                                        p['menu_price'] = menu_price
+                                        break
+                                save_pricing('beer')
+                                st.success(f"✅ Saved!")
+                                st.rerun()
+                        
+                        with col_delete:
+                            if st.button("🗑️ Remove", key=f"delete_beer_{item['product']}"):
+                                st.session_state.beer_pricing = [p for p in st.session_state.beer_pricing if p['product'] != item['product']]
+                                save_pricing('beer')
+                                st.success(f"✅ Removed!")
+                                st.rerun()
+            else:
+                st.info("No beer pricing set up yet. Add products from the 'Add New Product' tab.")
+        
+        # =====================================================================
+        # WINE PRICING TAB
+        # =====================================================================
+        with tab_wine:
+            st.markdown("### 🍷 Wine Menu Pricing")
+            st.markdown("Set menu prices for wine based on target COGS %. Products are pulled from Master Inventory.")
+            
+            wine_pricing = st.session_state.get('wine_pricing', [])
+            wine_inventory = st.session_state.get('wine_inventory', pd.DataFrame())
+            
+            if len(wine_pricing) > 0:
+                wine_pricing_sorted = sorted(wine_pricing, key=lambda x: x.get('product', '').lower())
+                
+                st.markdown(f"**{len(wine_pricing_sorted)} products with menu pricing:**")
+                
+                for idx, item in enumerate(wine_pricing_sorted):
+                    with st.expander(f"**{item['product']}**", expanded=False):
+                        # Get cost from inventory
+                        inv_cost = 0
+                        inv_size = 0
+                        if len(wine_inventory) > 0 and 'Product' in wine_inventory.columns:
+                            match = wine_inventory[wine_inventory['Product'] == item['product']]
+                            if len(match) > 0:
+                                inv_cost = clean_currency_value(match['Cost'].iloc[0]) if 'Cost' in match.columns else 0
+                                inv_size = clean_currency_value(match['Size (oz.)'].iloc[0]) if 'Size (oz.)' in match.columns else 0
+                        
+                        cost_per_oz = inv_cost / inv_size if inv_size > 0 else 0
+                        
+                        st.caption(f"Bottle Cost: ${inv_cost:.2f} | Size: {inv_size} oz | Cost/oz: ${cost_per_oz:.4f}")
+                        
+                        st.markdown("**Pricing:**")
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        # BTG (6oz pour)
+                        btg_oz = 6.0
+                        btg_cost = cost_per_oz * btg_oz
+                        
+                        with col1:
+                            btg_price = st.number_input(
+                                f"BTG Price ({btg_oz}oz)",
+                                min_value=0.0,
+                                value=float(item.get('btg_price', 0)),
+                                step=0.50,
+                                key=f"wine_btg_price_{item['product']}"
+                            )
+                        
+                        with col2:
+                            btg_actual_cogs = (btg_cost / btg_price * 100) if btg_price > 0 else 0
+                            st.metric("BTG COGS %", f"{btg_actual_cogs:.1f}%")
+                            st.caption(f"Cost: ${btg_cost:.2f}")
+                        
+                        with col3:
+                            bottle_price = st.number_input(
+                                "Bottle Price",
+                                min_value=0.0,
+                                value=float(item.get('bottle_price', 0)),
+                                step=1.0,
+                                key=f"wine_bottle_price_{item['product']}"
+                            )
+                        
+                        with col4:
+                            bottle_actual_cogs = (inv_cost / bottle_price * 100) if bottle_price > 0 else 0
+                            st.metric("Bottle COGS %", f"{bottle_actual_cogs:.1f}%")
+                            st.caption(f"Cost: ${inv_cost:.2f}")
+                        
+                        col_save, col_delete = st.columns(2)
+                        with col_save:
+                            if st.button("💾 Save", key=f"save_wine_{item['product']}"):
+                                for p in st.session_state.wine_pricing:
+                                    if p['product'] == item['product']:
+                                        p['btg_price'] = btg_price
+                                        p['bottle_price'] = bottle_price
+                                        break
+                                save_pricing('wine')
+                                st.success(f"✅ Saved!")
+                                st.rerun()
+                        
+                        with col_delete:
+                            if st.button("🗑️ Remove", key=f"delete_wine_{item['product']}"):
+                                st.session_state.wine_pricing = [p for p in st.session_state.wine_pricing if p['product'] != item['product']]
+                                save_pricing('wine')
+                                st.success(f"✅ Removed!")
+                                st.rerun()
+            else:
+                st.info("No wine pricing set up yet. Add products from the 'Add New Product' tab.")
+        
+        # =====================================================================
+        # ADD NEW PRODUCT TAB
+        # =====================================================================
         with tab_add:
-            st.markdown("### Create New Cocktail Recipe")
+            st.markdown("### ➕ Add New Product")
             
-            if not available_products:
-                st.warning("⚠️ No products found in Master Inventory. Add spirits and ingredients to the Master Inventory first to build recipes.")
-            
-            # Initialize session state for dynamic ingredients if not exists
-            if 'cocktail_ingredient_count' not in st.session_state:
-                st.session_state.cocktail_ingredient_count = 1
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                recipe_name = st.text_input("Recipe Name *", placeholder="e.g., Old Fashioned", key="cocktail_recipe_name")
-                glass_type = st.selectbox("Glass Type", ["Rocks", "Coupe", "Highball", "Collins", "Nick & Nora", "Martini", "Wine", "Flute", "Mug", "Copper Mug", "Tiki", "Other"], key="cocktail_glass_type")
-            
-            with col2:
-                sale_price = st.number_input("Menu Sale Price ($) *", min_value=0.0, step=0.50, value=14.00, key="cocktail_sale_price")
-            
-            st.markdown("#### Ingredients")
-            
-            # Column headers
-            col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
-            with col_prod:
-                st.caption("Product")
-            with col_amt:
-                st.caption("Amount")
-            with col_unit:
-                st.caption("Unit")
-            with col_remove:
-                st.caption("")
-            
-            # Dynamic ingredient rows
-            ingredients_to_remove = []
-            for i in range(st.session_state.cocktail_ingredient_count):
-                col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
-                with col_prod:
-                    st.selectbox(
-                        f"Product {i+1}",
-                        options=[""] + available_products,
-                        key=f"cocktail_ing_prod_{i}",
-                        label_visibility="collapsed"
-                    )
-                with col_amt:
-                    st.number_input(
-                        f"Amount {i+1}",
-                        min_value=0.0,
-                        step=0.25,
-                        value=0.0,
-                        key=f"cocktail_ing_amt_{i}",
-                        label_visibility="collapsed"
-                    )
-                with col_unit:
-                    st.selectbox(
-                        f"Unit {i+1}",
-                        options=["oz", "dashes", "barspoon", "drops", "rinse", "each", "ml"],
-                        key=f"cocktail_ing_unit_{i}",
-                        label_visibility="collapsed"
-                    )
-                with col_remove:
-                    if st.session_state.cocktail_ingredient_count > 1:
-                        if st.button("🗑️", key=f"cocktail_remove_ing_{i}", help="Remove ingredient"):
-                            ingredients_to_remove.append(i)
-            
-            # Handle ingredient removal
-            if ingredients_to_remove:
-                # Shift ingredients up to fill gaps
-                for remove_idx in sorted(ingredients_to_remove, reverse=True):
-                    for j in range(remove_idx, st.session_state.cocktail_ingredient_count - 1):
-                        # Copy values from j+1 to j
-                        if f"cocktail_ing_prod_{j+1}" in st.session_state:
-                            st.session_state[f"cocktail_ing_prod_{j}"] = st.session_state[f"cocktail_ing_prod_{j+1}"]
-                            st.session_state[f"cocktail_ing_amt_{j}"] = st.session_state[f"cocktail_ing_amt_{j+1}"]
-                            st.session_state[f"cocktail_ing_unit_{j}"] = st.session_state[f"cocktail_ing_unit_{j+1}"]
-                    st.session_state.cocktail_ingredient_count -= 1
-                st.rerun()
-            
-            # Add ingredient button
-            if st.button("➕ Add Ingredient", key="cocktail_add_ingredient"):
-                st.session_state.cocktail_ingredient_count += 1
-                st.rerun()
-            
-            st.markdown("#### Instructions")
-            instructions = st.text_area("Build/Preparation Instructions", placeholder="e.g., Stir with ice, strain into rocks glass with large ice cube. Express orange peel.", height=100, key="cocktail_instructions")
+            add_type = st.radio(
+                "What would you like to add?",
+                options=["🍹 Cocktail Recipe", "🥃 Spirit to Pricing", "🍺 Beer to Pricing", "🍷 Wine to Pricing"],
+                horizontal=True,
+                key="add_product_type"
+            )
             
             st.markdown("---")
             
-            # Save button
-            if st.button("💾 Save Recipe", type="primary", use_container_width=True, key="cocktail_save_btn"):
-                # Collect ingredient data
-                ingredients_data = []
-                for i in range(st.session_state.cocktail_ingredient_count):
-                    product = st.session_state.get(f"cocktail_ing_prod_{i}", "")
-                    amount = st.session_state.get(f"cocktail_ing_amt_{i}", 0.0)
-                    unit = st.session_state.get(f"cocktail_ing_unit_{i}", "oz")
-                    if product and amount > 0:
-                        ingredients_data.append({"product": product, "amount": amount, "unit": unit})
+            # =====================================================================
+            # ADD COCKTAIL RECIPE
+            # =====================================================================
+            if add_type == "🍹 Cocktail Recipe":
+                st.markdown("### Create New Cocktail Recipe")
                 
-                if not recipe_name:
-                    st.error("❌ Recipe name is required.")
-                elif not ingredients_data:
-                    st.error("❌ At least one ingredient with amount > 0 is required.")
-                elif sale_price <= 0:
-                    st.error("❌ Sale price must be greater than $0.")
-                else:
-                    # Check for duplicate name
-                    existing_names = [r['name'].lower() for r in recipes]
-                    if recipe_name.lower() in existing_names:
-                        st.error(f"❌ A recipe named '{recipe_name}' already exists.")
+                if not available_products:
+                    st.warning("⚠️ No products found in Master Inventory. Add spirits and ingredients to the Master Inventory first to build recipes.")
+                
+                if 'cocktail_ingredient_count' not in st.session_state:
+                    st.session_state.cocktail_ingredient_count = 1
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    recipe_name = st.text_input("Recipe Name *", placeholder="e.g., Old Fashioned", key="cocktail_recipe_name")
+                    glass_type = st.selectbox("Glass Type", ["Rocks", "Coupe", "Highball", "Collins", "Nick & Nora", "Martini", "Wine", "Flute", "Mug", "Copper Mug", "Tiki", "Other"], key="cocktail_glass_type")
+                
+                with col2:
+                    sale_price = st.number_input("Menu Sale Price ($) *", min_value=0.0, step=0.50, value=14.00, key="cocktail_sale_price")
+                
+                st.markdown("#### Ingredients")
+                
+                col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+                with col_prod:
+                    st.caption("Product")
+                with col_amt:
+                    st.caption("Amount")
+                with col_unit:
+                    st.caption("Unit")
+                with col_remove:
+                    st.caption("")
+                
+                ingredients_to_remove = []
+                for i in range(st.session_state.cocktail_ingredient_count):
+                    col_prod, col_amt, col_unit, col_remove = st.columns([3, 1, 1, 0.5])
+                    with col_prod:
+                        st.selectbox(f"Product {i+1}", options=[""] + available_products, key=f"cocktail_ing_prod_{i}", label_visibility="collapsed")
+                    with col_amt:
+                        st.number_input(f"Amount {i+1}", min_value=0.0, step=0.25, value=0.0, key=f"cocktail_ing_amt_{i}", label_visibility="collapsed")
+                    with col_unit:
+                        st.selectbox(f"Unit {i+1}", options=["oz", "dashes", "barspoon", "drops", "rinse", "each", "ml"], key=f"cocktail_ing_unit_{i}", label_visibility="collapsed")
+                    with col_remove:
+                        if st.session_state.cocktail_ingredient_count > 1:
+                            if st.button("🗑️", key=f"cocktail_remove_ing_{i}", help="Remove ingredient"):
+                                ingredients_to_remove.append(i)
+                
+                if ingredients_to_remove:
+                    for remove_idx in sorted(ingredients_to_remove, reverse=True):
+                        for j in range(remove_idx, st.session_state.cocktail_ingredient_count - 1):
+                            if f"cocktail_ing_prod_{j+1}" in st.session_state:
+                                st.session_state[f"cocktail_ing_prod_{j}"] = st.session_state[f"cocktail_ing_prod_{j+1}"]
+                                st.session_state[f"cocktail_ing_amt_{j}"] = st.session_state[f"cocktail_ing_amt_{j+1}"]
+                                st.session_state[f"cocktail_ing_unit_{j}"] = st.session_state[f"cocktail_ing_unit_{j+1}"]
+                        st.session_state.cocktail_ingredient_count -= 1
+                    st.rerun()
+                
+                if st.button("➕ Add Ingredient", key="cocktail_add_ingredient"):
+                    st.session_state.cocktail_ingredient_count += 1
+                    st.rerun()
+                
+                st.markdown("#### Instructions")
+                instructions = st.text_area("Build/Preparation Instructions", placeholder="e.g., Stir with ice, strain into rocks glass with large ice cube. Express orange peel.", height=100, key="cocktail_instructions")
+                
+                st.markdown("---")
+                
+                if st.button("💾 Save Recipe", type="primary", use_container_width=True, key="cocktail_save_btn"):
+                    ingredients_data = []
+                    for i in range(st.session_state.cocktail_ingredient_count):
+                        product = st.session_state.get(f"cocktail_ing_prod_{i}", "")
+                        amount = st.session_state.get(f"cocktail_ing_amt_{i}", 0.0)
+                        unit = st.session_state.get(f"cocktail_ing_unit_{i}", "oz")
+                        if product and amount > 0:
+                            ingredients_data.append({"product": product, "amount": amount, "unit": unit})
+                    
+                    if not recipe_name:
+                        st.error("❌ Recipe name is required.")
+                    elif not ingredients_data:
+                        st.error("❌ At least one ingredient with amount > 0 is required.")
+                    elif sale_price <= 0:
+                        st.error("❌ Sale price must be greater than $0.")
                     else:
-                        new_recipe = {
-                            "name": recipe_name,
-                            "glass": glass_type,
-                            "sale_price": sale_price,
-                            "ingredients": ingredients_data,
-                            "instructions": instructions
-                        }
+                        existing_names = [r['name'].lower() for r in recipes]
+                        if recipe_name.lower() in existing_names:
+                            st.error(f"❌ A recipe named '{recipe_name}' already exists.")
+                        else:
+                            new_recipe = {
+                                "name": recipe_name,
+                                "glass": glass_type,
+                                "sale_price": sale_price,
+                                "ingredients": ingredients_data,
+                                "instructions": instructions
+                            }
+                            
+                            if 'cocktail_recipes' not in st.session_state:
+                                st.session_state.cocktail_recipes = []
+                            
+                            st.session_state.cocktail_recipes.append(new_recipe)
+                            save_recipes('cocktail')
+                            
+                            st.session_state.cocktail_ingredient_count = 1
+                            for key in list(st.session_state.keys()):
+                                if key.startswith("cocktail_ing_") or key in ["cocktail_recipe_name", "cocktail_instructions"]:
+                                    del st.session_state[key]
+                            
+                            st.success(f"✅ '{recipe_name}' added successfully!")
+                            st.rerun()
+            
+            # =====================================================================
+            # ADD SPIRIT TO PRICING
+            # =====================================================================
+            elif add_type == "🥃 Spirit to Pricing":
+                st.markdown("### Add Spirit to Menu Pricing")
+                st.markdown("Select a spirit from Master Inventory to set up menu pricing.")
+                
+                spirits_inventory = st.session_state.get('spirits_inventory', pd.DataFrame())
+                existing_spirit_pricing = [p['product'] for p in st.session_state.get('spirit_pricing', [])]
+                
+                if len(spirits_inventory) > 0 and 'Product' in spirits_inventory.columns:
+                    available_spirits = spirits_inventory[~spirits_inventory['Product'].isin(existing_spirit_pricing)]['Product'].tolist()
+                    available_spirits = sorted(available_spirits)
+                    
+                    if available_spirits:
+                        selected_spirit = st.selectbox("Select Spirit:", options=[""] + available_spirits, key="add_spirit_select")
                         
-                        if 'cocktail_recipes' not in st.session_state:
-                            st.session_state.cocktail_recipes = []
+                        if selected_spirit:
+                            match = spirits_inventory[spirits_inventory['Product'] == selected_spirit].iloc[0]
+                            inv_cost = clean_currency_value(match.get('Bottle Cost', 0))
+                            inv_size = clean_currency_value(match.get('Size (oz.)', 0))
+                            cost_per_oz = inv_cost / inv_size if inv_size > 0 else 0
+                            
+                            st.info(f"**{selected_spirit}** | Bottle: ${inv_cost:.2f} | Size: {inv_size}oz | Cost/oz: ${cost_per_oz:.4f}")
+                            
+                            target_cogs = st.number_input("Target COGS %", min_value=1.0, max_value=100.0, value=float(get_default_margin('spirits')), step=1.0, key="add_spirit_cogs")
+                            
+                            # Preview suggested prices
+                            st.markdown("**Suggested Prices (based on target COGS):**")
+                            pour_sizes = {'Shot (1oz)': 1.0, 'Single (1.5oz)': 1.5, 'Neat (2oz)': 2.0, 'Double (3oz)': 3.0}
+                            preview_cols = st.columns(4)
+                            for i, (label, pour_oz) in enumerate(pour_sizes.items()):
+                                with preview_cols[i]:
+                                    pour_cost = cost_per_oz * pour_oz
+                                    suggested = pour_cost / (target_cogs / 100) if target_cogs > 0 else 0
+                                    st.metric(label, f"${suggested:.0f}")
+                            
+                            if st.button("➕ Add to Spirit Pricing", type="primary", key="add_spirit_btn"):
+                                pour_map = {'shot': 1.0, 'single': 1.5, 'neat': 2.0, 'double': 3.0}
+                                new_pricing = {'product': selected_spirit}
+                                
+                                for pour_type, pour_oz in pour_map.items():
+                                    pour_cost = cost_per_oz * pour_oz
+                                    suggested_price = pour_cost / (target_cogs / 100) if target_cogs > 0 else 0
+                                    new_pricing[f'{pour_type}_price'] = round(suggested_price)
+                                
+                                st.session_state.spirit_pricing.append(new_pricing)
+                                save_pricing('spirit')
+                                st.success(f"✅ {selected_spirit} added to Spirit Pricing!")
+                                st.rerun()
+                    else:
+                        st.info("All spirits from Master Inventory are already in pricing.")
+                else:
+                    st.warning("No spirits found in Master Inventory. Add spirits there first.")
+            
+            # =====================================================================
+            # ADD BEER TO PRICING
+            # =====================================================================
+            elif add_type == "🍺 Beer to Pricing":
+                st.markdown("### Add Beer to Menu Pricing")
+                st.markdown("Select a beer from Master Inventory to set up menu pricing.")
+                
+                beer_inventory = st.session_state.get('beer_inventory', pd.DataFrame())
+                existing_beer_pricing = [p['product'] for p in st.session_state.get('beer_pricing', [])]
+                
+                if len(beer_inventory) > 0 and 'Product' in beer_inventory.columns:
+                    available_beers = beer_inventory[~beer_inventory['Product'].isin(existing_beer_pricing)]['Product'].tolist()
+                    available_beers = sorted(available_beers)
+                    
+                    if available_beers:
+                        selected_beer = st.selectbox("Select Beer:", options=[""] + available_beers, key="add_beer_select")
                         
-                        st.session_state.cocktail_recipes.append(new_recipe)
-                        save_recipes('cocktail')
+                        if selected_beer:
+                            match = beer_inventory[beer_inventory['Product'] == selected_beer].iloc[0]
+                            inv_cost = clean_currency_value(match.get('Cost per Keg/Case', 0))
+                            inv_size = clean_currency_value(match.get('Size', 0))
+                            inv_uom = match.get('UoM', '')
+                            cost_per_unit = inv_cost / inv_size if inv_size > 0 else 0
+                            
+                            st.info(f"**{selected_beer}** | Cost: ${inv_cost:.2f} | Size: {inv_size} {inv_uom} | Cost/Unit: ${cost_per_unit:.2f}")
+                            
+                            target_cogs = st.number_input("Target COGS %", min_value=1.0, max_value=100.0, value=float(get_default_margin('beer')), step=1.0, key="add_beer_cogs")
+                            suggested_price = cost_per_unit / (target_cogs / 100) if target_cogs > 0 else 0
+                            
+                            st.metric("Suggested Menu Price", f"${suggested_price:.2f}")
+                            
+                            if st.button("➕ Add to Beer Pricing", type="primary", key="add_beer_btn"):
+                                new_pricing = {
+                                    'product': selected_beer,
+                                    'target_cogs': target_cogs,
+                                    'menu_price': round(suggested_price, 2)
+                                }
+                                st.session_state.beer_pricing.append(new_pricing)
+                                save_pricing('beer')
+                                st.success(f"✅ {selected_beer} added to Beer Pricing!")
+                                st.rerun()
+                    else:
+                        st.info("All beers from Master Inventory are already in pricing.")
+                else:
+                    st.warning("No beers found in Master Inventory. Add beers there first.")
+            
+            # =====================================================================
+            # ADD WINE TO PRICING
+            # =====================================================================
+            elif add_type == "🍷 Wine to Pricing":
+                st.markdown("### Add Wine to Menu Pricing")
+                st.markdown("Select a wine from Master Inventory to set up menu pricing.")
+                
+                wine_inventory = st.session_state.get('wine_inventory', pd.DataFrame())
+                existing_wine_pricing = [p['product'] for p in st.session_state.get('wine_pricing', [])]
+                
+                if len(wine_inventory) > 0 and 'Product' in wine_inventory.columns:
+                    available_wines = wine_inventory[~wine_inventory['Product'].isin(existing_wine_pricing)]['Product'].tolist()
+                    available_wines = sorted(available_wines)
+                    
+                    if available_wines:
+                        selected_wine = st.selectbox("Select Wine:", options=[""] + available_wines, key="add_wine_select")
                         
-                        # Reset form
-                        st.session_state.cocktail_ingredient_count = 1
-                        for key in list(st.session_state.keys()):
-                            if key.startswith("cocktail_ing_") or key in ["cocktail_recipe_name", "cocktail_instructions"]:
-                                del st.session_state[key]
-                        
-                        st.success(f"✅ '{recipe_name}' added successfully!")
-                        st.rerun()
+                        if selected_wine:
+                            match = wine_inventory[wine_inventory['Product'] == selected_wine].iloc[0]
+                            inv_cost = clean_currency_value(match.get('Cost', 0))
+                            inv_size = clean_currency_value(match.get('Size (oz.)', 0))
+                            cost_per_oz = inv_cost / inv_size if inv_size > 0 else 0
+                            
+                            st.info(f"**{selected_wine}** | Bottle: ${inv_cost:.2f} | Size: {inv_size}oz | Cost/oz: ${cost_per_oz:.4f}")
+                            
+                            target_cogs = st.number_input("Target COGS %", min_value=1.0, max_value=100.0, value=float(get_default_margin('wine')), step=1.0, key="add_wine_cogs")
+                            
+                            btg_cost = cost_per_oz * 6  # 6oz pour
+                            btg_suggested = btg_cost / (target_cogs / 100) if target_cogs > 0 else 0
+                            bottle_suggested = inv_cost / (target_cogs / 100) if target_cogs > 0 else 0
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric("Suggested BTG (6oz)", f"${btg_suggested:.2f}")
+                            with col2:
+                                st.metric("Suggested Bottle", f"${bottle_suggested:.2f}")
+                            
+                            if st.button("➕ Add to Wine Pricing", type="primary", key="add_wine_btn"):
+                                new_pricing = {
+                                    'product': selected_wine,
+                                    'btg_price': round(btg_suggested, 2),
+                                    'bottle_price': round(bottle_suggested, 2)
+                                }
+                                st.session_state.wine_pricing.append(new_pricing)
+                                save_pricing('wine')
+                                st.success(f"✅ {selected_wine} added to Wine Pricing!")
+                                st.rerun()
+                    else:
+                        st.info("All wines from Master Inventory are already in pricing.")
+                else:
+                    st.warning("No wines found in Master Inventory. Add wines there first.")
 
 
 def show_bar_prep():
