@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.16
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.17
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -210,6 +210,13 @@
 #           - Pricing stored as JSON in Google Sheets (spirit_pricing, beer_pricing, wine_pricing)
 #           - Products sorted alphabetically in all pricing tabs
 #           - Add New Product tab: Create cocktail recipes OR add inventory items to pricing
+#           - Beer Pricing: Draft vs Packaged selection with pour size options for draft beers
+#           - Draft beers include pour size in menu item name (e.g., "IPA (16oz)")
+#           - Uses Cost/Unit from inventory for accurate pricing calculations
+#   bb_V2.17 - Price Builder refinements:
+#           - Renamed "Spirit to Pricing" → "Spirit Pricing" (same for Beer/Wine)
+#           - Fixed password login timing issue (was requiring two attempts)
+#           - Login now uses st.form for reliable password submission
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -4686,21 +4693,31 @@ def show_cocktails():
                 st.markdown(f"**{len(beer_pricing_sorted)} products with menu pricing:**")
                 
                 for idx, item in enumerate(beer_pricing_sorted):
-                    with st.expander(f"**{item['product']}**", expanded=False):
-                        # Get cost from inventory
-                        inv_cost = 0
-                        inv_size = 0
-                        inv_uom = ''
-                        if len(beer_inventory) > 0 and 'Product' in beer_inventory.columns:
-                            match = beer_inventory[beer_inventory['Product'] == item['product']]
+                    # Determine beer type label
+                    beer_type = item.get('beer_type', 'unknown')
+                    type_icon = "🍺" if beer_type == 'draft' else "🥫" if beer_type == 'packaged' else "🍺"
+                    
+                    with st.expander(f"{type_icon} **{item['product']}**", expanded=False):
+                        # Use stored cost_per_unit if available, otherwise lookup from inventory
+                        cost_per_unit = item.get('cost_per_unit', 0)
+                        base_product = item.get('base_product', item['product'])
+                        
+                        # If no stored cost, try to get from inventory (backwards compatibility)
+                        if cost_per_unit == 0 and len(beer_inventory) > 0 and 'Product' in beer_inventory.columns:
+                            match = beer_inventory[beer_inventory['Product'] == base_product]
                             if len(match) > 0:
                                 inv_cost = clean_currency_value(match['Cost per Keg/Case'].iloc[0]) if 'Cost per Keg/Case' in match.columns else 0
                                 inv_size = clean_currency_value(match['Size'].iloc[0]) if 'Size' in match.columns else 0
-                                inv_uom = match['UoM'].iloc[0] if 'UoM' in match.columns else ''
+                                cost_per_unit = clean_currency_value(match['Cost/Unit'].iloc[0]) if 'Cost/Unit' in match.columns else (inv_cost / inv_size if inv_size > 0 else 0)
                         
-                        cost_per_unit = inv_cost / inv_size if inv_size > 0 else 0
-                        
-                        st.caption(f"Cost per Keg/Case: ${inv_cost:.2f} | Size: {inv_size} {inv_uom} | Cost/Unit: ${cost_per_unit:.2f}")
+                        # Display type-specific info
+                        if beer_type == 'draft':
+                            pour_size = item.get('pour_size', 'N/A')
+                            st.caption(f"Type: Draft | Pour Size: {pour_size}oz | Pour Cost: ${cost_per_unit:.2f}")
+                        elif beer_type == 'packaged':
+                            st.caption(f"Type: Packaged | Cost per Can/Bottle: ${cost_per_unit:.2f}")
+                        else:
+                            st.caption(f"Cost/Unit: ${cost_per_unit:.2f}")
                         
                         col1, col2, col3 = st.columns(3)
                         
@@ -4843,7 +4860,7 @@ def show_cocktails():
             
             add_type = st.radio(
                 "What would you like to add?",
-                options=["🍹 Cocktail Recipe", "🥃 Spirit to Pricing", "🍺 Beer to Pricing", "🍷 Wine to Pricing"],
+                options=["🍹 Cocktail Recipe", "🥃 Spirit Pricing", "🍺 Beer Pricing", "🍷 Wine Pricing"],
                 horizontal=True,
                 key="add_product_type"
             )
@@ -4961,7 +4978,7 @@ def show_cocktails():
             # =====================================================================
             # ADD SPIRIT TO PRICING
             # =====================================================================
-            elif add_type == "🥃 Spirit to Pricing":
+            elif add_type == "🥃 Spirit Pricing":
                 st.markdown("### Add Spirit to Menu Pricing")
                 st.markdown("Select a spirit from Master Inventory to set up menu pricing.")
                 
@@ -5016,7 +5033,7 @@ def show_cocktails():
             # =====================================================================
             # ADD BEER TO PRICING
             # =====================================================================
-            elif add_type == "🍺 Beer to Pricing":
+            elif add_type == "🍺 Beer Pricing":
                 st.markdown("### Add Beer to Menu Pricing")
                 st.markdown("Select a beer from Master Inventory to set up menu pricing.")
                 
@@ -5024,8 +5041,7 @@ def show_cocktails():
                 existing_beer_pricing = [p['product'] for p in st.session_state.get('beer_pricing', [])]
                 
                 if len(beer_inventory) > 0 and 'Product' in beer_inventory.columns:
-                    available_beers = beer_inventory[~beer_inventory['Product'].isin(existing_beer_pricing)]['Product'].tolist()
-                    available_beers = sorted(available_beers)
+                    available_beers = sorted(beer_inventory['Product'].tolist())
                     
                     if available_beers:
                         selected_beer = st.selectbox("Select Beer:", options=[""] + available_beers, key="add_beer_select")
@@ -5035,34 +5051,117 @@ def show_cocktails():
                             inv_cost = clean_currency_value(match.get('Cost per Keg/Case', 0))
                             inv_size = clean_currency_value(match.get('Size', 0))
                             inv_uom = match.get('UoM', '')
-                            cost_per_unit = inv_cost / inv_size if inv_size > 0 else 0
+                            cost_per_unit = clean_currency_value(match.get('Cost/Unit', 0))
+                            
+                            # If Cost/Unit not in sheet, calculate it
+                            if cost_per_unit == 0 and inv_size > 0:
+                                cost_per_unit = inv_cost / inv_size
                             
                             st.info(f"**{selected_beer}** | Cost: ${inv_cost:.2f} | Size: {inv_size} {inv_uom} | Cost/Unit: ${cost_per_unit:.2f}")
                             
-                            target_cogs = st.number_input("Target COGS %", min_value=1.0, max_value=100.0, value=float(get_default_margin('beer')), step=1.0, key="add_beer_cogs")
-                            suggested_price = cost_per_unit / (target_cogs / 100) if target_cogs > 0 else 0
+                            # Ask if Draft or Packaged
+                            beer_type = st.radio(
+                                "Beer Type:",
+                                options=["🍺 Draft", "🥫 Packaged (Can/Bottle)"],
+                                horizontal=True,
+                                key="add_beer_type"
+                            )
                             
-                            st.metric("Suggested Menu Price", f"${suggested_price:.2f}")
+                            if beer_type == "🍺 Draft":
+                                st.markdown("**Draft Pour Settings:**")
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    pour_size = st.selectbox(
+                                        "Pour Size (oz):",
+                                        options=[10, 12, 14, 16, 20],
+                                        index=2,  # Default to 14oz
+                                        key="add_beer_pour_size"
+                                    )
+                                
+                                # Calculate pour cost using cost/oz
+                                pour_cost = cost_per_unit * pour_size
+                                
+                                with col2:
+                                    target_cogs = st.number_input(
+                                        "Target COGS %",
+                                        min_value=1.0, max_value=100.0,
+                                        value=float(get_default_margin('beer')),
+                                        step=1.0,
+                                        key="add_beer_cogs"
+                                    )
+                                
+                                suggested_price = pour_cost / (target_cogs / 100) if target_cogs > 0 else 0
+                                
+                                # Menu item name includes pour size
+                                menu_item_name = f"{selected_beer} ({pour_size}oz)"
+                                
+                                st.caption(f"Pour Cost: ${pour_cost:.2f}")
+                                st.metric("Suggested Menu Price", f"${suggested_price:.2f}")
+                                st.caption(f"Menu Item: **{menu_item_name}**")
+                                
+                                # Check if this specific pour size is already in pricing
+                                if menu_item_name in existing_beer_pricing:
+                                    st.warning(f"'{menu_item_name}' is already in pricing.")
+                                else:
+                                    if st.button("➕ Add to Beer Pricing", type="primary", key="add_beer_btn"):
+                                        new_pricing = {
+                                            'product': menu_item_name,
+                                            'base_product': selected_beer,
+                                            'beer_type': 'draft',
+                                            'pour_size': pour_size,
+                                            'cost_per_unit': pour_cost,
+                                            'target_cogs': target_cogs,
+                                            'menu_price': round(suggested_price, 2)
+                                        }
+                                        st.session_state.beer_pricing.append(new_pricing)
+                                        save_pricing('beer')
+                                        st.success(f"✅ {menu_item_name} added to Beer Pricing!")
+                                        st.rerun()
                             
-                            if st.button("➕ Add to Beer Pricing", type="primary", key="add_beer_btn"):
-                                new_pricing = {
-                                    'product': selected_beer,
-                                    'target_cogs': target_cogs,
-                                    'menu_price': round(suggested_price, 2)
-                                }
-                                st.session_state.beer_pricing.append(new_pricing)
-                                save_pricing('beer')
-                                st.success(f"✅ {selected_beer} added to Beer Pricing!")
-                                st.rerun()
+                            else:  # Packaged
+                                st.markdown("**Packaged Beer Settings:**")
+                                
+                                # Cost per unit is cost per can/bottle
+                                target_cogs = st.number_input(
+                                    "Target COGS %",
+                                    min_value=1.0, max_value=100.0,
+                                    value=float(get_default_margin('beer')),
+                                    step=1.0,
+                                    key="add_beer_cogs_pkg"
+                                )
+                                
+                                suggested_price = cost_per_unit / (target_cogs / 100) if target_cogs > 0 else 0
+                                
+                                st.caption(f"Cost per Can/Bottle: ${cost_per_unit:.2f}")
+                                st.metric("Suggested Menu Price", f"${suggested_price:.2f}")
+                                
+                                # Check if already in pricing
+                                if selected_beer in existing_beer_pricing:
+                                    st.warning(f"'{selected_beer}' is already in pricing.")
+                                else:
+                                    if st.button("➕ Add to Beer Pricing", type="primary", key="add_beer_btn_pkg"):
+                                        new_pricing = {
+                                            'product': selected_beer,
+                                            'base_product': selected_beer,
+                                            'beer_type': 'packaged',
+                                            'cost_per_unit': cost_per_unit,
+                                            'target_cogs': target_cogs,
+                                            'menu_price': round(suggested_price, 2)
+                                        }
+                                        st.session_state.beer_pricing.append(new_pricing)
+                                        save_pricing('beer')
+                                        st.success(f"✅ {selected_beer} added to Beer Pricing!")
+                                        st.rerun()
                     else:
-                        st.info("All beers from Master Inventory are already in pricing.")
+                        st.info("No beers found in Master Inventory.")
                 else:
                     st.warning("No beers found in Master Inventory. Add beers there first.")
             
             # =====================================================================
             # ADD WINE TO PRICING
             # =====================================================================
-            elif add_type == "🍷 Wine to Pricing":
+            elif add_type == "🍷 Wine Pricing":
                 st.markdown("### Add Wine to Menu Pricing")
                 st.markdown("Select a wine from Master Inventory to set up menu pricing.")
                 
@@ -6078,66 +6177,54 @@ def check_password():
         # No password configured, allow access
         return True
     
-    def password_entered():
-        """Checks whether a password entered by the user is correct."""
-        if st.session_state.get("password_input") == app_password:
-            st.session_state["password_correct"] = True
-            if "password_input" in st.session_state:
-                del st.session_state["password_input"]  # Don't store the password
-        else:
-            st.session_state["password_correct"] = False
-
-    # First run or password not yet correct
-    if "password_correct" not in st.session_state:
-        st.markdown(
-            """
-            <style>
-            .password-container {
-                max-width: 400px;
-                margin: 100px auto;
-                padding: 40px;
-                background: white;
-                border-radius: 10px;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
+    # Already authenticated
+    if st.session_state.get("password_correct", False):
+        return True
+    
+    # Show login form
+    st.markdown(
+        """
+        <style>
+        .password-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 40px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("## 🍸 Butterbird")
+        st.markdown("#### Beverage Management System")
+        st.markdown("---")
         
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.markdown("## 🍸 Butterbird")
-            st.markdown("#### Beverage Management System")
-            st.markdown("---")
-            st.text_input(
+        # Use a form to ensure password is submitted properly
+        with st.form("login_form"):
+            password_input = st.text_input(
                 "Enter Password", 
-                type="password", 
-                key="password_input",
-                on_change=password_entered
+                type="password",
+                key="password_field"
             )
-            st.button("Login", on_click=password_entered, type="primary", use_container_width=True)
-        return False
-    
-    # Password was entered but incorrect
-    elif not st.session_state["password_correct"]:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.markdown("## 🍸 Butterbird")
-            st.markdown("#### Beverage Management System")
-            st.markdown("---")
-            st.text_input(
-                "Enter Password", 
-                type="password", 
-                key="password_input",
-                on_change=password_entered
-            )
-            st.button("Login", on_click=password_entered, type="primary", use_container_width=True)
+            submitted = st.form_submit_button("Login", type="primary", use_container_width=True)
+            
+            if submitted:
+                if password_input == app_password:
+                    st.session_state["password_correct"] = True
+                    st.rerun()
+                else:
+                    st.session_state["password_correct"] = False
+        
+        # Show error message if password was incorrect
+        if "password_correct" in st.session_state and not st.session_state["password_correct"]:
             st.error("😕 Incorrect password. Please try again.")
-        return False
     
-    # Password correct
-    return True
+    return False
 
 
 def main():
