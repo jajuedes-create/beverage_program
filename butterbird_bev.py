@@ -1,5 +1,5 @@
 # =============================================================================
-# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.17
+# BEVERAGE MANAGEMENT APP - BUTTERBIRD V2.19
 # =============================================================================
 # A Streamlit application for managing restaurant beverage operations including:
 #   - Master Inventory (Spirits, Wine, Beer, Ingredients, N/A Beverages)
@@ -151,8 +151,7 @@
 #   bb_V2.13 - Full COGS Calculator implementation:
 #           - Three tabs: COGS Calculator, Trends & Analytics, Saved Calculations
 #           - Inventory period selection from saved snapshots
-#           - Auto-populated purchases from Order History by Invoice Date
-#           - Manual override option for purchase amounts
+#           - Manual input for purchases by category
 #           - COGS calculation by category (Spirits, Wine, Beer, Ingredients)
 #           - COGS as percentage of sales (Wine, Beer, Bar categories)
 #           - Bar COGS combines Spirits + Ingredients for cocktail cost tracking
@@ -217,6 +216,15 @@
 #           - Renamed "Spirit to Pricing" → "Spirit Pricing" (same for Beer/Wine)
 #           - Fixed password login timing issue (was requiring two attempts)
 #           - Login now uses st.form for reliable password submission
+#   bb_V2.18 - COGS Calculator simplification:
+#           - Removed auto-populate purchases from Order History feature
+#           - Purchases are now always manually entered by user
+#           - Removed manual override checkbox (no longer needed)
+#           - Cleaner, simpler COGS input workflow
+#   bb_V2.19 - COGS Trends visualization update:
+#           - Charts now plot by Period End date instead of Calculation Date
+#           - Data sorted chronologically by Period End for accurate trend display
+#           - X-axis labels updated to "Period End Date"
 #
 # Developed by: James Juedes utilizing Claude Opus 4.5
 # Deployment: Streamlit Community Cloud via GitHub
@@ -729,45 +737,6 @@ def load_cogs_history() -> Optional[pd.DataFrame]:
     return history
 
 
-def get_purchases_by_category_and_date(start_date: str, end_date: str) -> dict:
-    """Calculates total purchases by category from Order History."""
-    purchases = {'Spirits': 0.0, 'Wine': 0.0, 'Beer': 0.0, 'Ingredients': 0.0}
-    
-    order_history = st.session_state.get('order_history', pd.DataFrame())
-    if len(order_history) == 0:
-        return purchases
-    
-    df = order_history.copy()
-    
-    # Use Invoice Date if available, otherwise Week
-    date_col = 'Invoice Date' if 'Invoice Date' in df.columns else 'Week'
-    if date_col not in df.columns:
-        return purchases
-    
-    # Filter by date range
-    try:
-        if date_col == 'Invoice Date':
-            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-            start = pd.to_datetime(start_date)
-            end = pd.to_datetime(end_date)
-            mask = (df[date_col] >= start) & (df[date_col] <= end)
-        else:
-            mask = (df[date_col] >= start_date) & (df[date_col] <= end_date)
-        df = df[mask]
-    except Exception:
-        pass
-    
-    if len(df) == 0:
-        return purchases
-    
-    # Sum by category
-    if 'Category' in df.columns and 'Total Cost' in df.columns:
-        for cat in purchases.keys():
-            cat_df = df[df['Category'] == cat]
-            if len(cat_df) > 0:
-                purchases[cat] = float(cat_df['Total Cost'].sum())
-    
-    return purchases
 
 
 # =============================================================================
@@ -5670,73 +5639,51 @@ def show_cogs():
         
         st.markdown("---")
         
-        # Auto-populate purchases from Order History
+        # Purchases - Always manual input
         st.markdown("### 🛒 Purchases")
-        st.markdown("Purchases are auto-populated from Order History based on Invoice Date. You can override if needed.")
-        
-        # Get auto-calculated purchases
-        auto_purchases = get_purchases_by_category_and_date(start_date, end_date)
-        
-        # Toggle for manual override
-        use_manual_override = st.checkbox("✏️ Enable manual override for purchases", key="cogs_manual_override")
+        st.markdown("Enter total purchases by category for the selected period.")
         
         col_p1, col_p2, col_p3, col_p4 = st.columns(4)
         
         with col_p1:
-            if use_manual_override:
-                purchase_spirits = st.number_input(
-                    "🥃 Spirits Purchases",
-                    min_value=0.0,
-                    value=auto_purchases['Spirits'],
-                    step=50.0,
-                    format="%.2f",
-                    key="cogs_purchase_spirits"
-                )
-            else:
-                purchase_spirits = auto_purchases['Spirits']
-                st.metric("🥃 Spirits Purchases", format_currency(purchase_spirits))
+            purchase_spirits = st.number_input(
+                "🥃 Spirits Purchases",
+                min_value=0.0,
+                value=0.0,
+                step=50.0,
+                format="%.2f",
+                key="cogs_purchase_spirits"
+            )
         
         with col_p2:
-            if use_manual_override:
-                purchase_wine = st.number_input(
-                    "🍷 Wine Purchases",
-                    min_value=0.0,
-                    value=auto_purchases['Wine'],
-                    step=50.0,
-                    format="%.2f",
-                    key="cogs_purchase_wine"
-                )
-            else:
-                purchase_wine = auto_purchases['Wine']
-                st.metric("🍷 Wine Purchases", format_currency(purchase_wine))
+            purchase_wine = st.number_input(
+                "🍷 Wine Purchases",
+                min_value=0.0,
+                value=0.0,
+                step=50.0,
+                format="%.2f",
+                key="cogs_purchase_wine"
+            )
         
         with col_p3:
-            if use_manual_override:
-                purchase_beer = st.number_input(
-                    "🍺 Beer Purchases",
-                    min_value=0.0,
-                    value=auto_purchases['Beer'],
-                    step=50.0,
-                    format="%.2f",
-                    key="cogs_purchase_beer"
-                )
-            else:
-                purchase_beer = auto_purchases['Beer']
-                st.metric("🍺 Beer Purchases", format_currency(purchase_beer))
+            purchase_beer = st.number_input(
+                "🍺 Beer Purchases",
+                min_value=0.0,
+                value=0.0,
+                step=50.0,
+                format="%.2f",
+                key="cogs_purchase_beer"
+            )
         
         with col_p4:
-            if use_manual_override:
-                purchase_ingredients = st.number_input(
-                    "🧴 Ingredients Purchases",
-                    min_value=0.0,
-                    value=auto_purchases['Ingredients'],
-                    step=50.0,
-                    format="%.2f",
-                    key="cogs_purchase_ingredients"
-                )
-            else:
-                purchase_ingredients = auto_purchases['Ingredients']
-                st.metric("🧴 Ingredients Purchases", format_currency(purchase_ingredients))
+            purchase_ingredients = st.number_input(
+                "🧴 Ingredients Purchases",
+                min_value=0.0,
+                value=0.0,
+                step=50.0,
+                format="%.2f",
+                key="cogs_purchase_ingredients"
+            )
         
         total_purchases = purchase_spirits + purchase_wine + purchase_beer + purchase_ingredients
         
@@ -6047,16 +5994,21 @@ Note: Bar = Spirits + Ingredients combined
             trend_df = cogs_history.copy()
             trend_df['Period'] = trend_df['Period Start'] + ' to ' + trend_df['Period End']
             
+            # Sort by Period End date for proper chronological order
+            trend_df['Period End'] = pd.to_datetime(trend_df['Period End'], errors='coerce')
+            trend_df = trend_df.sort_values('Period End')
+            
             fig_trend = px.line(
                 trend_df,
-                x='Calculation Date',
+                x='Period End',
                 y='Total COGS',
                 markers=True,
                 title='Total COGS Trend'
             )
             fig_trend.update_layout(
                 yaxis_tickprefix='$',
-                yaxis_tickformat=',.0f'
+                yaxis_tickformat=',.0f',
+                xaxis_title='Period End Date'
             )
             st.plotly_chart(fig_trend, use_container_width=True)
             
@@ -6064,7 +6016,7 @@ Note: Bar = Spirits + Ingredients combined
             st.markdown("#### COGS by Category Over Time")
             
             category_trend = trend_df.melt(
-                id_vars=['Calculation Date'],
+                id_vars=['Period End'],
                 value_vars=['Spirits COGS', 'Wine COGS', 'Beer COGS', 'Ingredients COGS'],
                 var_name='Category',
                 value_name='COGS'
@@ -6073,7 +6025,7 @@ Note: Bar = Spirits + Ingredients combined
             
             fig_cat_trend = px.line(
                 category_trend,
-                x='Calculation Date',
+                x='Period End',
                 y='COGS',
                 color='Category',
                 markers=True,
@@ -6087,7 +6039,8 @@ Note: Bar = Spirits + Ingredients combined
             )
             fig_cat_trend.update_layout(
                 yaxis_tickprefix='$',
-                yaxis_tickformat=',.0f'
+                yaxis_tickformat=',.0f',
+                xaxis_title='Period End Date'
             )
             st.plotly_chart(fig_cat_trend, use_container_width=True)
             
@@ -6095,17 +6048,20 @@ Note: Bar = Spirits + Ingredients combined
             if 'Total COGS %' in cogs_history.columns and cogs_history['Total COGS %'].sum() > 0:
                 st.markdown("#### COGS Percentage Trend")
                 
-                pct_df = cogs_history[cogs_history['Total COGS %'] > 0]
+                pct_df = trend_df[trend_df['Total COGS %'] > 0].copy()
                 
                 if len(pct_df) > 0:
                     fig_pct = px.line(
                         pct_df,
-                        x='Calculation Date',
+                        x='Period End',
                         y='Total COGS %',
                         markers=True,
                         title='COGS % of Sales'
                     )
-                    fig_pct.update_layout(yaxis_ticksuffix='%')
+                    fig_pct.update_layout(
+                        yaxis_ticksuffix='%',
+                        xaxis_title='Period End Date'
+                    )
                     
                     # Add target line at 20%
                     fig_pct.add_hline(y=20, line_dash="dash", line_color="green", 
